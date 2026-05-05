@@ -58,13 +58,14 @@ function resolveBundledClaudeBinaryPath(
   resolvePackage = require.resolve,
   fileExists = fs.existsSync
 ) {
+  const pathImpl = platform === 'win32' ? path.win32 : path.posix
   const packageName = `@anthropic-ai/claude-agent-sdk-${platform}-${arch}`
   const binaryName = platform === 'win32' ? 'claude.exe' : 'claude'
 
   try {
     const packageJsonPath = resolvePackage(`${packageName}/package.json`)
-    const packageDir = path.dirname(packageJsonPath)
-    const bundledPath = path.join(packageDir, binaryName)
+    const packageDir = pathImpl.dirname(packageJsonPath)
+    const bundledPath = pathImpl.join(packageDir, binaryName)
     const candidates = [bundledPath]
 
     if (bundledPath.includes('app.asar') && !bundledPath.includes('app.asar.unpacked')) {
