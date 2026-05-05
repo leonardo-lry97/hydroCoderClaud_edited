@@ -135,11 +135,7 @@
         }
       ],
       "icon": "assets/icon.icns",
-      "category": "public.app-category.developer-tools",
-      "extendInfo": {
-        "CFBundleName": "HydroDesktop",
-        "CFBundleDisplayName": "HydroDesktop"
-      }
+      "category": "public.app-category.developer-tools"
     },
     "linux": {
       "target": [
