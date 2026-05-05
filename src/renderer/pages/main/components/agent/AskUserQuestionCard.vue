@@ -107,6 +107,10 @@ const permissionActions = computed(() => Array.isArray(props.message?.input?.act
 const singleAnswers = ref({})
 const multiAnswers = ref({})
 
+const isMultiSelectQuestion = (question) => {
+  return question?.multiSelect === true || question?.multiSelect === 'true' || question?.multi_select === true || question?.multi_select === 'true'
+}
+
 watch(questions, (value) => {
   const nextSingle = {}
   const nextMulti = {}
@@ -144,10 +148,6 @@ const resolvedAnswerText = computed(() => {
     return `${question}${answer}`
   }).filter(Boolean).join('；')
 })
-
-const isMultiSelectQuestion = (question) => {
-  return question?.multiSelect === true || question?.multiSelect === 'true' || question?.multi_select === true || question?.multi_select === 'true'
-}
 
 const canSubmit = computed(() => {
   if (interactionKind.value !== 'ask_user_question') return true

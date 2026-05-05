@@ -19,6 +19,10 @@ const { WeixinBridge } = require('./managers/weixin-bridge');
 const { setupIPCHandlers } = require('./ipc-handlers');
 const { createTrayController } = require('./tray-controller');
 const { tMain } = require('./utils/app-i18n');
+const { getStableUserDataPath } = require('./utils/user-data-path');
+
+const stableUserDataPath = getStableUserDataPath()
+app.setPath('userData', stableUserDataPath)
 
 // 保持窗口引用
 let mainWindow = null;
@@ -87,7 +91,7 @@ function applyMacAppDisplayName() {
     return
   }
 
-  app.setName('Hydro Desktop')
+  app.setName('HydroDesktop')
 }
 
 function hideMacApplicationMenu() {

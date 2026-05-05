@@ -12,7 +12,6 @@
  */
 
 const { spawn: cpSpawn } = require('child_process')
-const { killProcessTree } = require('../utils/process-tree-kill')
 
 class ClaudeCodeRunner {
   constructor() {

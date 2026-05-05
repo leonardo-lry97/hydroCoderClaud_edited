@@ -27,6 +27,10 @@ function resolveConfiguredModelId(_source, profile) {
   return '';
 }
 
+function normalizeDeveloperClaudeSource(value) {
+  return value === 'system' ? 'system' : 'bundled';
+}
+
 class ConfigManager {
   /**
    * @param {Object} options - 可选配置
@@ -110,6 +114,7 @@ class ConfigManager {
         // 应用模式
         appMode: 'agent',  // 启动固定为 'agent'
         enableDeveloperMode: true,
+        developerClaudeSource: 'bundled',
 
         // Agent 模式配置
         agent: {
@@ -150,6 +155,17 @@ class ConfigManager {
 
         // 迁移 Profile 结构（category/model → serviceProvider/selectedModelId）
         migratedConfig = this.migrateProfileStructure(migratedConfig);
+
+        const normalizedDeveloperClaudeSource = normalizeDeveloperClaudeSource(
+          migratedConfig?.settings?.developerClaudeSource
+        );
+        if (migratedConfig?.settings?.developerClaudeSource !== normalizedDeveloperClaudeSource) {
+          migratedConfig.settings = {
+            ...migratedConfig.settings,
+            developerClaudeSource: normalizedDeveloperClaudeSource
+          };
+          needsSave = true;
+        }
 
         // 迁移 skillsMarket → market
         if (migratedConfig.skillsMarket) {
@@ -479,9 +495,13 @@ class ConfigManager {
    * 更新设置
    */
   updateSettings(settings) {
+    const nextSettings = { ...settings };
+    if (Object.prototype.hasOwnProperty.call(nextSettings, 'developerClaudeSource')) {
+      nextSettings.developerClaudeSource = normalizeDeveloperClaudeSource(nextSettings.developerClaudeSource);
+    }
     this.config.settings = {
       ...this.config.settings,
-      ...settings
+      ...nextSettings
     };
     return this.save();
   }

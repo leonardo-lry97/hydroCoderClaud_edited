@@ -142,13 +142,6 @@ export function buildBuiltinSlashCommands(t) {
       autoSubmit: false
     },
     {
-      name: '/compact',
-      icon: 'compress',
-      description: t('agent.cmdCompact'),
-      source: 'hybrid',
-      autoSubmit: true
-    },
-    {
       name: '/cost',
       icon: 'info',
       description: t('agent.cmdCost'),

@@ -188,11 +188,6 @@ export function useAgentLocalCommands({
 
     const lower = parsedCommand.lowerName
 
-    if (lower === '/compact') {
-      await compactConversation()
-      return true
-    }
-
     if (lower === '/schedule') {
       createScheduledTaskDraft(parsedCommand)
       return true

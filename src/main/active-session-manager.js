@@ -11,6 +11,8 @@
 const { v4: uuidv4 } = require('uuid')
 const pty = require('node-pty')
 const os = require('os')
+const fs = require('fs')
+const path = require('path')
 const { buildProcessEnv, buildStandardExtraVars } = require('./utils/env-builder')
 const { safeSend } = require('./utils/safe-send')
 const { killProcessTree } = require('./utils/process-tree-kill')
@@ -31,6 +33,80 @@ const SessionStatus = {
 const SessionType = {
   SESSION: 'session',     // Claude 会话
   TERMINAL: 'terminal'    // 纯终端（不启动 claude）
+}
+
+function isPowerShellShell(shell) {
+  if (typeof shell !== 'string') return false
+  const normalized = shell.toLowerCase()
+  return normalized.includes('powershell') || normalized.endsWith('pwsh.exe') || normalized === 'pwsh'
+}
+
+function quoteShellPath(targetPath, isWin) {
+  if (isWin) {
+    return `"${targetPath.replace(/"/g, '""')}"`
+  }
+  return `'${targetPath.replace(/'/g, `'\\''`)}'`
+}
+
+function normalizeDeveloperClaudeSource(value) {
+  return value === 'system' ? 'system' : 'bundled'
+}
+
+function resolveBundledClaudeBinaryPath(
+  platform = os.platform(),
+  arch = os.arch(),
+  resolvePackage = require.resolve,
+  fileExists = fs.existsSync
+) {
+  const packageName = `@anthropic-ai/claude-agent-sdk-${platform}-${arch}`
+  const binaryName = platform === 'win32' ? 'claude.exe' : 'claude'
+
+  try {
+    const packageJsonPath = resolvePackage(`${packageName}/package.json`)
+    const packageDir = path.dirname(packageJsonPath)
+    const bundledPath = path.join(packageDir, binaryName)
+    const candidates = [bundledPath]
+
+    if (bundledPath.includes('app.asar') && !bundledPath.includes('app.asar.unpacked')) {
+      candidates.push(bundledPath.replace(/app\.asar/g, 'app.asar.unpacked'))
+    }
+
+    for (const candidate of candidates) {
+      if (fileExists(candidate)) {
+        return candidate
+      }
+    }
+  } catch (error) {
+    console.warn(`[ActiveSession] Failed to resolve bundled Claude binary from ${packageName}: ${error.message}`)
+  }
+
+  return null
+}
+
+function buildClaudeLaunchCommand({
+  shell,
+  isWin,
+  resumeSessionId = null,
+  bundledClaudePath = null,
+  source = 'bundled'
+}) {
+  let executable
+
+  if (source === 'bundled') {
+    if (!bundledClaudePath) {
+      throw new Error('Bundled Claude binary not found')
+    }
+    const quotedPath = quoteShellPath(bundledClaudePath, isWin)
+    executable = isWin && isPowerShellShell(shell)
+      ? `& ${quotedPath}`
+      : quotedPath
+  } else {
+    executable = 'claude'
+  }
+
+  return resumeSessionId
+    ? `${executable} --resume ${resumeSessionId}`
+    : executable
 }
 
 /**
@@ -56,6 +132,8 @@ class ActiveSession {
 
     // 是否有可见的 Tab（后台会话 = visible false）
     this.visible = true
+    this.isClosing = false
+    this.closePromise = null
   }
 
   toJSON() {
@@ -82,6 +160,9 @@ class ActiveSessionManager {
     this.mainWindow = mainWindow
     this.configManager = configManager
     this.sessionDatabase = options.sessionDatabase || null
+    this.ptyModule = options.ptyModule || pty
+    this.resolveBundledClaudeBinaryPath = options.resolveBundledClaudeBinaryPath || resolveBundledClaudeBinaryPath
+    this.buildClaudeLaunchCommand = options.buildClaudeLaunchCommand || buildClaudeLaunchCommand
 
     // 活动会话映射: sessionId -> ActiveSession
     this.sessions = new Map()
@@ -159,7 +240,7 @@ class ActiveSessionManager {
         const dbProject = this.sessionDatabase.getOrCreateProject(
           options.projectPath,
           encodedPath,
-          options.projectName || require('path').basename(options.projectPath)
+          options.projectName || path.basename(options.projectPath)
         )
 
         // 使用数据库项目的 INTEGER id 创建待定会话
@@ -203,7 +284,7 @@ class ActiveSessionManager {
 
     // 根据 shell 类型设置参数
     let shellArgs = []
-    if (isWin && shell.toLowerCase().includes('powershell')) {
+    if (isWin && isPowerShellShell(shell)) {
       shellArgs = ['-NoLogo', '-NoProfile']  // PowerShell 抑制启动横幅
     }
 
@@ -227,15 +308,27 @@ class ActiveSessionManager {
     // 构建子进程环境变量（使用标准 extraVars：TERM、SHELL、AUTOCOMPACT）
     const extraVars = buildStandardExtraVars(this.configManager)
     const envVars = buildProcessEnv(profile, extraVars, this.configManager)
-
-    // 调试日志
-    console.log(`[ActiveSession] Auth vars: API_KEY=${envVars.ANTHROPIC_API_KEY ? 'SET' : 'UNSET'}, AUTH_TOKEN=${envVars.ANTHROPIC_AUTH_TOKEN ? 'SET' : 'UNSET'}`)
-
-    console.log(`[ActiveSession] Starting terminal for session ${sessionId} in: ${session.projectPath}`)
-
+    const developerClaudeSource = normalizeDeveloperClaudeSource(
+      this.configManager?.getConfig?.()?.settings?.developerClaudeSource
+    )
     try {
+      const bundledClaudePath = developerClaudeSource === 'bundled'
+        ? this.resolveBundledClaudeBinaryPath()
+        : null
+      const claudeCmd = this.buildClaudeLaunchCommand({
+        shell,
+        isWin,
+        resumeSessionId: session.resumeSessionId,
+        bundledClaudePath,
+        source: developerClaudeSource
+      })
+
+      // 调试日志
+      console.log(`[ActiveSession] Auth vars: API_KEY=${envVars.ANTHROPIC_API_KEY ? 'SET' : 'UNSET'}, AUTH_TOKEN=${envVars.ANTHROPIC_AUTH_TOKEN ? 'SET' : 'UNSET'}`)
+      console.log(`[ActiveSession] Starting terminal for session ${sessionId} in: ${session.projectPath}`)
+
       // 创建 PTY 进程
-      session.pty = pty.spawn(shell, shellArgs, {
+      session.pty = this.ptyModule.spawn(shell, shellArgs, {
         name: 'xterm-256color',
         cols: 80,
         rows: 24,
@@ -261,6 +354,7 @@ class ActiveSessionManager {
         session.status = SessionStatus.EXITED
         session.exitCode = exitCode
         session.pty = null
+        session.isClosing = false
 
         this._safeSend('session:exit', {
           sessionId: session.id,
@@ -283,10 +377,7 @@ class ActiveSessionManager {
           // 纯终端：设置代码页、清屏，不启动 claude
           this.write(sessionId, `${chcpCmd}${clearCmd}\r`)
         } else {
-          // Claude 会话：设置代码页、清屏并启动 claude
-          const claudeCmd = session.resumeSessionId
-            ? `claude --resume ${session.resumeSessionId}`
-            : 'claude'
+          console.log(`[ActiveSession] Launching Claude via ${developerClaudeSource === 'bundled' ? 'bundled binary' : 'system command'}: ${bundledClaudePath || 'claude'}`)
           this.write(sessionId, `${chcpCmd}${clearCmd} ${cmdSep} ${claudeCmd}\r`)
         }
       }, 100)
@@ -299,6 +390,9 @@ class ActiveSessionManager {
 
       return { success: true, session: session.toJSON() }
     } catch (error) {
+      if (error.message === 'Bundled Claude binary not found') {
+        error.message = '当前设置为“内置 Claude”，但未找到内置可执行文件'
+      }
       console.error(`[ActiveSession] Failed to start session ${sessionId}:`, error)
       session.status = SessionStatus.ERROR
       session.error = error.message
@@ -363,11 +457,27 @@ class ActiveSessionManager {
     const session = this.sessions.get(sessionId)
     if (!session) return
 
+    if (session.closePromise) {
+      return session.closePromise
+    }
+
+    session.closePromise = this._closeSession(session, graceful)
+      .finally(() => {
+        session.closePromise = null
+      })
+
+    return session.closePromise
+  }
+
+  async _closeSession(session, graceful = true) {
+    if (session.isClosing) return
+    session.isClosing = true
+
     if (session.pty) {
       if (graceful) {
         // 优雅关闭：先发送 Ctrl+C，再强制关闭
         try {
-          console.log(`[ActiveSession] Gracefully closing session ${sessionId}...`)
+          console.log(`[ActiveSession] Gracefully closing session ${session.id}...`)
 
           // 发送第一次 Ctrl+C
           session.pty.write('\x03')
@@ -378,7 +488,7 @@ class ActiveSessionManager {
 
           // 检查是否已退出
           if (session.status === SessionStatus.EXITED) {
-            console.log(`[ActiveSession] Session ${sessionId} exited after first Ctrl+C`)
+            console.log(`[ActiveSession] Session ${session.id} exited after first Ctrl+C`)
           } else {
             // 发送第二次 Ctrl+C
             session.pty.write('\x03')
@@ -389,17 +499,12 @@ class ActiveSessionManager {
 
             // 如果还没退出，强制 kill
             if (session.status !== SessionStatus.EXITED && session.pty) {
-              console.log(`[ActiveSession] Force killing session ${sessionId}...`)
-              try {
-                session.pty.kill()
-              } catch (killError) {
-                // Windows conpty 在进程已退出时 kill() 会抛 AttachConsole failed，忽略
-                console.log(`[ActiveSession] Kill error (ignored): ${killError.message}`)
-              }
+              console.log(`[ActiveSession] Force killing session ${session.id}...`)
+              this._forceKill(session)
             }
           }
         } catch (error) {
-          console.error(`[ActiveSession] Graceful close failed for session ${sessionId}:`, error)
+          console.error(`[ActiveSession] Graceful close failed for session ${session.id}:`, error)
           // 出错时尝试强制 kill
           this._forceKill(session)
         }
@@ -409,11 +514,11 @@ class ActiveSessionManager {
       }
     }
 
-    this.sessions.delete(sessionId)
-    console.log(`[ActiveSession] Session ${sessionId} closed`)
+    this.sessions.delete(session.id)
+    console.log(`[ActiveSession] Session ${session.id} closed`)
 
     // 如果关闭的是聚焦会话，清空聚焦
-    if (this.focusedSessionId === sessionId) {
+    if (this.focusedSessionId === session.id) {
       this.focusedSessionId = null
     }
   }
@@ -425,15 +530,19 @@ class ActiveSessionManager {
   _forceKill(session) {
     try {
       if (session.pty) {
-        const pid = session.pty.pid || session.pid
+        const ptyProcess = session.pty
+        session.pty = null
+        const pid = ptyProcess.pid || session.pid
         console.log(`[ActiveSession] Force killing session ${session.id} (PID: ${pid})...`)
         // Windows: 先杀进程树（shell 内的 claude code 等子进程）
-        killProcessTree(pid)
-        // 再走 node-pty 自身清理（进程已退出时 conpty 可能抛 AttachConsole failed）
-        try {
-          session.pty.kill()
-        } catch (_) {
-          // 忽略：进程已退出时 conpty 的预期异常
+        const treeKilled = killProcessTree(pid)
+        if (os.platform() !== 'win32' || !treeKilled) {
+          // 非 Windows 或 taskkill 未生效时，再走 node-pty 自身清理
+          try {
+            ptyProcess.kill()
+          } catch (_) {
+            // 忽略：进程已退出时 conpty 的预期异常
+          }
         }
       }
     } catch (error) {
@@ -635,5 +744,7 @@ class ActiveSessionManager {
 module.exports = {
   ActiveSessionManager,
   ActiveSession,
-  SessionStatus
+  SessionStatus,
+  resolveBundledClaudeBinaryPath,
+  buildClaudeLaunchCommand
 }

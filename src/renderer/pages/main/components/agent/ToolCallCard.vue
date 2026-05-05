@@ -4,8 +4,8 @@
       <Icon name="wrench" :size="14" class="tool-icon" />
       <span class="tool-name">{{ message.toolName }}</span>
       <span v-if="toolSummary" class="tool-summary">: {{ toolSummary }}</span>
-      <span class="tool-status" :class="{ done: message.output }">
-        {{ message.output ? '✓' : '...' }}
+      <span class="tool-status" :class="{ done: message.output, running: !message.output && message.progressText }">
+        {{ message.output ? '✓' : (message.progressText || '...') }}
       </span>
       <Icon :name="expanded ? 'chevronUp' : 'chevronDown'" :size="12" class="expand-icon" />
     </div>
@@ -255,6 +255,10 @@ const renderToolContent = (value) => {
 
 .tool-status.done {
   color: #52c41a;
+}
+
+.tool-status.running {
+  color: var(--primary-color);
 }
 
 .expand-icon {

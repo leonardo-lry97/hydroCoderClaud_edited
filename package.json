@@ -29,7 +29,7 @@
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.90",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.126",
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
     "better-sqlite3": "^12.6.0",
@@ -93,6 +93,7 @@
       "node_modules/node-pty/**/*",
       "node_modules/better-sqlite3/**/*",
       "node_modules/@anthropic-ai/claude-agent-sdk/**/*",
+      "node_modules/@anthropic-ai/claude-agent-sdk-*/*",
       "node_modules/undici/**/*"
     ],
     "win": {
@@ -134,7 +135,11 @@
         }
       ],
       "icon": "assets/icon.icns",
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "extendInfo": {
+        "CFBundleName": "HydroDesktop",
+        "CFBundleDisplayName": "HydroDesktop"
+      }
     },
     "linux": {
       "target": [

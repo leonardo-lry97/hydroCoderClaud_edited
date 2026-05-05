@@ -20,7 +20,7 @@
       <template v-for="msg in messages" :key="msg.id">
         <!-- 用户/助手消息 -->
         <MessageBubble
-          v-if="msg.role === 'user' || msg.role === 'assistant'"
+          v-if="msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system'"
           :message="msg"
           :session-cwd="sessionCwd"
           @preview-image="$emit('preview-image', $event)"

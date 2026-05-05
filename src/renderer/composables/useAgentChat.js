@@ -51,6 +51,9 @@ export function useAgentChat(sessionId, options = {}) {
   let streamingTimer = null
   let currentBlockType = null  // 当前流式 content block 的类型（text / tool_use 等）
   let streamTextReceived = false  // 本轮是否收到过流式 text delta（用于判断是否为非流式 API）
+  let currentTurnSlashCommand = ''
+  let currentTurnHasVisibleOutput = false
+  let lastSystemStatusFingerprint = ''
 
   const modelOptions = ref([])
   let modelInitToken = 0
@@ -167,6 +170,110 @@ export function useAgentChat(sessionId, options = {}) {
   // 清理函数列表
   const cleanupFns = []
 
+  const beginCurrentTurn = ({ slashCommandName = '' } = {}) => {
+    currentTurnSlashCommand = slashCommandName
+    currentTurnHasVisibleOutput = false
+    lastSystemStatusFingerprint = ''
+  }
+
+  const resetCurrentTurn = () => {
+    currentTurnSlashCommand = ''
+    currentTurnHasVisibleOutput = false
+    lastSystemStatusFingerprint = ''
+  }
+
+  const markCurrentTurnVisible = () => {
+    currentTurnHasVisibleOutput = true
+  }
+
+  const stringifyDisplayValue = (value, preferredKeys = []) => {
+    if (value == null) return ''
+    if (typeof value === 'string') return value.trim()
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+
+    if (Array.isArray(value)) {
+      const parts = value
+        .map(item => stringifyDisplayValue(item, preferredKeys))
+        .filter(Boolean)
+      return parts.join('\n').trim()
+    }
+
+    if (typeof value === 'object') {
+      for (const key of preferredKeys) {
+        const candidate = stringifyDisplayValue(value[key], preferredKeys)
+        if (candidate) return candidate
+      }
+
+      try {
+        return JSON.stringify(value, null, 2)
+      } catch {
+        return ''
+      }
+    }
+
+    return String(value)
+  }
+
+  const summarizeResultText = (value) => stringifyDisplayValue(value, [
+    'message',
+    'text',
+    'result',
+    'summary',
+    'content',
+    'status'
+  ])
+
+  const summarizeSystemStatus = (value) => stringifyDisplayValue(value, [
+    'message',
+    'text',
+    'status',
+    'summary',
+    'detail'
+  ])
+
+  const summarizeOtherMessage = (value) => {
+    const directText = stringifyDisplayValue(value, [
+      'message',
+      'text',
+      'status',
+      'result',
+      'summary',
+      'content'
+    ])
+    if (directText) return directText
+
+    if (value && typeof value === 'object') {
+      const eventName = [value.type, value.subtype].filter(Boolean).join(':')
+      if (eventName) {
+        return t('agent.sdkEvent', { event: eventName })
+      }
+    }
+
+    return ''
+  }
+
+  const isTransientSystemStatus = (statusText) => {
+    if (!statusText) return true
+    const lower = statusText.toLowerCase()
+
+    return [
+      'thinking',
+      'requesting',
+      'streaming',
+      'idle',
+      'working',
+      'processing'
+    ].some(keyword => lower === keyword || lower.startsWith(`${keyword} `) || lower.startsWith(`${keyword}:`))
+  }
+
+  const formatElapsedSeconds = (value) => {
+    if (!Number.isFinite(value) || value < 0) return ''
+    if (value < 60) return `${value}s`
+    const minutes = Math.floor(value / 60)
+    const seconds = value % 60
+    return `${minutes}m ${String(seconds).padStart(2, '0')}s`
+  }
+
   /**
    * 加载历史消息
    */
@@ -225,12 +332,41 @@ export function useAgentChat(sessionId, options = {}) {
       timestamp: Date.now(),
       ...metadata
     })
+    markCurrentTurnVisible()
+  }
+
+  const addSystemMessage = (content, metadata = {}) => {
+    const normalizedContent = summarizeResultText(content)
+    if (!normalizedContent) return
+
+    messages.value.push({
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      role: MessageRole.SYSTEM,
+      content: normalizedContent,
+      timestamp: Date.now(),
+      ...metadata
+    })
+    markCurrentTurnVisible()
   }
 
   /**
    * 添加工具调用消息
    */
   const addToolMessage = (toolName, input, output, metadata = {}) => {
+    const toolUseId = metadata.toolUseId || null
+    const existingMessage = toolUseId
+      ? [...messages.value].reverse().find(msg => msg.role === MessageRole.TOOL && msg.toolUseId === toolUseId)
+      : null
+
+    if (existingMessage) {
+      existingMessage.toolName = toolName || existingMessage.toolName
+      existingMessage.input = input ?? existingMessage.input
+      existingMessage.output = output ?? existingMessage.output
+      Object.assign(existingMessage, metadata)
+      markCurrentTurnVisible()
+      return
+    }
+
     messages.value.push({
       id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       role: MessageRole.TOOL,
@@ -240,6 +376,7 @@ export function useAgentChat(sessionId, options = {}) {
       timestamp: Date.now(),
       ...metadata
     })
+    markCurrentTurnVisible()
   }
 
   const updateToolMessageOutput = (toolUseId, output) => {
@@ -249,6 +386,8 @@ export function useAgentChat(sessionId, options = {}) {
 
     if (toolMessage) {
       toolMessage.output = output
+      toolMessage.inProgress = false
+      toolMessage.progressText = ''
     }
   }
 
@@ -477,6 +616,11 @@ export function useAgentChat(sessionId, options = {}) {
     error.value = null
     isRestored.value = false
     isInterrupting.value = false  // 重置中断标志，允许正常队列消费
+    beginCurrentTurn({
+      slashCommandName: isActualSlashCommand && parsedSlashCommand.isSlashCommand
+        ? parsedSlashCommand.lowerName
+        : ''
+    })
 
     // 添加用户消息到界面
     if (trimmed && !isActualSlashCommand) {
@@ -524,6 +668,7 @@ export function useAgentChat(sessionId, options = {}) {
       error.value = err.message || 'Failed to send message'
       isStreaming.value = false
       stopTimer()
+      resetCurrentTurn()
     }
   }
 
@@ -671,7 +816,22 @@ export function useAgentChat(sessionId, options = {}) {
         // 真正的错误，显示错误消息
         error.value = result.error || result.result || 'Unknown error'
       }
+      resetCurrentTurn()
+      return
     }
+
+    if (!currentTurnHasVisibleOutput) {
+      const fallbackText = summarizeResultText(result?.result)
+      if (fallbackText) {
+        addSystemMessage(fallbackText, { systemKind: 'result' })
+      } else if (currentTurnSlashCommand) {
+        addSystemMessage(t('agent.commandCompleted', { command: currentTurnSlashCommand }), {
+          systemKind: 'result'
+        })
+      }
+    }
+
+    resetCurrentTurn()
   }
 
   /**
@@ -706,6 +866,7 @@ export function useAgentChat(sessionId, options = {}) {
     isStreaming.value = false
     stopTimer()
     streamTextReceived = false
+    resetCurrentTurn()
     const rawError = data.error || t('agent.unknownError')
     const resolver = ERROR_MESSAGES[rawError]
     error.value = typeof resolver === 'function' ? resolver() : (resolver || rawError)
@@ -719,12 +880,14 @@ export function useAgentChat(sessionId, options = {}) {
 
     if (stderr) {
       error.value = stderr
+      resetCurrentTurn()
       return
     }
 
     error.value = exitCode == null
       ? 'Claude Code CLI exited unexpectedly'
       : `Claude Code CLI exited unexpectedly (code ${exitCode})`
+    resetCurrentTurn()
   }
 
   /**
@@ -758,6 +921,7 @@ export function useAgentChat(sessionId, options = {}) {
         hasActiveSession.value = false
         isRestored.value = true
       }
+      resetCurrentTurn()
     } else if (data.status === 'streaming') {
       hasActiveSession.value = true
       isRestored.value = false
@@ -772,6 +936,13 @@ export function useAgentChat(sessionId, options = {}) {
   const handleCompacted = (data) => {
     if (data.sessionId !== sessionId) return
     isCompacting.value = false
+    addSystemMessage(
+      t('agent.compactCompleted', {
+        count: Number.isFinite(data.preTokens) ? data.preTokens : 0,
+        trigger: data.trigger || 'manual'
+      }),
+      { systemKind: 'compact' }
+    )
     console.log(`[useAgentChat] Compacted: preTokens=${data.preTokens}, trigger=${data.trigger}`)
   }
 
@@ -798,7 +969,53 @@ export function useAgentChat(sessionId, options = {}) {
    */
   const handleToolProgress = (data) => {
     if (data.sessionId !== sessionId) return
-    updateToolMessageOutput(data.toolUseId || null, data.content || null)
+    const toolUseId = data.toolUseId || null
+    let toolMessage = toolUseId
+      ? [...messages.value].reverse().find(msg => msg.role === MessageRole.TOOL && msg.toolUseId === toolUseId)
+      : null
+
+    if (!toolMessage) {
+      addToolMessage(data.toolName || 'Tool', null, null, { toolUseId })
+      toolMessage = toolUseId
+        ? [...messages.value].reverse().find(msg => msg.role === MessageRole.TOOL && msg.toolUseId === toolUseId)
+        : [...messages.value].reverse().find(msg => msg.role === MessageRole.TOOL)
+    }
+
+    if (toolMessage) {
+      if (data.toolName && !toolMessage.toolName) {
+        toolMessage.toolName = data.toolName
+      }
+      if (Number.isFinite(data.elapsedSeconds)) {
+        toolMessage.elapsedSeconds = data.elapsedSeconds
+        toolMessage.progressText = formatElapsedSeconds(data.elapsedSeconds)
+      }
+      toolMessage.inProgress = !toolMessage.output
+      markCurrentTurnVisible()
+    }
+  }
+
+  const handleSystemStatus = (data) => {
+    if (data.sessionId !== sessionId) return
+
+    const statusText = summarizeSystemStatus(data.status)
+    if (!statusText) return
+
+    const fingerprint = statusText.toLowerCase()
+    if (fingerprint === lastSystemStatusFingerprint) return
+    lastSystemStatusFingerprint = fingerprint
+
+    if (isTransientSystemStatus(statusText)) return
+
+    addSystemMessage(statusText, { systemKind: 'status' })
+  }
+
+  const handleOtherMessage = (data) => {
+    if (data.sessionId !== sessionId) return
+
+    const summary = summarizeOtherMessage(data.message)
+    if (!summary) return
+
+    addSystemMessage(summary, { systemKind: 'sdk' })
   }
 
   const handleInteractionRequest = (data) => {
@@ -881,6 +1098,12 @@ export function useAgentChat(sessionId, options = {}) {
     }
     if (window.electronAPI.onAgentToolProgress) {
       cleanupFns.push(window.electronAPI.onAgentToolProgress(handleToolProgress))
+    }
+    if (window.electronAPI.onAgentSystemStatus) {
+      cleanupFns.push(window.electronAPI.onAgentSystemStatus(handleSystemStatus))
+    }
+    if (window.electronAPI.onAgentOtherMessage) {
+      cleanupFns.push(window.electronAPI.onAgentOtherMessage(handleOtherMessage))
     }
     if (window.electronAPI.onAgentStatusChange) {
       cleanupFns.push(window.electronAPI.onAgentStatusChange(handleStatusChange))

@@ -1,7 +1,7 @@
 <template>
   <div class="message-bubble" :class="[message.role]" @contextmenu.prevent="handleContextMenu">
     <div class="bubble-avatar">
-      <Icon :name="message.role === 'user' ? 'user' : 'robot'" :size="16" />
+      <Icon :name="avatarIconName" :size="16" />
     </div>
     <div class="bubble-content">
       <div class="bubble-capture" ref="captureRef">
@@ -117,6 +117,11 @@ const isUserOverflowing = ref(false)
 const isNotebookMode = computed(() => props.chatMode === 'notebook')
 const isNotebookAssistant = computed(() => isNotebookMode.value && props.message.role === 'assistant')
 const shouldClampUserMessage = computed(() => isNotebookMode.value && props.message.role === 'user' && isUserOverflowing.value)
+const avatarIconName = computed(() => {
+  if (props.message.role === 'user') return 'user'
+  if (props.message.role === 'system') return 'info'
+  return 'robot'
+})
 const externalSenderLabel = computed(() => {
   if (!props.message.senderNick) return ''
   if (props.message.source === 'dingtalk') return `${props.message.senderNick}${t('agent.dingtalkSuffix')}`
@@ -524,6 +529,24 @@ const copyContentToAchievement = async () => {
   background: var(--primary-color);
   color: white;
   border-top-right-radius: 4px;
+}
+
+.message-bubble.system .bubble-avatar {
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  color: var(--primary-color);
+}
+
+.message-bubble.system .bubble-content {
+  max-width: 88%;
+}
+
+.message-bubble.system .bubble-body {
+  background: var(--bg-color-tertiary);
+  color: var(--text-color-secondary);
+  border-color: var(--border-color);
+  border-style: dashed;
+  border-radius: 10px;
+  font-size: 13px;
 }
 
 .message-bubble.user .bubble-body.user-clamped {

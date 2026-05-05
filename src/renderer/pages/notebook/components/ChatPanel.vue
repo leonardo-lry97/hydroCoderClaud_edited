@@ -48,7 +48,7 @@
 
       <template v-for="msg in messages" :key="msg.id">
         <MessageBubble
-          v-if="msg.role === 'user' || msg.role === 'assistant'"
+          v-if="msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system'"
           :message="msg"
           :session-cwd="sessionCwd"
           chat-mode="notebook"

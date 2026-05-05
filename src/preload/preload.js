@@ -778,6 +778,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ['onAgentStatusChange', 'agent:statusChange'],
       ['onAgentToolProgress', 'agent:toolProgress'],
       ['onAgentSystemStatus', 'agent:systemStatus'],
+      ['onAgentOtherMessage', 'agent:otherMessage'],
       ['onAgentRenamed', 'agent:renamed'],
       ['onAgentCompacted', 'agent:compacted'],
       ['onAgentUsage', 'agent:usage'],

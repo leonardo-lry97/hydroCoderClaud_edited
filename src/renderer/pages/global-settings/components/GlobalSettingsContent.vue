@@ -40,73 +40,93 @@
 
     <!-- Session Settings Section -->
     <n-card :title="t('globalSettings.sessionSettings')" class="settings-section">
-      <n-grid :cols="2" :x-gap="24">
-        <n-grid-item>
-          <n-form-item :label="t('globalSettings.maxActiveSessions')">
-            <n-input-number
-              v-model:value="formData.maxActiveSessions"
-              :min="1"
-              :max="20"
-              placeholder="5"
-            />
-            <template #feedback>{{ t('globalSettings.maxActiveSessionsHint') }}</template>
-          </n-form-item>
-        </n-grid-item>
-
-        <n-grid-item>
-          <n-form-item :label="t('globalSettings.maxHistorySessions')">
-            <n-input-number
-              v-model:value="formData.maxHistorySessions"
-              :min="1"
-              :max="50"
-              placeholder="10"
-            />
-            <template #feedback>{{ t('globalSettings.maxHistorySessionsHint') }}</template>
-          </n-form-item>
-        </n-grid-item>
-
-        <n-grid-item>
-          <n-form-item :label="t('globalSettings.autocompactPctOverride')">
-            <n-input-number
-              v-model:value="formData.autocompactPctOverride"
-              :min="0"
-              :max="100"
-              :placeholder="t('globalSettings.autocompactDefault')"
-              clearable
-            />
-            <template #feedback>{{ t('globalSettings.autocompactPctOverrideHint') }}</template>
-          </n-form-item>
-        </n-grid-item>
-
-        <n-grid-item>
-          <n-form-item :label="t('globalSettings.messageQueue')">
-            <n-switch v-model:value="formData.messageQueue" @update:value="handleQueueToggle" />
-            <template #feedback>{{ t('globalSettings.messageQueueHint') }}</template>
-          </n-form-item>
-        </n-grid-item>
-
-        <n-grid-item>
-          <n-form-item :label="t('globalSettings.enableDeveloperMode')">
-            <n-switch v-model:value="formData.enableDeveloperMode" />
-            <template #feedback>{{ t('globalSettings.enableDeveloperModeHint') }}</template>
-          </n-form-item>
-        </n-grid-item>
-
-        <n-grid-item :span="2" style="margin-top: 12px">
-          <n-form-item :label="t('globalSettings.outputBaseDir')">
-            <div style="display: flex; gap: 8px; width: 100%">
-              <n-input
-                v-model:value="formData.outputBaseDir"
-                :placeholder="defaultOutputBaseDir"
-                clearable
-                style="flex: 1"
+      <div class="settings-subsection">
+        <div class="settings-subsection-title">{{ t('globalSettings.sessionLimitsGroup') }}</div>
+        <n-grid :cols="2" :x-gap="24">
+          <n-grid-item>
+            <n-form-item :label="t('globalSettings.maxActiveSessions')">
+              <n-input-number
+                v-model:value="formData.maxActiveSessions"
+                :min="1"
+                :max="20"
+                placeholder="5"
               />
-              <n-button @click="handleSelectOutputDir">{{ t('common.browse') }}</n-button>
-            </div>
-            <template #feedback>{{ t('globalSettings.outputBaseDirHint') }}</template>
-          </n-form-item>
-        </n-grid-item>
-      </n-grid>
+              <template #feedback>{{ t('globalSettings.maxActiveSessionsHint') }}</template>
+            </n-form-item>
+          </n-grid-item>
+
+          <n-grid-item>
+            <n-form-item :label="t('globalSettings.maxHistorySessions')">
+              <n-input-number
+                v-model:value="formData.maxHistorySessions"
+                :min="1"
+                :max="50"
+                placeholder="10"
+              />
+              <template #feedback>{{ t('globalSettings.maxHistorySessionsHint') }}</template>
+            </n-form-item>
+          </n-grid-item>
+
+          <n-grid-item>
+            <n-form-item :label="t('globalSettings.autocompactPctOverride')">
+              <n-input-number
+                v-model:value="formData.autocompactPctOverride"
+                :min="0"
+                :max="100"
+                :placeholder="t('globalSettings.autocompactDefault')"
+                clearable
+              />
+              <template #feedback>{{ t('globalSettings.autocompactPctOverrideHint') }}</template>
+            </n-form-item>
+          </n-grid-item>
+
+          <n-grid-item>
+            <n-form-item :label="t('globalSettings.messageQueue')">
+              <n-switch v-model:value="formData.messageQueue" @update:value="handleQueueToggle" />
+              <template #feedback>{{ t('globalSettings.messageQueueHint') }}</template>
+            </n-form-item>
+          </n-grid-item>
+        </n-grid>
+      </div>
+
+      <div class="settings-subsection">
+        <div class="settings-subsection-title">{{ t('globalSettings.developerRuntimeGroup') }}</div>
+        <n-grid :cols="2" :x-gap="24">
+          <n-grid-item>
+            <n-form-item :label="t('globalSettings.enableDeveloperMode')">
+              <n-switch v-model:value="formData.enableDeveloperMode" />
+              <template #feedback>{{ t('globalSettings.enableDeveloperModeHint') }}</template>
+            </n-form-item>
+          </n-grid-item>
+
+          <n-grid-item>
+            <n-form-item :label="t('globalSettings.developerClaudeSource')">
+              <n-select
+                v-model:value="formData.developerClaudeSource"
+                :options="developerClaudeSourceOptions"
+                style="width: 100%"
+              />
+              <template #feedback>{{ t('globalSettings.developerClaudeSourceHint') }}</template>
+            </n-form-item>
+          </n-grid-item>
+        </n-grid>
+      </div>
+
+      <div class="settings-subsection settings-subsection-last">
+        <div class="settings-subsection-title">{{ t('globalSettings.agentOutputGroup') }}</div>
+        <n-form-item :label="t('globalSettings.outputBaseDir')">
+          <div style="display: flex; gap: 8px; width: 100%">
+            <n-input
+              v-model:value="formData.outputBaseDir"
+              :placeholder="defaultOutputBaseDir"
+              clearable
+              style="flex: 1"
+            />
+            <n-button @click="handleSelectOutputDir">{{ t('common.browse') }}</n-button>
+          </div>
+          <template #feedback>{{ t('globalSettings.outputBaseDirHint') }}</template>
+        </n-form-item>
+      </div>
     </n-card>
 
     <!-- Footer Buttons -->
@@ -140,6 +160,7 @@ const DEFAULTS = {
   autocompactPctOverride: null,  // null 表示使用 Claude Code 默认值
   messageQueue: true,
   enableDeveloperMode: true,
+  developerClaudeSource: 'bundled',
   outputBaseDir: ''              // 空字符串 = 使用默认 ~/cc-desktop-agent-output
 }
 
@@ -151,6 +172,7 @@ const formData = ref({
   autocompactPctOverride: DEFAULTS.autocompactPctOverride,
   messageQueue: DEFAULTS.messageQueue,
   enableDeveloperMode: DEFAULTS.enableDeveloperMode,
+  developerClaudeSource: DEFAULTS.developerClaudeSource,
   outputBaseDir: DEFAULTS.outputBaseDir
 })
 
@@ -187,6 +209,7 @@ const loadSettings = async () => {
       formData.value.messageQueue = config.settings.agent.messageQueue
     }
     formData.value.enableDeveloperMode = config?.settings?.enableDeveloperMode !== false
+    formData.value.developerClaudeSource = config?.settings?.developerClaudeSource || DEFAULTS.developerClaudeSource
     formData.value.outputBaseDir = config?.settings?.agent?.outputBaseDir || defaultOutputBaseDir.value
   } catch (err) {
     console.error('Failed to load settings:', err)
@@ -200,14 +223,18 @@ const defaultOutputBaseDir = computed(() => {
   return `${home}/cc-desktop-agent-output`
 })
 
+const developerClaudeSourceOptions = computed(() => [
+  { label: t('globalSettings.developerClaudeSourceBundled'), value: 'bundled' },
+  { label: t('globalSettings.developerClaudeSourceSystem'), value: 'system' }
+])
+
 // 选择输出目录
 const handleSelectOutputDir = async () => {
   const dir = await window.electronAPI?.selectDirectory({ title: t('globalSettings.outputBaseDir') })
   if (dir) formData.value.outputBaseDir = dir
 }
 
-// 队列开关实时生效（不依赖保存按钮）
-const handleQueueToggle = async (enabled) => {
+const persistMessageQueueSetting = async (enabled) => {
   try {
     const config = await invoke('getConfig')
     if (config?.settings?.agent) {
@@ -219,6 +246,11 @@ const handleQueueToggle = async (enabled) => {
     console.error('Failed to save queue setting:', err)
     message.error(t('messages.saveFailed') + ': ' + err.message)
   }
+}
+
+// 队列开关实时生效（不依赖保存按钮）
+const handleQueueToggle = async (enabled) => {
+  await persistMessageQueueSetting(enabled)
 }
 
 const handleSave = async () => {
@@ -241,7 +273,8 @@ const handleSave = async () => {
 
     const nextMode = formData.value.enableDeveloperMode ? undefined : 'agent'
     const settingsPayload = {
-      enableDeveloperMode: formData.value.enableDeveloperMode
+      enableDeveloperMode: formData.value.enableDeveloperMode,
+      developerClaudeSource: formData.value.developerClaudeSource
     }
     if (nextMode) {
       settingsPayload.appMode = nextMode
@@ -279,6 +312,7 @@ const handleReset = async () => {
     formData.value.autocompactPctOverride = DEFAULTS.autocompactPctOverride
     formData.value.messageQueue = DEFAULTS.messageQueue
     formData.value.enableDeveloperMode = DEFAULTS.enableDeveloperMode
+    formData.value.developerClaudeSource = DEFAULTS.developerClaudeSource
     formData.value.outputBaseDir = defaultOutputBaseDir.value
 
     // Save to backend
@@ -289,8 +323,14 @@ const handleReset = async () => {
     await invoke('updateMaxActiveSessions', DEFAULTS.maxActiveSessions)
     await invoke('updateMaxHistorySessions', DEFAULTS.maxHistorySessions)
     await invoke('updateAutocompactPctOverride', DEFAULTS.autocompactPctOverride)
-    await window.electronAPI.updateSettings({ enableDeveloperMode: DEFAULTS.enableDeveloperMode })
-    window.electronAPI.broadcastSettings({ enableDeveloperMode: DEFAULTS.enableDeveloperMode })
+    await window.electronAPI.updateSettings({
+      enableDeveloperMode: DEFAULTS.enableDeveloperMode,
+      developerClaudeSource: DEFAULTS.developerClaudeSource
+    })
+    window.electronAPI.broadcastSettings({
+      enableDeveloperMode: DEFAULTS.enableDeveloperMode,
+      developerClaudeSource: DEFAULTS.developerClaudeSource
+    })
 
     // 重置 outputBaseDir
     const config = await invoke('getConfig')
@@ -299,7 +339,7 @@ const handleReset = async () => {
       await invoke('saveConfig', JSON.parse(JSON.stringify(config)))
     }
 
-    // 注意：消息队列设置已在 handleQueueToggle 中实时保存（通过 v-model 触发），这里不再重复保存
+    await persistMessageQueueSetting(DEFAULTS.messageQueue)
 
     message.success(t('messages.saveSuccess'))
   } catch (err) {
@@ -315,4 +355,22 @@ const handleClose = () => {
 
 <style scoped>
 /* 组件特有样式 - 公共样式由 settings-common.css 提供 */
+.settings-subsection {
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-color, #e8e8e3);
+}
+
+.settings-subsection-last {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.settings-subsection-title {
+  margin-bottom: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-color-1, #222);
+}
 </style>

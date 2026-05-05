@@ -185,9 +185,11 @@ class TerminalManager {
         const pid = this.pty.pid;
         console.log(`[Terminal] Killing process (PID: ${pid})...`);
         // Windows: 先杀进程树（包括 shell 内启动的 claude code 等子进程）
-        killProcessTree(pid);
-        // 再走 node-pty 自身的清理
-        this.pty.kill();
+        const treeKilled = killProcessTree(pid);
+        if (os.platform() !== 'win32' || !treeKilled) {
+          // 非 Windows 或 taskkill 未生效时，再走 node-pty 自身清理
+          this.pty.kill();
+        }
         this.pty = null;
         this.currentProject = null;
       } catch (error) {
