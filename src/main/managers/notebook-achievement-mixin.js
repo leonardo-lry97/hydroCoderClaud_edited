@@ -124,7 +124,7 @@ const notebookAchievementMixin = {
     const relPath = normalizeNotebookPath(path.join('achievements', 'fromchat', fileName))
     const achievement = this.addAchievement(notebookId, {
       name: fileName,
-      type: 'fromchat',
+      type: 'image',
       path: relPath,
       sourceIds
     })
