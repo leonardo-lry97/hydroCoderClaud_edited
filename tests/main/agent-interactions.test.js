@@ -10,6 +10,8 @@ const {
 } = await import('../../src/main/managers/desktop-capability-query-options.js')
 
 describe('AgentSessionManager interactions', () => {
+  const FIXED_CLAUDE_EXE = '/usr/local/bin/claude'
+
   function createManager() {
     const sent = []
     const manager = new AgentSessionManager({
@@ -24,6 +26,7 @@ describe('AgentSessionManager interactions', () => {
       getDefaultProfile: () => ({ id: 'p1', baseUrl: 'https://example.com' }),
       getAPIProfile: () => null
     })
+    vi.spyOn(manager, '_getDeveloperClaudeExecutablePath').mockReturnValue(FIXED_CLAUDE_EXE)
     manager.sessionDatabase = {
       insertAgentMessage: vi.fn(),
       updateAgentMessageToolOutput: vi.fn(),
@@ -421,7 +424,7 @@ describe('AgentSessionManager interactions', () => {
       apiProfileId: 'p2',
       apiBaseUrl: 'https://api-inference.modelscope.cn',
       modelId: 'deepseek-ai/DeepSeek-V4-Pro',
-      executablePath: 'C:\\workspace\\develop\\HydroCoder\\cc-desktop\\node_modules\\@anthropic-ai\\claude-agent-sdk-win32-x64\\claude.exe'
+      executablePath: FIXED_CLAUDE_EXE
     }
     manager.sessions.set('s-restored-model', session)
 
@@ -477,7 +480,7 @@ describe('AgentSessionManager interactions', () => {
       apiProfileId: 'p2',
       apiBaseUrl: 'https://api-inference.modelscope.cn',
       modelId: 'deepseek-ai/DeepSeek-V4-Pro',
-      executablePath: 'C:\\workspace\\develop\\HydroCoder\\cc-desktop\\node_modules\\@anthropic-ai\\claude-agent-sdk-win32-x64\\claude.exe'
+      executablePath: FIXED_CLAUDE_EXE
     }
     session.pendingRuntimeChange = 'none'
     manager.sessions.set(session.id, session)
@@ -537,7 +540,7 @@ describe('AgentSessionManager interactions', () => {
       apiProfileId: 'p1',
       apiBaseUrl: 'https://example.com',
       modelId: 'shared-model',
-      executablePath: 'C:\\workspace\\develop\\HydroCoder\\cc-desktop\\node_modules\\@anthropic-ai\\claude-agent-sdk-win32-x64\\claude.exe'
+      executablePath: FIXED_CLAUDE_EXE
     }
     manager.sessions.set(session.id, session)
 
