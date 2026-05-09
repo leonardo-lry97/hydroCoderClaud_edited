@@ -49,11 +49,11 @@
 └──────────┴─────────────────────┴──────────────┘
 ```
 
-**MainContent.vue** (1147 行) 是布局容器，管理三栏的显隐与拖拽：
+**MainContent.vue** (1292 行) 是布局容器，管理三栏的显隐与拖拽：
 
 | 区域 | 组件 | 职责 |
 |------|------|------|
-| 左栏 | `LeftPanel` (1646 行) | Developer: 项目选择 + 会话列表；Agent: 对话列表 |
+| 左栏 | `LeftPanel` (905 行) | Developer: 项目选择 + 会话列表；Agent: 对话列表 |
 | 中栏 | `TabBar` + 内容区 | Tab 切换 + 终端/对话渲染 |
 | 右栏 | `RightPanel` / `AgentRightPanel` | Developer: 9 Tab 配置面板；Agent: 文件浏览器 |
 
@@ -126,12 +126,13 @@ const currentModeTabs = computed(() =>
 | Agents | AgentsTab (409 行) | Agent 分组列表/安装/启禁/编辑/导入导出 |
 | Hooks | HooksTab (569 行) | Hook 分组列表/编辑（含 ANSI 转义解析） |
 | MCP | MCPTab (398 行) | MCP 服务器管理（兼容 Claude Desktop 格式） |
+| Files | FilesTab (—) | 文件浏览与内容预览 |
 | Plugins | PluginsTab (824 行) | 插件管理/市场安装 |
+| Scheduled Tasks | ScheduledTasksTab (—) | 定时任务管理（列表/创建/编辑/历史） |
 | Settings | SettingsTab (505 行) | CLI 权限/环境变量配置 |
 | Prompts | PromptsTab (925 行) | 提示词管理/标签/搜索 |
-| Commands | QuickCommands (664 行) | 快捷命令面板 |
 
-面板底部固定 `QuickInput` (203 行)，提供快捷输入 → 发送到终端 / 添加到队列 / 保存为 Prompt。
+面板底部固定 `QuickInput` (203 行)，提供快捷输入 → 发送到终端 / 添加到队列 / 保存为 Prompt。快捷命令通过 `QuickCommands` (664 行) 在独立的 `commands/` 子目录中以组件形式组织，不占用独立 Tab 入口。
 
 `MessageQueue` (807 行) 作为特殊 Tab 单独处理（不参与 KeepAlive），管理消息队列的编排与发送。
 
@@ -151,7 +152,7 @@ const currentModeTabs = computed(() =>
 
 ### 聊天界面
 
-`AgentChatTab` (590 行) 是对话主视图：
+`AgentChatTab` (774 行) 是对话主视图：
 
 ```
 ┌─────────────────────────┐
@@ -186,7 +187,7 @@ const currentModeTabs = computed(() =>
 - 文件路径可点击（`preview-path` 事件 → 右侧文件预览）
 - 结果文本截断，点击展开完整内容
 
-#### ChatInput (1610 行)
+#### ChatInput (870 行)
 
 最大的单组件，职责：
 

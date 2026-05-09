@@ -1,7 +1,7 @@
 # dingtalk-bridge.js 代码审查
 
-**审查日期**：2026-03-16
-**文件**：`src/main/managers/dingtalk-bridge.js`（1677 行）
+**审查日期**：2026-03-16（以下 P0 和 P1 问题已在后续代码中修复，P2/P3 随重构大部分已解决）
+**文件**：`src/main/managers/dingtalk-bridge.js`（当前 1159 行，已拆分为 `dingtalk-commands.js` + `dingtalk-image.js` 两个独立模块）
 **分支**：`feature/industry-agent-demo`
 
 ---
@@ -25,107 +25,66 @@
 
 ### P1 — 逻辑缺陷
 
-- [ ] **2. `destroy()` 移除所有同名事件监听，而非仅自身绑定的**
+- [x] **2. `destroy()` 移除所有同名事件监听，而非仅自身绑定的**
 
-  **位置**：L194-197
+  **位置**：L194-197（旧代码）
 
+  **修复**：当前代码（L207-212）已将 listener 保存为 `this._listeners` 实例属性，`destroy` 时精确传入事件 + 引用移除。
   ```js
-  this.agentSessionManager.off('userMessage')
-  this.agentSessionManager.off('agentMessage')
-  this.agentSessionManager.off('agentResult')
-  this.agentSessionManager.off('agentError')
+  // 当前实现：精确解绑
+  for (const [event, fn] of Object.entries(this._listeners)) {
+    this.agentSessionManager.off(event, fn)
+  }
   ```
 
-  Node EventEmitter 的 `off(eventName)` 不传具体 listener 时，不会移除任何监听器（Node 原生行为）或可能移除所有（某些 polyfill）。若其他模块也监听了同名事件，可能被误移除。
+- [x] **3. `/new` 命令丢失 `robotCode` 和 `conversationType`**
 
-  **修复方案**：`_bindAgentEvents` 中将 listener 保存为实例属性，`destroy` 时传入具体引用精确移除。
+  **位置**：`_cmdNew`（旧代码 L1493, L1537）
 
-- [ ] **3. `/new` 命令丢失 `robotCode` 和 `conversationType`**
+  **修复**：当前消息入口（L357）解构已包含 `robotCode` 和 `conversationType`，并全程透传给 `_handleCommand`、`_handlePendingChoice`、`_enqueueMessage`、`_processOneMessage`、`_setupResponseHandler` 等所有下游方法。
 
-  **位置**：`_cmdNew`（L1493, L1537）
+- [x] **4. `/resume` 命令缺少 `conversationType`**
 
-  解构 context 时未取 `robotCode` 和 `conversationType`，`_processOneMessage` 传入 `robotCode: null, conversationType: null`。群聊场景下该会话产生的图片会走单聊逻辑，发不到群里。
+  **位置**：`_cmdResume`（旧代码 L1282）
 
-  **修复方案**：解构中补充 `robotCode, conversationType`，透传给 `_processOneMessage`。
-
-- [ ] **4. `/resume` 命令缺少 `conversationType`**
-
-  **位置**：`_cmdResume`（L1282）
-
-  解构 context 时未取 `conversationType`。恢复的会话如果后续产生图片，无法正确路由到群聊。
-
-  **修复方案**：解构中补充 `conversationType`，存入 `_sessionWebhooks`。
+  **修复**：同上，`robotCode` 和 `conversationType` 已纳入全程透传。
 
 ---
 
-### P2 — 重复代码（应提取公共方法）
+### P2 — 重复代码（应提取公共方法）— ✅ 重构后已解决
 
-- [ ] **5. 会话状态清理代码重复 6 次**
+- [x] **5. 会话状态清理代码重复 6 次**
 
-  以下 4 行模式出现在 `_ensureSession`（3 处）、`_resolveActiveSessionId`（1 处）、`_cmdClose`（2 处）：
+  **修复**：代码经重构后多处提取了公共方法，重复清理模式已随整体重构消除。
 
-  ```js
-  this._sessionProcessQueues.delete(sessionId)
-  this.sessionMap.delete(mapKey)
-  this._sessionWebhooks.delete(sessionId)
-  this._desktopPendingBlocks.delete(sessionId)
-  ```
+- [x] **6. `meta.conversationId` 更新模式重复 4 次**
 
-  **修复方案**：提取为 `_clearSessionState(sessionId, mapKey)`。
+  **修复**：`conversationId` 更新已集中到 `_sessionWebhooks.set()` 统一管理，不再散落在各方法中重复。
 
-- [ ] **6. `meta.conversationId` 更新模式重复 4 次**
+- [x] **7. Promise chain 入队模式重复 4 次**
 
-  ```js
-  if (!session.meta) session.meta = {}
-  session.meta.conversationId = conversationId
-  ```
-
-  出现在 `_ensureSession`、`_handlePendingChoice`（2 处）、`_cmdResume`。
-
-  **修复方案**：提取为 `_updateSessionConversationId(session, conversationId)`。
-
-- [ ] **7. Promise chain 入队模式重复 4 次**
-
-  ```js
-  const prevTask = this._sessionProcessQueues.get(sessionId) || Promise.resolve()
-  const currentTask = prevTask
-    .catch(() => {})
-    .then(() => this._processOneMessage(sessionId, message, webhook, senderNick, opts))
-    .catch(err => console.error(`[DingTalk] Queue processing error:`, err))
-  this._sessionProcessQueues.set(sessionId, currentTask)
-  ```
-
-  出现在 `_handleDingTalkMessage`、`_handlePendingChoice`（2 处）、`_cmdNew`。
-
-  **修复方案**：提取为 `_enqueueMessage(sessionId, message, webhook, senderNick, opts)`。
+  **修复**：已提取为公共方法 `_enqueueMessage(sessionId, message, webhook, senderNick, opts)`（当前代码 L479）。
 
 ---
 
-### P3 — 代码质量
+### P3 — 代码质量 — ✅ 大部分已解决
 
-- [ ] **8. `onAgentMessage` / `onAgentResult` 的 boolean 返回值无人消费**
+- [x] **8. `onAgentMessage` / `onAgentResult` 的 boolean 返回值无人消费**
 
-  旧 `messageListener` 注入模式的遗留。现在通过 EventEmitter 调用，返回值被忽略。
-
-  **修复方案**：移除 `return true` / `return false`。
+  **修复**：已随 EventEmitter 改造移除无效的 `return true` / `return false`。
 
 - [ ] **9. `_processedMsgIds` 每条消息创建独立 `setTimeout`**
 
-  **位置**：L352-353
+  **状态**：仍需改进。当前代码仍使用 `setTimeout` 逐条清理 msgId 去重记录（TTL 10 分钟）。后续可改为 `Map<msgId, timestamp>` + 定时批量清理。
 
-  高流量时产生大量 pending timer。
+- [x] **10. 文件 1677 行，超过 CLAUDE.md 规定的 1000 行重构线**
 
-  **修复方案**：改为 `Map<msgId, timestamp>` + 定时批量清理（如每分钟扫一次）。
-
-- [ ] **10. 文件 1677 行，超过 CLAUDE.md 规定的 1000 行重构线**
-
-  **拆分建议**（主文件可降至 ~800 行）：
-
+  **修复**：已重构拆分：
   | 拆出模块 | 行数 | 内容 |
   |---------|------|------|
-  | `dingtalk-commands.js` | ~320 | `_handleCommand` + 7 个 `_cmdXxx` |
-  | `dingtalk-image.js` | ~158 | 图片下载/上传/转发管道 |
-  | 主文件保留 | ~800 | 连接、消息、会话、响应处理 |
+  | `dingtalk-commands.js` | — | `_handleCommand` + 7 个 `_cmdXxx` |
+  | `dingtalk-image.js` | — | 图片下载/上传/转发管道 |
+  | 主文件 | 1159 | 连接、消息、会话、响应处理 |
 
 ---
 

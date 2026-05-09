@@ -6,13 +6,13 @@
 
 | 类别 | 文件数 | 总行数 |
 |------|--------|--------|
-| 顶层模块 | 13 | 7397 |
-| IPC Handlers | 12+ | 3459+ |
-| Managers | 16 | 5340 |
-| Database | 10 | 1808 |
-| Utils | 10 | 1189 |
+| 顶层模块 | 15 | ~8300 |
+| IPC Handlers | 22 | ~3800 |
+| Managers | 23 | ~9700 |
+| Database | 11 | ~2000 |
+| Utils | 16 | ~1400 |
 | Config | 2 | 438 |
-| **合计** | **63** | **19631** |
+| **合计** | **89** | **~25600** |
 
 ---
 
@@ -26,7 +26,7 @@
 - **架构上下文**：-> [应用生命周期](../design/main-process.md#应用生命周期)
 
 ### config-manager.js
-- **行数**：1056
+- **行数**：1260
 - **职责**：应用配置管理（config.json），含 API Profile、服务商、市场、MCP 代理、全局设置与配置迁移
 - **关键方法**：`load()`, `save()`, `getConfig()`, `getAPIConfig()`, `testAPIConnection()`, `getMarketConfig()`, `getMcpProxyConfig()`, `ensureProxySupport()`, `migrateToProfiles()`, `migrateProfileStructure()`
 - **Mixin**：`providerConfigMixin`（服务商 CRUD）、`apiConfigMixin`（API Profile CRUD）
@@ -39,7 +39,7 @@
 - **架构上下文**：-> [Terminal 模式](../design/main-process.md#terminal-模式)
 
 ### agent-session-manager.js
-- **行数**：1373
+- **行数**：2322
 - **职责**：Agent 会话管理，通过 Claude Code CLI SDK 的 Streaming HTTP API 实现多轮 AI 对话
 - **关键方法**：`create()`, `sendMessage()`, `cancel()`, `close()`, `closeAll()`, `reopen()`, `toggleMcp()`, `list()`, `rename()`
 - **关键类**：`AgentSession`（单个会话）、`AgentSessionManager`（管理器）
@@ -109,19 +109,19 @@
 
 | 文件 | 通道前缀 | 行数 | 关键 Handler |
 |------|---------|------|-------------|
-| agent-handlers.js | agent: | 474 | sendMessage, cancel, create, close, reopen, rename, getMessages, listConversations, searchFiles |
-| plugin-handlers.js | plugins: / skills: / agents: / hooks: / mcp: / settings: | 1236 | listPlugins, getAllSkills, createSkill, importSkills, getAllAgents, getGlobalHooks, listMcpAll |
-| config-handlers.js | config: / providers: | 278 | getConfig, updateSettings, testAPI, getProfiles, addProfile |
-| prompt-handlers.js | prompt: | 278 | getPrompts, createPrompt, updatePrompt, deletePrompt, getPromptTags |
+| agent-handlers.js | agent: | 615 | sendMessage, cancel, create, close, reopen, rename, getMessages, listConversations, searchFiles |
+| plugin-handlers.js | plugins: / skills: / agents: / hooks: / mcp: / settings: | 34 | （入口文件，注册 8 个领域子模块） |
+| config-handlers.js | config: / providers: | 259 | getConfig, updateSettings, testAPI, getProfiles, addProfile |
+| prompt-handlers.js | prompt: | 248 | getPrompts, createPrompt, updatePrompt, deletePrompt, getPromptTags |
 | project-handlers.js | project: | 290 | listProjects, createProject, updateProject, deleteProject, hasProblematicPath |
 | session-handlers.js | session: | 230 | getSessions, getMessages, searchSessions, syncSessions, getTags |
 | active-session-handlers.js | activeSession: | 136 | create, start, close, write, resize, rename |
-| capability-handlers.js | capabilities: | 101 | fetch, install, uninstall, enable, disable, toggleMcp |
-| notebook-handlers.js | notebook: | 488 | list, create, bindSession, listSources, listAchievements, listTools, prepareGeneration, previewGeneration |
+| capability-handlers.js | capabilities: | 120 | fetch, install, uninstall, enable, disable, toggleMcp |
+| notebook-handlers.js | notebook: | 521 | list, create, bindSession, listSources, listAchievements, listTools, prepareGeneration, previewGeneration |
 | update-handlers.js | update: | 59 | checkForUpdates, downloadUpdate, quitAndInstall, getStatus |
-| dingtalk-handlers.js | dingtalk: | 55 | getStatus, start, stop, getConfig, saveConfig |
-| scheduled-task-handlers.js | scheduled-task: | 63 | list, create, update, delete, runNow, listRuns |
-| weixin-notify-handlers.js | weixin-notify: | 81 | startLogin, waitLogin, listAccounts, listTargets, updateTarget, deleteTarget, pollOnce, sendText, bindSessionToTarget |
+| dingtalk-handlers.js | dingtalk: | 56 | getStatus, start, stop, getConfig, saveConfig |
+| scheduled-task-handlers.js | scheduled-task: | 68 | list, create, update, delete, runNow, listRuns |
+| weixin-notify-handlers.js | weixin-notify: | 83 | startLogin, waitLogin, listAccounts, listTargets, updateTarget, deleteTarget, pollOnce, sendText, bindSessionToTarget |
 | queue-handlers.js | queue: | 45 | getQueue, addToQueue, deleteItem, clearQueue |
 
 ---
@@ -135,7 +135,7 @@
 - **架构上下文**：-> [能力市场](../design/integrations.md#能力市场)
 
 ### dingtalk-bridge.js
-- **行数**：1335
+- **行数**：1159
 - **职责**：钉钉机器人桥接（Stream 连接、消息转发、图片上传、命令系统、多会话管理）
 - **关键方法**：`start()`, `stop()`, `restart()`, `getStatus()`, `onAgentMessage()`, `onAgentResult()`, `onAgentError()`
 - **内部方法**：`_handleDingTalkMessage()`, `_ensureSession()`, `_sendCollectedImages()`, `_handleCommand()`, `_replyToDingTalk()`
