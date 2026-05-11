@@ -12,10 +12,23 @@ const { VIDEO_EXTS, VIDEO_MIME_MAP, MAX_VIDEO_SIZE, MAX_IMG_SIZE } = require('..
 
 const MAX_TEXT_PREVIEW_SIZE = 1024 * 1024
 
-function setupAgentHandlers(ipcMain, agentSessionManager) {
+function setupAgentHandlers(ipcMain, agentSessionManager, agentSessionBroker = null) {
   if (!agentSessionManager) {
     console.warn('[IPC] AgentSessionManager not available, skipping agent handlers')
     return
+  }
+
+  const service = agentSessionBroker || agentSessionManager
+  const hostClient = {
+    clientId: 'host-ui',
+    clientType: 'host',
+    clientMeta: null
+  }
+  const invoke = (method, ...args) => {
+    if (agentSessionBroker) {
+      return service[method](...args, hostClient)
+    }
+    return service[method](...args)
   }
 
   // ========================================
@@ -25,7 +38,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 创建新会话
   ipcMain.handle('agent:create', async (event, options) => {
     try {
-      return agentSessionManager.create(options)
+      return invoke('create', options)
     } catch (err) {
       console.error('[IPC] agent:create error:', err)
       return { error: err.message }
@@ -36,14 +49,14 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   ipcMain.handle('agent:sendMessage', async (event, { sessionId, message, model, modelTier, maxTurns }) => {
     try {
       // 不等待完成，让流式消息通过 IPC 事件推送
-      agentSessionManager.sendMessage(sessionId, message, { model: model || modelTier, maxTurns }).catch(err => {
+      invoke('sendMessage', sessionId, message, { model: model || modelTier, maxTurns }).catch(err => {
         console.error('[IPC] agent:sendMessage async error:', err)
         // 推送错误到前端，使用 _safeSend 防止窗口已销毁时报错
-        agentSessionManager._safeSend('agent:error', {
+        service._safeSend('agent:error', {
           sessionId,
           error: err.message || 'Unknown error'
         })
-        agentSessionManager._safeSend('agent:statusChange', {
+        service._safeSend('agent:statusChange', {
           sessionId,
           status: 'idle'
         })
@@ -58,7 +71,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 取消生成（使用 interrupt，不杀 CLI 进程）
   ipcMain.handle('agent:cancel', async (event, sessionId) => {
     try {
-      await agentSessionManager.cancel(sessionId)
+      await invoke('cancel', sessionId)
       return { success: true }
     } catch (err) {
       console.error('[IPC] agent:cancel error:', err)
@@ -69,7 +82,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 恢复会话（从 DB 重新加载到内存）
   ipcMain.handle('agent:reopen', async (event, sessionId) => {
     try {
-      return agentSessionManager.reopen(sessionId)
+      return invoke('reopen', sessionId)
     } catch (err) {
       console.error('[IPC] agent:reopen error:', err)
       return { error: err.message }
@@ -79,7 +92,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 切换 API Profile（终止当前 CLI 进程，下次发消息用新 profile）
   ipcMain.handle('agent:switchApiProfile', async (event, { sessionId, profileId }) => {
     try {
-      await agentSessionManager.switchApiProfile(sessionId, profileId)
+      await invoke('switchApiProfile', sessionId, profileId)
       return { success: true }
     } catch (err) {
       console.error('[IPC] agent:switchApiProfile error:', err)
@@ -90,7 +103,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 关闭会话
   ipcMain.handle('agent:close', async (event, sessionId) => {
     try {
-      await agentSessionManager.close(sessionId)
+      await invoke('close', sessionId)
       return { success: true }
     } catch (err) {
       console.error('[IPC] agent:close error:', err)
@@ -101,7 +114,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 响应宿主交互（AskUserQuestion）
   ipcMain.handle('agent:respondInteraction', async (event, { sessionId, interactionId, answers, questions, annotations, updatedInput, updatedPermissions, decisionClassification, behavior }) => {
     try {
-      return agentSessionManager.resolveInteraction(sessionId, interactionId, {
+      return invoke('resolveInteraction', sessionId, interactionId, {
         answers,
         questions,
         annotations,
@@ -119,7 +132,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 取消宿主交互
   ipcMain.handle('agent:cancelInteraction', async (event, { sessionId, interactionId, reason }) => {
     try {
-      return agentSessionManager.cancelInteraction(sessionId, interactionId, reason)
+      return invoke('cancelInteraction', sessionId, interactionId, reason)
     } catch (err) {
       console.error('[IPC] agent:cancelInteraction error:', err)
       return { error: err.message }
@@ -128,18 +141,18 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
 
   // 获取单个会话
   ipcMain.handle('agent:get', async (event, sessionId) => {
-    return agentSessionManager.get(sessionId)
+    return invoke('get', sessionId)
   })
 
   // 获取所有会话列表
   ipcMain.handle('agent:list', async () => {
-    return agentSessionManager.list()
+    return invoke('list')
   })
 
   // 重命名会话
   ipcMain.handle('agent:rename', async (event, { sessionId, title }) => {
     try {
-      return agentSessionManager.rename(sessionId, title)
+      return invoke('rename', sessionId, title)
     } catch (err) {
       console.error('[IPC] agent:rename error:', err)
       return { error: err.message }
@@ -148,19 +161,19 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
 
   // 获取消息历史
   ipcMain.handle('agent:getMessages', async (event, sessionId) => {
-    return agentSessionManager.getMessages(sessionId)
+    return invoke('getMessages', sessionId)
   })
 
   // 压缩会话上下文
   ipcMain.handle('agent:compact', async (event, sessionId) => {
     try {
-      agentSessionManager.compactConversation(sessionId).catch(err => {
+      invoke('compactConversation', sessionId).catch(err => {
         console.error('[IPC] agent:compact async error:', err)
-        agentSessionManager._safeSend('agent:error', {
+        service._safeSend('agent:error', {
           sessionId,
           error: err.message || 'Compact failed'
         })
-        agentSessionManager._safeSend('agent:statusChange', {
+        service._safeSend('agent:statusChange', {
           sessionId,
           status: 'idle'
         })
@@ -175,7 +188,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 物理删除对话
   ipcMain.handle('agent:deleteConversation', async (event, sessionId) => {
     try {
-      return agentSessionManager.deleteConversation(sessionId)
+      return invoke('deleteConversation', sessionId)
     } catch (err) {
       console.error('[IPC] agent:deleteConversation error:', err)
       return { error: err.message }
@@ -185,7 +198,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 清空并重建会话（用于 /clear 命令）
   ipcMain.handle('agent:clearAndRecreate', async (event, { sessionId, overrides }) => {
     try {
-      const newSession = await agentSessionManager.clearAndRecreate(sessionId, overrides || {})
+      const newSession = await invoke('clearAndRecreate', sessionId, overrides || {})
       return { success: true, session: newSession }
     } catch (err) {
       console.error('[IPC] agent:clearAndRecreate error:', err)
@@ -200,7 +213,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 切换模型（实时生效）
   ipcMain.handle('agent:setModel', async (event, { sessionId, model }) => {
     try {
-      const result = await agentSessionManager.setModel(sessionId, model)
+      const result = await invoke('setModel', sessionId, model)
       return result && typeof result === 'object' ? result : { success: true }
     } catch (err) {
       console.error('[IPC] agent:setModel error:', err)
@@ -211,7 +224,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 获取支持的模型列表
   ipcMain.handle('agent:getSupportedModels', async (event, sessionId) => {
     try {
-      return await agentSessionManager.getSupportedModels(sessionId)
+      return await invoke('getSupportedModels', sessionId)
     } catch (err) {
       console.error('[IPC] agent:getSupportedModels error:', err)
       return { error: err.message }
@@ -221,7 +234,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 获取支持的 slash 命令列表
   ipcMain.handle('agent:getSupportedCommands', async (event, sessionId) => {
     try {
-      return await agentSessionManager.getSupportedCommands(sessionId)
+      return await invoke('getSupportedCommands', sessionId)
     } catch (err) {
       console.error('[IPC] agent:getSupportedCommands error:', err)
       return { error: err.message }
@@ -231,7 +244,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 获取账户信息
   ipcMain.handle('agent:getAccountInfo', async (event, sessionId) => {
     try {
-      return await agentSessionManager.getAccountInfo(sessionId)
+      return await invoke('getAccountInfo', sessionId)
     } catch (err) {
       console.error('[IPC] agent:getAccountInfo error:', err)
       return { error: err.message }
@@ -241,7 +254,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 获取 MCP 服务器状态
   ipcMain.handle('agent:getMcpServerStatus', async (event, sessionId) => {
     try {
-      return await agentSessionManager.getMcpServerStatus(sessionId)
+      return await invoke('getMcpServerStatus', sessionId)
     } catch (err) {
       console.error('[IPC] agent:getMcpServerStatus error:', err)
       return { error: err.message }
@@ -251,7 +264,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 获取完整初始化结果
   ipcMain.handle('agent:getInitResult', async (event, sessionId) => {
     try {
-      return await agentSessionManager.getInitResult(sessionId)
+      return await invoke('getInitResult', sessionId)
     } catch (err) {
       const message = String(err?.message || err || '')
       const isExpectedMissingInit = message.includes('No active streaming session') || message.includes('not found')
@@ -268,12 +281,12 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
 
   // 获取输出目录路径
   ipcMain.handle('agent:getOutputDir', async (event, sessionId) => {
-    return agentSessionManager.getOutputDir(sessionId)
+    return invoke('getOutputDir', sessionId)
   })
 
   // 打开输出目录
   ipcMain.handle('agent:openOutputDir', async (event, sessionId) => {
-    const dir = agentSessionManager.getOutputDir(sessionId)
+    const dir = invoke('getOutputDir', sessionId)
     if (dir) {
       await shell.openPath(dir)
       return { success: true }
@@ -283,7 +296,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
 
   // 列出输出文件
   ipcMain.handle('agent:listOutputFiles', async (event, sessionId) => {
-    return agentSessionManager.listOutputFiles(sessionId)
+    return invoke('listOutputFiles', sessionId)
   })
 
   // ========================================
@@ -293,7 +306,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 列出目录内容（支持子目录）
   ipcMain.handle('agent:listDir', async (event, { sessionId, relativePath, showHidden }) => {
     try {
-      return agentSessionManager.listDir(sessionId, relativePath || '', !!showHidden)
+      return invoke('listDir', sessionId, relativePath || '', !!showHidden)
     } catch (err) {
       console.error('[IPC] agent:listDir error:', err)
       return { entries: [], error: err.message }
@@ -303,7 +316,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 读取文件内容（用于预览）
   ipcMain.handle('agent:readFile', async (event, { sessionId, relativePath }) => {
     try {
-      return agentSessionManager.readFile(sessionId, relativePath)
+      return invoke('readFile', sessionId, relativePath)
     } catch (err) {
       console.error('[IPC] agent:readFile error:', err)
       return { error: err.message }
@@ -313,7 +326,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 保存文件
   ipcMain.handle('agent:saveFile', async (event, { sessionId, relativePath, content }) => {
     try {
-      return agentSessionManager.saveFile(sessionId, relativePath, content)
+      return invoke('saveFile', sessionId, relativePath, content)
     } catch (err) {
       console.error('[IPC] agent:saveFile error:', err)
       return { error: err.message }
@@ -520,7 +533,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 搜索文件
   ipcMain.handle('agent:searchFiles', async (event, { sessionId, keyword, showHidden }) => {
     try {
-      return await agentSessionManager.searchFiles(sessionId, keyword, !!showHidden)
+      return await invoke('searchFiles', sessionId, keyword, !!showHidden)
     } catch (err) {
       console.error('[IPC] agent:searchFiles error:', err)
       return { results: [] }
@@ -534,7 +547,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 创建文件或文件夹
   ipcMain.handle('agent:createFile', async (event, { sessionId, parentPath, name, isDirectory }) => {
     try {
-      return await agentSessionManager.createFile(sessionId, parentPath, name, isDirectory)
+      return await invoke('createFile', sessionId, parentPath, name, isDirectory)
     } catch (err) {
       console.error('[IPC] agent:createFile error:', err)
       return { error: err.message }
@@ -544,7 +557,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 重命名文件或文件夹
   ipcMain.handle('agent:renameFile', async (event, { sessionId, oldPath, newName }) => {
     try {
-      return await agentSessionManager.renameFile(sessionId, oldPath, newName)
+      return await invoke('renameFile', sessionId, oldPath, newName)
     } catch (err) {
       console.error('[IPC] agent:renameFile error:', err)
       return { error: err.message }
@@ -554,7 +567,7 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   // 删除文件或文件夹
   ipcMain.handle('agent:deleteFile', async (event, { sessionId, path }) => {
     try {
-      return await agentSessionManager.deleteFile(sessionId, path)
+      return await invoke('deleteFile', sessionId, path)
     } catch (err) {
       console.error('[IPC] agent:deleteFile error:', err)
       return { error: err.message }

@@ -12,6 +12,15 @@ class AgentSession {
     this.id = options.id || uuidv4()
     this.type = options.type || AgentType.CHAT
     this.status = AgentStatus.IDLE
+    this.ownerClientId = typeof options.ownerClientId === 'string' && options.ownerClientId.trim()
+      ? options.ownerClientId.trim()
+      : 'host-ui'
+    this.clientType = typeof options.clientType === 'string' && options.clientType.trim()
+      ? options.clientType.trim()
+      : 'host'
+    this.clientMeta = options.clientMeta && typeof options.clientMeta === 'object' && !Array.isArray(options.clientMeta)
+      ? { ...options.clientMeta }
+      : null
     this.sdkSessionId = null        // SDK 返回的 session_id，用于 resume
     this.title = options.title || ''
     this.cwd = options.cwd || null  // 工作目录
@@ -43,6 +52,9 @@ class AgentSession {
       id: this.id,
       type: this.type,
       status: this.status,
+      ownerClientId: this.ownerClientId,
+      clientType: this.clientType,
+      clientMeta: this.clientMeta,
       sdkSessionId: this.sdkSessionId,
       title: this.title,
       cwd: this.cwd,

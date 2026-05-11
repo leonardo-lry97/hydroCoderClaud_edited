@@ -59,6 +59,18 @@ function normalizeModelIdOrNull(value) {
   return normalized || null
 }
 
+function parseClientMeta(value) {
+  if (!value) return null
+  if (typeof value === 'object' && !Array.isArray(value)) return value
+  if (typeof value !== 'string') return null
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 function buildRuntimeSignature({ apiProfileId = null, apiBaseUrl = null, modelId = null, executablePath = null } = {}) {
   return {
     apiProfileId: apiProfileId || null,
@@ -524,7 +536,10 @@ class AgentSessionManager extends EventEmitter {
       modelId: initialModelId,
       source: resolveConversationSource(options.type, options.source),
       taskId: options.taskId || null,
-      meta: options.meta || {}
+      meta: options.meta || {},
+      ownerClientId: options.ownerClientId,
+      clientType: options.clientType,
+      clientMeta: options.clientMeta
     })
 
     // 自动分配工作目录
@@ -547,7 +562,10 @@ class AgentSessionManager extends EventEmitter {
           apiBaseUrl: profile?.baseUrl || null,
           modelId: session.modelId,
           source: session.source,
-          taskId: session.taskId
+          taskId: session.taskId,
+          ownerClientId: session.ownerClientId,
+          clientType: session.clientType,
+          clientMeta: session.clientMeta
         })
         session.dbConversationId = dbRecord.id
       } catch (err) {
@@ -840,7 +858,10 @@ class AgentSessionManager extends EventEmitter {
         title: row.title || '',
         cwd: row.cwd,
         source: resolveConversationSource(row.type, row.source),
-        taskId: row.task_id || null
+        taskId: row.task_id || null,
+        ownerClientId: row.owner_client_id || 'host-ui',
+        clientType: row.client_type || 'host',
+        clientMeta: parseClientMeta(row.client_meta)
       })
 
       // 恢复关键状态
@@ -868,7 +889,7 @@ class AgentSessionManager extends EventEmitter {
       console.log(`[AgentSession] Reopened session ${sessionId} from DB (sdkSessionId: ${session.sdkSessionId || 'none'})`)
     }
 
-    return session.toJSON()
+    return this._serializeSession(session)
   }
 
   /**
@@ -1704,7 +1725,10 @@ class AgentSessionManager extends EventEmitter {
       cwd: newCwd,
       apiProfileId: newApiProfileId,
       modelId: newModelId,
-      cwdSubDir: overrides.cwdSubDir
+      cwdSubDir: overrides.cwdSubDir,
+      ownerClientId: oldSession.ownerClientId,
+      clientType: oldSession.clientType,
+      clientMeta: oldSession.clientMeta
     })
 
     console.log(`[AgentSession] Cleared and recreated session: ${sessionId} -> ${newSession.id}`)
@@ -1869,6 +1893,9 @@ class AgentSessionManager extends EventEmitter {
             id: row.session_id,
             type: row.type,
             status: row.status,
+            ownerClientId: row.owner_client_id || 'host-ui',
+            clientType: row.client_type || 'host',
+            clientMeta: parseClientMeta(row.client_meta),
             sdkSessionId: row.sdk_session_id,
             title: row.title || '',
             cwd: row.cwd,
@@ -1929,7 +1956,7 @@ class AgentSessionManager extends EventEmitter {
     this._safeSend('agent:renamed', { sessionId, title: newTitle })
 
     console.log(`[AgentSession] Renamed session ${sessionId} to: ${newTitle}`)
-    return session.toJSON()
+    return this._serializeSession(session)
   }
 
   /**

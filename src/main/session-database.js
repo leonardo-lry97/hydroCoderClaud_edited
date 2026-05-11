@@ -197,7 +197,10 @@ class SessionDatabaseBase {
       { name: 'staff_id', type: 'TEXT' },         // 钉钉发送者 staffId
       { name: 'conversation_id', type: 'TEXT' },   // 钉钉群/单聊会话 ID
       { name: 'source', type: "TEXT DEFAULT 'manual'" },
-      { name: 'task_id', type: 'INTEGER' }
+      { name: 'task_id', type: 'INTEGER' },
+      { name: 'owner_client_id', type: "TEXT DEFAULT 'host-ui'" },
+      { name: 'client_type', type: "TEXT DEFAULT 'host'" },
+      { name: 'client_meta', type: 'TEXT' }
     ]
 
     for (const col of agentConvNewColumns) {
@@ -623,6 +626,9 @@ class SessionDatabaseBase {
         queued_messages TEXT DEFAULT '[]',
         source TEXT DEFAULT 'manual',
         task_id INTEGER,
+        owner_client_id TEXT DEFAULT 'host-ui',
+        client_type TEXT DEFAULT 'host',
+        client_meta TEXT,
         created_at INTEGER,
         updated_at INTEGER
       )

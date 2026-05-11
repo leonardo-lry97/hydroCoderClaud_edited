@@ -29,6 +29,7 @@ const promptHandlersMod = safeRequire('./ipc-handlers/prompt-handlers', 'prompt-
 const queueHandlersMod = safeRequire('./ipc-handlers/queue-handlers', 'queue-handlers');
 const pluginHandlersMod = safeRequire('./ipc-handlers/plugin-handlers', 'plugin-handlers');
 const agentHandlersMod = safeRequire('./ipc-handlers/agent-handlers', 'agent-handlers');
+const agentSessionBrokerMod = safeRequire('./agent-platform/agent-session-broker', 'agent-session-broker');
 const capabilityHandlersMod = safeRequire('./ipc-handlers/capability-handlers', 'capability-handlers');
 const updateHandlersMod = safeRequire('./ipc-handlers/update-handlers', 'update-handlers');
 const dingtalkHandlersMod = safeRequire('./ipc-handlers/dingtalk-handlers', 'dingtalk-handlers');
@@ -47,6 +48,7 @@ const registerPromptHandlers = promptHandlersMod?.registerPromptHandlers;
 const setupQueueHandlers = queueHandlersMod?.setupQueueHandlers;
 const setupPluginHandlers = pluginHandlersMod?.setupPluginHandlers;
 const setupAgentHandlers = agentHandlersMod?.setupAgentHandlers;
+const AgentSessionBroker = agentSessionBrokerMod?.AgentSessionBroker;
 const setupCapabilityHandlers = capabilityHandlersMod?.setupCapabilityHandlers;
 const setupUpdateHandlers = updateHandlersMod?.setupUpdateHandlers;
 const setupDingTalkHandlers = dingtalkHandlersMod?.setupDingTalkHandlers;
@@ -115,6 +117,9 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
   if (capabilityManager) {
     capabilityManager.setSessionDatabase(sessionDatabase);
   }
+  const agentSessionBroker = agentSessionManager && AgentSessionBroker
+    ? new AgentSessionBroker(agentSessionManager)
+    : null
   if (sessionFileWatcher) {
     sessionFileWatcher.setDependencies({
       sessionDatabase,
@@ -745,7 +750,7 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
   // Agent 会话管理
   // ========================================
   if (agentSessionManager && setupAgentHandlers) {
-    setupAgentHandlers(ipcMain, agentSessionManager);
+    setupAgentHandlers(ipcMain, agentSessionManager, agentSessionBroker);
   }
 
   // ========================================

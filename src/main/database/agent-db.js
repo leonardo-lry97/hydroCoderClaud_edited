@@ -24,13 +24,28 @@ function withAgentOperations(BaseClass) {
     /**
      * 创建 Agent 对话记录
      */
-    createAgentConversation({ sessionId, type, title, cwd, cwdAuto, apiProfileId, apiBaseUrl, modelId, source, taskId }) {
+    createAgentConversation({
+      sessionId,
+      type,
+      title,
+      cwd,
+      cwdAuto,
+      apiProfileId,
+      apiBaseUrl,
+      modelId,
+      source,
+      taskId,
+      ownerClientId,
+      clientType,
+      clientMeta
+    }) {
       const now = Date.now()
       const result = this.db.prepare(`
         INSERT INTO agent_conversations (
-          session_id, type, title, cwd, cwd_auto, api_profile_id, api_base_url, model_id, source, task_id, created_at, updated_at
+          session_id, type, title, cwd, cwd_auto, api_profile_id, api_base_url, model_id, source, task_id,
+          owner_client_id, client_type, client_meta, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         sessionId,
         type || 'chat',
@@ -42,6 +57,9 @@ function withAgentOperations(BaseClass) {
         normalizeModelId(modelId),
         source || 'manual',
         taskId || null,
+        ownerClientId || 'host-ui',
+        clientType || 'host',
+        clientMeta ? JSON.stringify(clientMeta) : null,
         now,
         now
       )
@@ -59,6 +77,9 @@ function withAgentOperations(BaseClass) {
         modelId: normalizeModelId(modelId),
         source: source || 'manual',
         taskId: taskId || null,
+        ownerClientId: ownerClientId || 'host-ui',
+        clientType: clientType || 'host',
+        clientMeta: clientMeta || null,
         createdAt: now,
         updatedAt: now
       }
