@@ -5,6 +5,7 @@
 > 关联文档：  
 > - `docs/design/agent-platform-technical-design.md`  
 > - `docs/design/agent-platform-implementation-breakdown.md`  
+> - `docs/design/agent-platform-phase2-open-interface-implementation-plan.md`
 > - `docs/design/desktop-app-extension-platform-design.md`  
 > - `docs/design/hydrology-station-data-workbench-design.md`  
 > - `docs/design/hydrology-station-data-workbench-data-model-and-backend-design.md`  
