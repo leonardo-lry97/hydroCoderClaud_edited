@@ -835,6 +835,7 @@ export default {
     apiConfig: 'API Configuration',
     providerManager: 'Provider Manager',
     globalSettings: 'Global Settings',
+    embeddedApps: 'Embedded Apps',
     capabilityWorkbench: 'Capability Workbench',
     appearanceSettings: 'Appearance',
     sessionHistory: 'Session Browser',

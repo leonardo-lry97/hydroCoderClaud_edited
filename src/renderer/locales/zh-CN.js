@@ -838,6 +838,7 @@ export default {
     apiConfig: 'API 配置管理',
     providerManager: '服务商管理',
     globalSettings: '全局设置',
+    embeddedApps: '内嵌应用',
     capabilityWorkbench: '能力管理',
     appearanceSettings: '外观设置',
     sessionHistory: '会话查询',
