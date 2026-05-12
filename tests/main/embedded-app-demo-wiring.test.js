@@ -32,6 +32,8 @@ describe('embedded app demo wiring', () => {
   it('exposes embedded app demo opener in preload', () => {
     const source = fs.readFileSync(preloadPath, 'utf-8')
 
+    expect(source).toContain("'embedded-app:list': () => ipcRenderer.invoke('embedded-app:list')")
+    expect(source).toContain("'embedded-app:open': (menuKey) => ipcRenderer.invoke('embedded-app:open', menuKey)")
     expect(source).toContain("openEmbeddedAppDemo: () => ipcRenderer.invoke('window:openEmbeddedAppDemo')")
   })
 
