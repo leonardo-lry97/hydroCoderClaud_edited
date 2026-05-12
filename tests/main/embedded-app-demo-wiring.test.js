@@ -31,11 +31,13 @@ describe('embedded app demo wiring', () => {
   })
 
   it('defines main-process labels for registered embedded apps', () => {
-    const source = fs.readFileSync(appI18nPath, 'utf-8')
+    delete require.cache[appI18nPath]
+    const { tMain } = require(appI18nPath)
+    const zhConfig = { getConfig: () => ({ settings: { locale: 'zh-CN' } }) }
+    const enConfig = { getConfig: () => ({ settings: { locale: 'en-US' } }) }
 
-    expect(source).toContain('embeddedApps:')
-    expect(source).toContain("demoTitle: 'Agent 平台 Demo'")
-    expect(source).toContain("demoTitle: 'Agent Platform Demo'")
+    expect(tMain(zhConfig, 'embeddedApps.demoTitle')).toBe('Agent 平台 Demo')
+    expect(tMain(enConfig, 'embeddedApps.demoTitle')).toBe('Agent Platform Demo')
   })
 
   it('exposes embedded app demo opener in preload', () => {
