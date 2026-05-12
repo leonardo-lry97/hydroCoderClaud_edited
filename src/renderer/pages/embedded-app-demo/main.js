@@ -1,5 +1,11 @@
 import './styles.css'
 import { setPageTitle } from '@/utils/page-bootstrap'
+import {
+  buildAutoInteractionResponse,
+  extractAssistantMessageText,
+  extractStreamText,
+  getInteractionRequest
+} from './agent-event-format'
 
 setPageTitle('embeddedAppDemo')
 
@@ -134,18 +140,12 @@ setPageTitle('embeddedAppDemo')
       appendEvent(event.channel, event.payload)
 
       if (event.channel === 'agent:message') {
-        const content = event.payload?.message?.content
-          || event.payload?.content
-          || event.payload?.text
-          || ''
+        const content = extractAssistantMessageText(event)
         state.currentAssistantMessageEl = addMessage('agent', content)
       }
 
       if (event.channel === 'agent:stream') {
-        const chunk = event.payload?.delta
-          || event.payload?.textDelta
-          || event.payload?.text
-          || ''
+        const chunk = extractStreamText(event)
         if (!state.currentAssistantMessageEl) {
           state.currentAssistantMessageEl = addMessage('agent', '')
         }
@@ -157,13 +157,16 @@ setPageTitle('embeddedAppDemo')
       }
 
       if (event.channel === 'agent:interactionRequest') {
-        const interactionId = event.payload?.interactionId
-        const kind = event.payload?.kind
+        const interaction = getInteractionRequest(event)
+        const interactionId = interaction?.interactionId
+        const kind = interaction?.kind
 
         if (interactionId && kind === 'ask_user_question') {
-          await window.hydroAgent.respondInteraction(session.id, interactionId, {
-            answers: ['示例页自动确认：继续执行']
-          })
+          await window.hydroAgent.respondInteraction(
+            session.id,
+            interactionId,
+            buildAutoInteractionResponse(interaction)
+          )
           appendEvent('interaction:auto-response', {
             interactionId,
             note: 'auto-responded by minimal demo'
