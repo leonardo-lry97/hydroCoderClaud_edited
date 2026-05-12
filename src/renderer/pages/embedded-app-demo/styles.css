@@ -139,6 +139,20 @@ textarea {
   padding: 12px 14px;
 }
 
+.path-preview {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(31, 42, 36, 0.04);
+  color: var(--muted);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 textarea {
   resize: vertical;
 }

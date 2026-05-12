@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hydrology Workbench - Hydro Desktop</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="workbench-shell">
+    <aside class="station-pane">
+      <header class="app-head">
+        <p class="eyebrow">Hydrology Workbench</p>
+        <h1>水文站工作台</h1>
+        <p class="summary">按站点组织数据处理流程，左侧选站点，中间处理业务，右侧调用 Agent。</p>
+      </header>
+
+      <div class="station-toolbar">
+        <span>站点树</span>
+        <button id="newStationBtn" type="button">新建</button>
+      </div>
+      <nav id="stationTree" class="station-tree" aria-label="站点树"></nav>
+    </aside>
+
+    <main class="workspace-pane">
+      <header class="workspace-head">
+        <div>
+          <p class="eyebrow">Current Station</p>
+          <h2 id="currentStationTitle">站点</h2>
+          <p id="currentStationMeta" class="station-meta"></p>
+        </div>
+        <div class="status-strip">
+          <span>水位统计 00:00</span>
+          <span>气象统计 20:00</span>
+          <span>水位摘录</span>
+        </div>
+      </header>
+
+      <nav id="functionTabs" class="function-tabs" aria-label="站点功能"></nav>
+
+      <section class="tab-panel">
+        <div class="pane-head">
+          <h3 id="activeFunctionTitle">基础信息管理</h3>
+          <span id="activeFunctionMeta">站点基础资料</span>
+        </div>
+
+        <div id="tabContent"></div>
+
+        <form id="stationForm" class="station-form" hidden>
+          <div class="form-grid">
+            <label>站码<input name="code" required placeholder="QX001"></label>
+            <label>站名<input name="name" required placeholder="青溪站"></label>
+            <label>流域<input name="basin" placeholder="青溪流域"></label>
+            <label>河流<input name="river" placeholder="青溪"></label>
+            <label>经度<input name="longitude" type="number" step="0.000001" placeholder="118.3214"></label>
+            <label>纬度<input name="latitude" type="number" step="0.000001" placeholder="29.7812"></label>
+            <label>高程<input name="elevation" type="number" step="0.01" placeholder="42.5"></label>
+          </div>
+
+          <div class="form-line">
+            <span>观测类别</span>
+            <label><input name="observationTypes" type="checkbox" value="waterLevel"> 水位</label>
+            <label><input name="observationTypes" type="checkbox" value="airTemperature"> 气温</label>
+          </div>
+
+          <div class="form-line">
+            <span>数据源</span>
+            <label><input name="manual" type="checkbox"> 人工观测</label>
+            <label><input name="videoOcr" type="checkbox"> 视频识别</label>
+            <label><input name="telemetry" type="checkbox"> 遥测</label>
+          </div>
+
+          <div class="form-grid compact">
+            <label>状态
+              <select name="status">
+                <option value="active">在线</option>
+                <option value="maintenance">维护中</option>
+                <option value="disabled">停用</option>
+              </select>
+            </label>
+            <label>水位统计时间<input name="waterLevelStatAt" value="00:00"></label>
+            <label>气象统计时间<input name="meteorologicalStatAt" value="20:00"></label>
+            <label>水位最大时变幅<input name="waterLevelMaxHourlyChange" type="number" step="0.01"></label>
+          </div>
+
+          <div id="stationFormError" class="form-error"></div>
+          <div class="form-actions">
+            <button class="primary-action" type="submit">保存站点</button>
+            <button id="resetStationBtn" class="secondary-action" type="button">新建站点</button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <aside class="assistant-pane">
+      <div class="pane-head">
+        <h3>Agent 助手</h3>
+        <span id="cwdStatus">未连接</span>
+      </div>
+      <p id="agentContext" class="assistant-copy">选择站点和功能后，Agent 将获得当前业务上下文。</p>
+      <div class="agent-status">
+        <span>Bridge</span>
+        <strong id="agentStatus">checking</strong>
+      </div>
+      <button id="connectAgentBtn" class="primary-action" type="button">连接工作台 Agent</button>
+      <pre id="agentLog" class="agent-log"></pre>
+    </aside>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -9,12 +9,24 @@ import {
 
 setPageTitle('embeddedAppDemo')
 
-(function bootstrapEmbeddedAgentMinimal() {
+function renderFatalError(error) {
+  const message = error?.message || String(error || '')
+  const stack = error?.stack || ''
+  document.body.innerHTML = `
+    <div style="padding: 24px; color: #b91c1c; font-family: sans-serif;">
+      <h2>Embedded Demo 初始化失败</h2>
+      <pre style="white-space: pre-wrap;">${message}\n${stack}</pre>
+    </div>
+  `
+}
+
+try {
   const bridgeStatusEl = document.getElementById('bridgeStatus')
   const clientStatusEl = document.getElementById('clientStatus')
   const sessionStatusEl = document.getElementById('sessionStatus')
   const appIdInput = document.getElementById('appIdInput')
   const cwdInput = document.getElementById('cwdInput')
+  const cwdPreview = document.getElementById('cwdPreview')
   const sessionMetaEl = document.getElementById('sessionMeta')
   const messageInput = document.getElementById('messageInput')
   const messageList = document.getElementById('messageList')
@@ -32,10 +44,22 @@ setPageTitle('embeddedAppDemo')
 
   const state = {
     connected: false,
+    busy: false,
     clientId: null,
+    defaultCwd: '',
     sessionId: null,
     unsubscribeEvents: null,
     currentAssistantMessageEl: null
+  }
+
+  function withTimeout(promise, label, timeoutMs = 8000) {
+    let timer = null
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+    })
+    return Promise.race([promise, timeout]).finally(() => {
+      if (timer) clearTimeout(timer)
+    })
   }
 
   function appendEvent(kind, payload) {
@@ -58,11 +82,16 @@ setPageTitle('embeddedAppDemo')
     bridgeStatusEl.textContent = window.hydroAgent ? 'available' : 'missing'
     clientStatusEl.textContent = state.connected
       ? `connected (${state.clientId || 'unknown'})`
+      : state.busy
+        ? 'connecting...'
       : 'disconnected'
     sessionStatusEl.textContent = state.sessionId || 'none'
     sessionMetaEl.textContent = state.sessionId
       ? `Session: ${state.sessionId}`
       : 'No session'
+    if (cwdPreview) {
+      cwdPreview.textContent = cwdInput.value.trim() || state.defaultCwd || 'Connect 后显示当前 app 默认目录'
+    }
   }
 
   function addMessage(role, text) {
@@ -103,18 +132,31 @@ setPageTitle('embeddedAppDemo')
       return
     }
 
-    const result = await window.hydroAgent.connect({
-      appId,
-      clientMeta: {
-        page: 'embedded-agent-demo',
-        version: '0.1.0'
-      }
-    })
-
-    state.connected = true
-    state.clientId = result.clientId || null
+    state.busy = true
     updateStatus()
-    appendEvent('connect:ok', result)
+    appendEvent('connect:start', { appId })
+
+    try {
+      const result = await withTimeout(window.hydroAgent.connect({
+        appId,
+        clientMeta: {
+          page: 'embedded-agent-demo',
+          version: '0.1.0'
+        }
+      }), 'hydroAgent.connect')
+
+      state.connected = true
+      state.clientId = result.clientId || null
+      state.defaultCwd = result.defaultCwd || ''
+      if (state.defaultCwd && !cwdInput.value.trim()) {
+        cwdInput.value = state.defaultCwd
+      }
+      updateStatus()
+      appendEvent('connect:ok', result)
+    } finally {
+      state.busy = false
+      updateStatus()
+    }
   }
 
   async function createSession() {
@@ -124,7 +166,7 @@ setPageTitle('embeddedAppDemo')
     }
 
     const options = {
-      cwd: cwdInput.value.trim(),
+      cwd: cwdInput.value.trim() || state.defaultCwd,
       title: 'Embedded Minimal Demo'
     }
 
@@ -141,7 +183,11 @@ setPageTitle('embeddedAppDemo')
 
       if (event.channel === 'agent:message') {
         const content = extractAssistantMessageText(event)
-        state.currentAssistantMessageEl = addMessage('agent', content)
+        if (state.currentAssistantMessageEl) {
+          state.currentAssistantMessageEl.textContent = content || state.currentAssistantMessageEl.textContent
+        } else {
+          state.currentAssistantMessageEl = addMessage('agent', content)
+        }
       }
 
       if (event.channel === 'agent:stream') {
@@ -243,6 +289,8 @@ setPageTitle('embeddedAppDemo')
     eventLog.textContent = ''
   })
 
+  cwdInput.addEventListener('input', updateStatus)
+
   messageInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
       event.preventDefault()
@@ -256,4 +304,6 @@ setPageTitle('embeddedAppDemo')
     bridgeAvailable: !!window.hydroAgent,
     themeBridgeAvailable: !!window.hydroHostTheme
   })
-})()
+} catch (error) {
+  renderFatalError(error)
+}

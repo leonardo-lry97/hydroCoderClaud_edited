@@ -12,6 +12,7 @@ const MAIN_I18N = {
         globalSettings: '全局设置 - Hydro Desktop',
         appearanceSettings: '外观设置 - Hydro Desktop',
         embeddedAppDemo: '内嵌应用 Demo - Hydro Desktop',
+        hydrologyWorkbench: '水文站工作台 - Hydro Desktop',
         settingsWorkbench: '能力管理 - Hydro Desktop',
         providerManager: '服务商管理 - Hydro Desktop',
         sessionManager: '会话查询 - Hydro Desktop',
@@ -40,7 +41,8 @@ const MAIN_I18N = {
       probeSessionTitle: 'API 测试探针'
     },
     embeddedApps: {
-      demoTitle: 'Agent 平台 Demo'
+      demoTitle: 'Agent 平台 Demo',
+      hydrologyWorkbenchTitle: '水文站工作台'
     }
   },
   'en-US': {
@@ -56,6 +58,7 @@ const MAIN_I18N = {
         globalSettings: 'Global Settings - Hydro Desktop',
         appearanceSettings: 'Appearance Settings - Hydro Desktop',
         embeddedAppDemo: 'Embedded App Demo - Hydro Desktop',
+        hydrologyWorkbench: 'Hydrology Workbench - Hydro Desktop',
         settingsWorkbench: 'Capability Management - Hydro Desktop',
         providerManager: 'Provider Manager - Hydro Desktop',
         sessionManager: 'Session Browser - Hydro Desktop',
@@ -84,7 +87,8 @@ const MAIN_I18N = {
       probeSessionTitle: 'API Test Probe'
     },
     embeddedApps: {
-      demoTitle: 'Agent Platform Demo'
+      demoTitle: 'Agent Platform Demo',
+      hydrologyWorkbenchTitle: 'Hydrology Workbench'
     }
   }
 }

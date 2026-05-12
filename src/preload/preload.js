@@ -11,6 +11,7 @@ const hydroAgentState = {
   appId: null,
   clientId: null,
   clientMeta: null,
+  defaultCwd: null,
   unsubscribeIpc: null,
   callbacks: new Set()
 };
@@ -126,6 +127,7 @@ const hydroAgent = {
     hydroAgentState.appId = normalizedAppId;
     hydroAgentState.clientId = result?.clientId || null;
     hydroAgentState.clientMeta = normalizedMeta;
+    hydroAgentState.defaultCwd = result?.defaultCwd || null;
     ensureHydroAgentEventBridge();
     return result;
   },
@@ -134,6 +136,7 @@ const hydroAgent = {
     hydroAgentState.appId = null;
     hydroAgentState.clientId = null;
     hydroAgentState.clientMeta = null;
+    hydroAgentState.defaultCwd = null;
     hydroAgentState.callbacks.clear();
     if (hydroAgentState.unsubscribeIpc) {
       hydroAgentState.unsubscribeIpc();

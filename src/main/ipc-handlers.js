@@ -3,7 +3,7 @@
  * 处理渲染进程和主进程之间的通信
  */
 
-const { ipcMain, dialog, shell, Notification } = require('electron');
+const { app, ipcMain, dialog, shell, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -80,6 +80,20 @@ const registerHandler = (channelName, handler) => {
     });
   }
 };
+
+function normalizeEmbeddedAppIdForPath(appId) {
+  const normalized = typeof appId === 'string'
+    ? appId.trim().replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '')
+    : ''
+  return normalized || 'embedded-app'
+}
+
+function getEmbeddedAppWorkspaceDir(appId) {
+  const safeAppId = normalizeEmbeddedAppIdForPath(appId)
+  const workspaceDir = path.join(app.getPath('userData'), 'embedded-apps', safeAppId, 'workspace')
+  fs.mkdirSync(workspaceDir, { recursive: true })
+  return workspaceDir
+}
 
 function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSessionManager, agentSessionManager, capabilityManager, updateManager, dingtalkBridge, notebookManager, scheduledTaskService, weixinNotifyService, weixinBridge, localAgentApiServer = null) {
   const translate = (key, params = {}) => typeof tMain === 'function'
@@ -793,8 +807,10 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     const normalizeEmbeddedClient = (client = {}) => {
       const rawAppId = typeof client.appId === 'string' ? client.appId.trim() : ''
       const appId = rawAppId || 'embedded-app'
+      const defaultCwd = getEmbeddedAppWorkspaceDir(appId)
       return {
         appId,
+        defaultCwd,
         clientId: `embed:${appId}`,
         clientType: 'embedded',
         clientMeta: client.clientMeta && typeof client.clientMeta === 'object' && !Array.isArray(client.clientMeta)
@@ -843,7 +859,8 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
       return {
         success: true,
         clientId: client.clientId,
-        appId: client.appId
+        appId: client.appId,
+        defaultCwd: client.defaultCwd
       }
     })
 
@@ -857,7 +874,16 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     })
 
     ipcMain.handle('hydro-agent:createSession', async (event, { client, options } = {}) => {
-      return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.create(options || {}, normalizedClient))
+      return withEmbeddedClient(event, client, (normalizedClient) => {
+        const requestedOptions = options && typeof options === 'object' ? options : {}
+        const sessionOptions = {
+          ...requestedOptions,
+          cwd: typeof requestedOptions.cwd === 'string' && requestedOptions.cwd.trim()
+            ? requestedOptions.cwd.trim()
+            : normalizedClient.defaultCwd
+        }
+        return agentSessionBroker.create(sessionOptions, normalizedClient)
+      })
     })
     ipcMain.handle('hydro-agent:listSessions', async (event, { client } = {}) => {
       return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.list(normalizedClient))

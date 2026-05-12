@@ -11,6 +11,19 @@ const EMBEDDED_APPS = [
       height: 860
     },
     enabled: true
+  },
+  {
+    id: 'hydrology-workbench',
+    menuKey: 'hydrology-workbench',
+    titleKey: 'app.windows.hydrologyWorkbench',
+    labelKey: 'embeddedApps.hydrologyWorkbenchTitle',
+    icon: 'water',
+    page: 'hydrology-workbench',
+    window: {
+      width: 1440,
+      height: 920
+    },
+    enabled: true
   }
 ]
 

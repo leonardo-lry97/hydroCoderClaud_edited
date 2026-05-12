@@ -17,6 +17,7 @@ describe('embedded hydro agent bridge wiring', () => {
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:sendMessage'")
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:listDir'")
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:searchFiles'")
+    expect(source).toContain('hydroAgentState.defaultCwd = result?.defaultCwd || null')
   })
 
   it('registers embedded hydro-agent ipc routes in the main process', () => {
@@ -31,5 +32,8 @@ describe('embedded hydro agent bridge wiring', () => {
     expect(source).toContain("ipcMain.handle('hydro-agent:listDir'")
     expect(source).toContain("ipcMain.handle('hydro-agent:searchFiles'")
     expect(source).toContain("sender.send('hydro-agent:event', payload)")
+    expect(source).toContain("path.join(app.getPath('userData'), 'embedded-apps', safeAppId, 'workspace')")
+    expect(source).toContain('defaultCwd: client.defaultCwd')
+    expect(source).toContain(': normalizedClient.defaultCwd')
   })
 })

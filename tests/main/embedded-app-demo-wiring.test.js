@@ -8,6 +8,7 @@ const ipcHandlersPath = path.resolve(__dirname, '../../src/main/ipc-handlers.js'
 const registryPath = path.resolve(__dirname, '../../src/main/embedded-app-registry.js')
 const preloadPath = path.resolve(__dirname, '../../src/preload/preload.js')
 const appI18nPath = path.resolve(__dirname, '../../src/main/utils/app-i18n.js')
+const viteConfigPath = path.resolve(__dirname, '../../vite.config.mjs')
 const embeddedAppsComposablePath = path.resolve(__dirname, '../../src/renderer/composables/useEmbeddedApps.js')
 const leftPanelPath = path.resolve(__dirname, '../../src/renderer/pages/main/components/LeftPanel.vue')
 const notebookTopNavPath = path.resolve(__dirname, '../../src/renderer/pages/notebook/components/NotebookTopNav.vue')
@@ -19,6 +20,9 @@ describe('embedded app demo wiring', () => {
     expect(source).toContain("id: 'agent-platform-demo'")
     expect(source).toContain("menuKey: 'embedded-app-demo'")
     expect(source).toContain("page: 'embedded-app-demo'")
+    expect(source).toContain("id: 'hydrology-workbench'")
+    expect(source).toContain("menuKey: 'hydrology-workbench'")
+    expect(source).toContain("page: 'hydrology-workbench'")
   })
 
   it('registers a window route for the embedded app demo', () => {
@@ -37,7 +41,17 @@ describe('embedded app demo wiring', () => {
     const enConfig = { getConfig: () => ({ settings: { locale: 'en-US' } }) }
 
     expect(tMain(zhConfig, 'embeddedApps.demoTitle')).toBe('Agent 平台 Demo')
+    expect(tMain(zhConfig, 'embeddedApps.hydrologyWorkbenchTitle')).toBe('水文站工作台')
     expect(tMain(enConfig, 'embeddedApps.demoTitle')).toBe('Agent Platform Demo')
+    expect(tMain(enConfig, 'embeddedApps.hydrologyWorkbenchTitle')).toBe('Hydrology Workbench')
+    expect(tMain(zhConfig, 'app.windows.hydrologyWorkbench')).toBe('水文站工作台 - Hydro Desktop')
+  })
+
+  it('includes the hydrology workbench in renderer build inputs', () => {
+    const source = fs.readFileSync(viteConfigPath, 'utf-8')
+
+    expect(source).toContain('hydrologyWorkbench:')
+    expect(source).toContain("src/renderer/pages/hydrology-workbench/index.html")
   })
 
   it('exposes embedded app demo opener in preload', () => {

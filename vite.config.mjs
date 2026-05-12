@@ -32,6 +32,7 @@ export default defineConfig({
         appearanceSettings: path.resolve(__dirname, 'src/renderer/pages/appearance-settings/index.html'),
         settingsWorkbench: path.resolve(__dirname, 'src/renderer/pages/settings-workbench/index.html'),
         embeddedAppDemo: path.resolve(__dirname, 'src/renderer/pages/embedded-app-demo/index.html'),
+        hydrologyWorkbench: path.resolve(__dirname, 'src/renderer/pages/hydrology-workbench/index.html'),
         sessionManager: path.resolve(__dirname, 'src/renderer/pages/session-manager/index.html'),
         updateManager: path.resolve(__dirname, 'src/renderer/pages/update-manager/index.html'),
         dingtalkSettings: path.resolve(__dirname, 'src/renderer/pages/dingtalk-settings/index.html')
