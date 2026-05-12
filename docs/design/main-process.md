@@ -6,6 +6,17 @@
 
 ## 应用生命周期
 
+### 单实例约束
+
+主进程在 `app.whenReady()` 之前先调用 `app.requestSingleInstanceLock()`。
+
+- Windows / macOS 均强制单实例运行，避免多个 Electron 主进程同时读写同一个 `{userData}` 目录
+- 若当前进程未获取到锁，立即退出，不继续初始化任何 Manager / Tray / BrowserWindow
+- 若已运行实例收到 `second-instance` 事件：
+  - 已有 `mainWindow` 且窗口仍存活：直接显示并聚焦窗口
+  - `mainWindow` 引用失效但仍有存活窗口：恢复并聚焦该窗口
+  - 应用进程仍在但没有任何窗口：重建主窗口、恢复 tray 状态、重绑 Manager 的 `mainWindow` 引用，并按需重启 `powerSaveBlocker`
+
 ### 启动序列
 
 `app.whenReady()` 触发后，按以下顺序初始化：
@@ -58,14 +69,15 @@
 
 ### macOS 特殊处理
 
-macOS 关闭窗口不退出应用（`window-all-closed` 事件不调用 `app.quit()`）。`activate` 事件重建窗口时：
+macOS 关闭窗口不退出应用（`window-all-closed` 事件不调用 `app.quit()`）。`activate` 事件与 `second-instance` 共用同一套窗口恢复逻辑：
 
-1. 重置 `cleanupDone = false`（允许新一轮清理）
-2. 调用 `createWindow()` 重建 `mainWindow`
-3. 重启 `powerSaveBlocker`
-4. 更新所有 Manager 的 `mainWindow` 引用
-5. 通知前端 `agent:allSessionsClosed`（CLI 进程已在 cleanup 中终止）
-6. 重启钉钉桥接，并更新微信桥接的 `mainWindow` 引用
+1. 若已有主窗口，则直接显示并聚焦，不重复创建窗口
+2. 若主窗口引用丢失但仍存在其他存活窗口，则恢复并聚焦该窗口
+3. 若当前无任何窗口，则重置 `cleanupDone = false`，调用 `createWindow()` 重建 `mainWindow`
+4. 重建窗口后刷新 tray 菜单，并确保 `powerSaveBlocker` 处于运行状态
+5. 更新所有 Manager 的 `mainWindow` 引用
+6. 通知前端 `agent:allSessionsClosed`（CLI 进程已在 cleanup 中终止）
+7. 重启钉钉桥接，并更新微信桥接的 `mainWindow` 引用
 
 ---
 

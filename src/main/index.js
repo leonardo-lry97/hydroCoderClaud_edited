@@ -19,6 +19,7 @@ const { WeixinBridge } = require('./managers/weixin-bridge');
 const { LocalAgentApiServer } = require('./agent-platform/local-agent-api-server');
 const { setupIPCHandlers } = require('./ipc-handlers');
 const { createTrayController } = require('./tray-controller');
+const { restoreOrCreateMainWindow, setupSingleInstanceLock } = require('./single-instance');
 const { tMain } = require('./utils/app-i18n');
 const { getStableUserDataPath } = require('./utils/user-data-path');
 
@@ -42,6 +43,10 @@ let localAgentApiServer = null;
 let powerSaveBlockerId = null;
 let resumeTimer = null;
 let trayController = null;
+
+function resetCleanupState() {
+  cleanupDone = false;
+}
 
 /**
  * 统一清理函数（幂等，可多次调用）
@@ -196,6 +201,26 @@ function rebindMainWindowReferences({ notifyAgentSessionsClosed = false, restart
   }
 }
 
+function restartPowerSaveBlocker() {
+  if (powerSaveBlockerId != null && powerSaveBlocker.isStarted(powerSaveBlockerId)) {
+    return
+  }
+
+  powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension')
+  console.log(`[Main] PowerSaveBlocker active (id=${powerSaveBlockerId})`)
+}
+
+function handleSecondInstance() {
+  return restoreOrCreateMainWindow({
+    trayController,
+    getMainWindow: () => mainWindow,
+    createWindow,
+    resetCleanupState,
+    restartPowerSaveBlocker,
+    rebindMainWindowReferences
+  })
+}
+
 /**
  * 创建主窗口
  */
@@ -330,195 +355,6 @@ async function fixProjectsData() {
 }
 
 /**
- * 应用就绪事件
- */
-app.whenReady().then(async () => {
-  // 检查是否是修复模式
-  if (process.argv.includes('--fix-db')) {
-    await fixProjectsData()
-    app.quit()
-    return
-  }
-
-  applyMacAppDisplayName()
-  hideMacApplicationMenu()
-
-  // 初始化管理器
-  configManager = new ConfigManager();
-  trayController = createTrayController({
-    appInstance: app,
-    configManager,
-    getMainWindow: () => mainWindow,
-    onQuitRequest: () => app.quit()
-  });
-
-  // 创建主窗口
-  createWindow();
-  try {
-    trayController.ensureTray();
-  } catch (error) {
-    console.error('[Main] Failed to initialize tray:', error)
-  }
-
-  // 初始化终端管理器（需要窗口实例）- 保留兼容旧代码
-  terminalManager = new TerminalManager(mainWindow, configManager);
-
-  // 初始化活动会话管理器（新的多会话管理）
-  activeSessionManager = new ActiveSessionManager(mainWindow, configManager);
-
-  // 初始化 Agent 会话管理器
-  agentSessionManager = new AgentSessionManager(mainWindow, configManager);
-
-  // 互相注入引用（跨模式会话占用检查）
-  activeSessionManager.setPeerManager(agentSessionManager)
-  agentSessionManager.setPeerManager(activeSessionManager)
-
-  // 初始化能力管理器（Agent 模式）
-  const { PluginService } = require('./plugin-runtime')
-  const { SkillsManager, AgentsManager, McpManager } = require('./managers')
-  const pluginCli = new PluginService()
-  const skillsManager = new SkillsManager()
-  const agentsManager = new AgentsManager()
-  const capMcpManager = new McpManager()
-  capMcpManager.configManager = configManager  // 注入 configManager，供代理注入使用
-  const { SettingsManager } = require('./managers/settings-manager')
-  capMcpManager.settingsManager = new SettingsManager()  // 注入 settingsManager，供 MCP 安装时自动写入工具权限
-  capabilityManager = new CapabilityManager(configManager, pluginCli, skillsManager, agentsManager, capMcpManager)
-
-  // 初始化更新管理器
-  updateManager = new UpdateManager(mainWindow, configManager)
-
-  // 初始化钉钉桥接（构造函数内部自动绑定 agentSessionManager 事件）
-  dingtalkBridge = new DingTalkBridge(configManager, agentSessionManager, mainWindow)
-
-  // 初始化 Notebook 管理器（需要 configManager 和 agentSessionManager）
-  notebookManager = new NotebookManager(configManager, agentSessionManager)
-
-  // 初始化定时任务服务（需要 configManager 和 agentSessionManager）
-  scheduledTaskService = new ScheduledTaskService(configManager, agentSessionManager)
-  agentSessionManager.scheduledTaskService = scheduledTaskService
-
-  // 初始化微信通知服务（内建 iLink 通道，不依赖 OpenClaw）
-  weixinNotifyService = new WeixinNotifyService(configManager)
-  weixinNotifyService.start()
-  agentSessionManager.weixinNotifyService = weixinNotifyService
-  weixinBridge = new WeixinBridge(configManager, agentSessionManager, weixinNotifyService, mainWindow)
-  weixinBridge.start()
-
-  localAgentApiServer = new LocalAgentApiServer({
-    configManager
-  })
-
-  const { agentSessionBroker, agentEventRouter } = setupIPCHandlers(
-    mainWindow,
-    configManager,
-    terminalManager,
-    activeSessionManager,
-    agentSessionManager,
-    capabilityManager,
-    updateManager,
-    dingtalkBridge,
-    notebookManager,
-    scheduledTaskService,
-    weixinNotifyService,
-    weixinBridge,
-    localAgentApiServer
-  ) || {}
-
-  localAgentApiServer.setDependencies({
-    agentSessionBroker,
-    agentEventRouter,
-    configManager
-  })
-  await localAgentApiServer.restartIfEnabled()
-
-  // 阻止系统挂起本应用（屏幕可正常关闭，但进程、网络、计时器保持活跃）
-  powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension')
-  console.log(`[Main] PowerSaveBlocker started (id=${powerSaveBlockerId})`)
-
-  // 系统从睡眠恢复时，重连钉钉桥接（防抖：30秒内只执行一次）
-  powerMonitor.on('resume', () => {
-    console.log('[Main] System resumed from sleep')
-    if (resumeTimer) return // 已有待执行的重连，跳过
-    resumeTimer = setTimeout(() => {
-      resumeTimer = null
-      if (dingtalkBridge) {
-        console.log('[Main] Reconnecting DingTalk bridge...')
-        dingtalkBridge.restart().catch(err => {
-          console.error('[Main] DingTalk reconnect failed:', err.message)
-        })
-      }
-      if (scheduledTaskService) {
-        scheduledTaskService.onSystemResume().catch(err => {
-          console.error('[Main] Scheduled task resume handling failed:', err.message)
-        })
-      }
-    }, 3000) // 延迟3秒，等系统完全恢复后再重连
-  })
-
-  // 启动后延迟 5 秒检查更新（避免影响启动体验）
-  updateManager.scheduleUpdateCheck(5000)
-
-  // 延迟启动钉钉桥接（不阻塞主流程）
-  setTimeout(() => {
-    dingtalkBridge.start().catch(err => {
-      console.error('[Main] DingTalk bridge auto-start failed:', err.message)
-    })
-  }, 3000)
-
-  // macOS 特定行为
-  app.on('activate', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      trayController?.showMainWindow()
-      return
-    }
-
-    if (BrowserWindow.getAllWindows().length === 0) {
-      // macOS 重建窗口时重置清理标志，让新一轮 closed 事件可以再次触发清理
-      cleanupDone = false;
-      trayController?.resetQuitting();
-      createWindow();
-      trayController?.refreshTrayMenu();
-
-      // 重新启动 powerSaveBlocker（在 cleanup 中已 stop）
-      powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension')
-      console.log(`[Main] PowerSaveBlocker restarted on activate (id=${powerSaveBlockerId})`)
-
-      // 更新所有 manager 的 mainWindow 引用
-      rebindMainWindowReferences({
-        notifyAgentSessionsClosed: true,
-        restartDingtalk: true
-      })
-    }
-  });
-});
-
-app.on('before-quit', () => {
-  trayController?.markQuitting()
-})
-
-/**
- * 所有窗口关闭事件
- */
-app.on('window-all-closed', () => {
-  // macOS 下通常不退出应用
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-
-/**
- * 应用即将退出事件
- */
-app.on('will-quit', () => {
-  trayController?.destroyTray()
-  cleanupAllSessions();
-  if (scheduledTaskService) {
-    scheduledTaskService.destroy()
-  }
-});
-
-/**
  * 信号处理（SIGTERM / SIGINT）
  * Windows 上 SIGINT 来自 Ctrl+C；SIGTERM 来自 taskkill
  */
@@ -544,3 +380,186 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[Main] Unhandled rejection at:', promise, 'reason:', reason);
 });
+
+const hasSingleInstanceLock = setupSingleInstanceLock({
+  appInstance: app,
+  onSecondInstance: () => {
+    if (app.isReady()) {
+      return handleSecondInstance()
+    }
+
+    app.whenReady().then(() => {
+      handleSecondInstance()
+    })
+    return null
+  }
+})
+
+if (hasSingleInstanceLock) {
+  /**
+   * 应用就绪事件
+   */
+  app.whenReady().then(async () => {
+    // 检查是否是修复模式
+    if (process.argv.includes('--fix-db')) {
+      await fixProjectsData()
+      app.quit()
+      return
+    }
+
+    applyMacAppDisplayName()
+    hideMacApplicationMenu()
+
+    // 初始化管理器
+    configManager = new ConfigManager();
+    trayController = createTrayController({
+      appInstance: app,
+      configManager,
+      getMainWindow: () => mainWindow,
+      onQuitRequest: () => app.quit()
+    });
+
+    // 创建主窗口
+    createWindow();
+    try {
+      trayController.ensureTray();
+    } catch (error) {
+      console.error('[Main] Failed to initialize tray:', error)
+    }
+
+    // 初始化终端管理器（需要窗口实例）- 保留兼容旧代码
+    terminalManager = new TerminalManager(mainWindow, configManager);
+
+    // 初始化活动会话管理器（新的多会话管理）
+    activeSessionManager = new ActiveSessionManager(mainWindow, configManager);
+
+    // 初始化 Agent 会话管理器
+    agentSessionManager = new AgentSessionManager(mainWindow, configManager);
+
+    // 互相注入引用（跨模式会话占用检查）
+    activeSessionManager.setPeerManager(agentSessionManager)
+    agentSessionManager.setPeerManager(activeSessionManager)
+
+    // 初始化能力管理器（Agent 模式）
+    const { PluginService } = require('./plugin-runtime')
+    const { SkillsManager, AgentsManager, McpManager } = require('./managers')
+    const pluginCli = new PluginService()
+    const skillsManager = new SkillsManager()
+    const agentsManager = new AgentsManager()
+    const capMcpManager = new McpManager()
+    capMcpManager.configManager = configManager  // 注入 configManager，供代理注入使用
+    const { SettingsManager } = require('./managers/settings-manager')
+    capMcpManager.settingsManager = new SettingsManager()  // 注入 settingsManager，供 MCP 安装时自动写入工具权限
+    capabilityManager = new CapabilityManager(configManager, pluginCli, skillsManager, agentsManager, capMcpManager)
+
+    // 初始化更新管理器
+    updateManager = new UpdateManager(mainWindow, configManager)
+
+    // 初始化钉钉桥接（构造函数内部自动绑定 agentSessionManager 事件）
+    dingtalkBridge = new DingTalkBridge(configManager, agentSessionManager, mainWindow)
+
+    // 初始化 Notebook 管理器（需要 configManager 和 agentSessionManager）
+    notebookManager = new NotebookManager(configManager, agentSessionManager)
+
+    // 初始化定时任务服务（需要 configManager 和 agentSessionManager）
+    scheduledTaskService = new ScheduledTaskService(configManager, agentSessionManager)
+    agentSessionManager.scheduledTaskService = scheduledTaskService
+
+    // 初始化微信通知服务（内建 iLink 通道，不依赖 OpenClaw）
+    weixinNotifyService = new WeixinNotifyService(configManager)
+    weixinNotifyService.start()
+    agentSessionManager.weixinNotifyService = weixinNotifyService
+    weixinBridge = new WeixinBridge(configManager, agentSessionManager, weixinNotifyService, mainWindow)
+    weixinBridge.start()
+
+    localAgentApiServer = new LocalAgentApiServer({
+      configManager
+    })
+
+    const { agentSessionBroker, agentEventRouter } = setupIPCHandlers(
+      mainWindow,
+      configManager,
+      terminalManager,
+      activeSessionManager,
+      agentSessionManager,
+      capabilityManager,
+      updateManager,
+      dingtalkBridge,
+      notebookManager,
+      scheduledTaskService,
+      weixinNotifyService,
+      weixinBridge,
+      localAgentApiServer
+    ) || {}
+
+    localAgentApiServer.setDependencies({
+      agentSessionBroker,
+      agentEventRouter,
+      configManager
+    })
+    await localAgentApiServer.restartIfEnabled()
+
+    // 阻止系统挂起本应用（屏幕可正常关闭，但进程、网络、计时器保持活跃）
+    restartPowerSaveBlocker()
+
+    // 系统从睡眠恢复时，重连钉钉桥接（防抖：30秒内只执行一次）
+    powerMonitor.on('resume', () => {
+      console.log('[Main] System resumed from sleep')
+      if (resumeTimer) return // 已有待执行的重连，跳过
+      resumeTimer = setTimeout(() => {
+        resumeTimer = null
+        if (dingtalkBridge) {
+          console.log('[Main] Reconnecting DingTalk bridge...')
+          dingtalkBridge.restart().catch(err => {
+            console.error('[Main] DingTalk reconnect failed:', err.message)
+          })
+        }
+        if (scheduledTaskService) {
+          scheduledTaskService.onSystemResume().catch(err => {
+            console.error('[Main] Scheduled task resume handling failed:', err.message)
+          })
+        }
+      }, 3000) // 延迟3秒，等系统完全恢复后再重连
+    })
+
+    // 启动后延迟 5 秒检查更新（避免影响启动体验）
+    updateManager.scheduleUpdateCheck(5000)
+
+    // 延迟启动钉钉桥接（不阻塞主流程）
+    setTimeout(() => {
+      dingtalkBridge.start().catch(err => {
+        console.error('[Main] DingTalk bridge auto-start failed:', err.message)
+      })
+    }, 3000)
+
+    // macOS 特定行为
+    app.on('activate', () => {
+      handleSecondInstance()
+    });
+  });
+
+  app.on('before-quit', () => {
+    trayController?.markQuitting()
+  })
+
+  /**
+   * 所有窗口关闭事件
+   */
+  app.on('window-all-closed', () => {
+    // macOS 下通常不退出应用
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+
+  /**
+   * 应用即将退出事件
+   */
+  app.on('will-quit', () => {
+    trayController?.destroyTray()
+    cleanupAllSessions();
+    if (scheduledTaskService) {
+      scheduledTaskService.destroy()
+    }
+  });
+}
