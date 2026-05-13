@@ -8,9 +8,44 @@
               <p class="embedded-agent-eyebrow">{{ appLabel }}</p>
               <h3>{{ title }}</h3>
             </div>
-            <button type="button" class="context-send-btn" :disabled="!sessionId || sendingContext" @click="sendContext">
-              发送当前上下文
-            </button>
+            <div class="embedded-agent-actions">
+              <div class="embedded-profile-switcher" ref="profileSwitcherRef">
+                <button
+                  type="button"
+                  class="embedded-profile-btn"
+                  :disabled="!sessionId || switchingProfile || loadingProfiles"
+                  :title="currentProfileName"
+                  @click="toggleProfileDropdown"
+                >
+                  <span class="embedded-profile-label">{{ currentProfileName }}</span>
+                  <span class="embedded-profile-caret">▾</span>
+                </button>
+                <Teleport to="body">
+                  <div
+                    v-if="showProfileDropdown"
+                    class="embedded-profile-dropdown"
+                    :style="profileDropdownStyle"
+                  >
+                    <div v-if="apiProfiles.length === 0" class="embedded-profile-empty">暂无 API 配置</div>
+                    <button
+                      v-for="profile in apiProfiles"
+                      :key="profile.id"
+                      type="button"
+                      class="embedded-profile-option"
+                      :class="{ active: profile.id === currentApiProfileId }"
+                      :disabled="switchingProfile"
+                      @click="handleSwitchProfile(profile)"
+                    >
+                      <span class="embedded-profile-check">{{ profile.id === currentApiProfileId ? '✓' : '' }}</span>
+                      <span class="embedded-profile-option-name">{{ profile.name }}</span>
+                    </button>
+                  </div>
+                </Teleport>
+              </div>
+              <button type="button" class="context-send-btn" :disabled="!sessionId || sendingContext" @click="sendContext">
+                发送当前上下文
+              </button>
+            </div>
           </header>
 
           <p class="embedded-agent-context">{{ contextText }}</p>
@@ -38,6 +73,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useMessage } from 'naive-ui'
 import { useTheme } from '@composables/useTheme'
 import { useNaiveLocale } from '@composables/useNaiveLocale'
 import AgentChatTab from '@/pages/main/components/AgentChatTab.vue'
@@ -76,6 +112,7 @@ const props = defineProps({
 
 const { naiveTheme, themeOverrides, cssVars, initTheme } = useTheme()
 const { naiveLocale, naiveDateLocale, initLocale } = useNaiveLocale()
+const message = useMessage()
 const chatRef = ref(null)
 const sessionId = ref('')
 const resolvedCwd = ref(props.cwd || '')
@@ -83,11 +120,31 @@ const error = ref('')
 const sendingContext = ref(false)
 const contextSnapshot = ref(null)
 const agentApi = ref(null)
+const apiProfiles = ref([])
+const loadingProfiles = ref(false)
+const currentApiProfileId = ref(props.apiProfileId || null)
+const currentModelId = ref(props.modelId || null)
+const switchingProfile = ref(false)
+const showProfileDropdown = ref(false)
+const profileSwitcherRef = ref(null)
+const profileDropdownPos = ref({ top: 0, right: 0 })
 
 const contextText = computed(() => {
   const context = contextSnapshot.value
   if (!context) return '当前应用尚未提供业务上下文。'
   return context.summary || context.title || '已接入当前应用业务上下文。'
+})
+
+const profileDropdownStyle = computed(() => ({
+  position: 'fixed',
+  top: `${profileDropdownPos.value.top}px`,
+  right: `${profileDropdownPos.value.right}px`,
+  zIndex: 9999
+}))
+
+const currentProfileName = computed(() => {
+  const active = apiProfiles.value.find(profile => profile.id === currentApiProfileId.value)
+  return active?.name || '默认 API'
 })
 
 const getLastSessionStorageKey = () => `embedded-agent:last-session:${props.appId}`
@@ -159,6 +216,8 @@ const createNewSession = async (overrides = {}) => {
     type: 'chat',
     title: props.title,
     cwd: resolvedCwd.value || null,
+    apiProfileId: currentApiProfileId.value || null,
+    modelId: currentModelId.value || null,
     ...overrides
   })
   if (session?.error) {
@@ -183,7 +242,103 @@ const reopenSessionIfNeeded = async (session) => {
 const applySession = (session) => {
   sessionId.value = session?.id || ''
   if (session?.cwd) resolvedCwd.value = session.cwd
+  currentApiProfileId.value = session?.apiProfileId !== undefined ? (session.apiProfileId || null) : currentApiProfileId.value
+  currentModelId.value = session?.modelId !== undefined ? (session.modelId || null) : currentModelId.value
   persistSessionId(sessionId.value)
+}
+
+const loadApiProfiles = async () => {
+  if (!window.electronAPI?.listAPIProfiles) return
+
+  loadingProfiles.value = true
+  try {
+    const profiles = await window.electronAPI.listAPIProfiles()
+    apiProfiles.value = Array.isArray(profiles) ? profiles : []
+  } catch (err) {
+    console.error('[EmbeddedAgentPanel] Failed to load API profiles:', err)
+    apiProfiles.value = []
+  } finally {
+    loadingProfiles.value = false
+  }
+}
+
+const syncSessionProfileSnapshot = async () => {
+  if (!sessionId.value || !agentApi.value?.getAgentSession) return
+
+  try {
+    const latestSession = await agentApi.value.getAgentSession(sessionId.value)
+    if (latestSession) {
+      currentApiProfileId.value = latestSession.apiProfileId !== undefined
+        ? (latestSession.apiProfileId || null)
+        : currentApiProfileId.value
+      currentModelId.value = latestSession.modelId !== undefined
+        ? (latestSession.modelId || null)
+        : currentModelId.value
+    }
+  } catch (err) {
+    console.warn('[EmbeddedAgentPanel] Failed to sync session profile snapshot:', err)
+  }
+}
+
+const updateProfileDropdownPos = () => {
+  if (!profileSwitcherRef.value) return
+  const rect = profileSwitcherRef.value.getBoundingClientRect()
+  profileDropdownPos.value = {
+    top: rect.bottom + 6,
+    right: window.innerWidth - rect.right
+  }
+}
+
+const toggleProfileDropdown = () => {
+  if (!sessionId.value || switchingProfile.value || loadingProfiles.value) return
+  if (!showProfileDropdown.value) {
+    updateProfileDropdownPos()
+  }
+  showProfileDropdown.value = !showProfileDropdown.value
+}
+
+const closeProfileDropdown = () => {
+  showProfileDropdown.value = false
+}
+
+const handleDocumentClick = (event) => {
+  if (!showProfileDropdown.value) return
+  if (profileSwitcherRef.value?.contains(event.target)) return
+  closeProfileDropdown()
+}
+
+const handleWindowResize = () => {
+  if (showProfileDropdown.value) {
+    updateProfileDropdownPos()
+  }
+}
+
+const handleSwitchProfile = async (profile) => {
+  closeProfileDropdown()
+  if (!profile?.id || !sessionId.value || switchingProfile.value) return
+  if (profile.id === currentApiProfileId.value) return
+  if (!agentApi.value?.switchAgentApiProfile) return
+
+  switchingProfile.value = true
+  error.value = ''
+  try {
+    const result = await agentApi.value.switchAgentApiProfile({
+      sessionId: sessionId.value,
+      profileId: profile.id
+    })
+    if (result?.error) {
+      throw new Error(result.error)
+    }
+    currentApiProfileId.value = profile.id
+    currentModelId.value = result?.modelId !== undefined ? (result.modelId || null) : null
+    await syncSessionProfileSnapshot()
+    message.success(`已切换到 ${profile.name}`)
+  } catch (err) {
+    error.value = err.message || String(err)
+    message.error(`切换 API 配置失败：${error.value}`)
+  } finally {
+    switchingProfile.value = false
+  }
 }
 
 const initializeSession = async () => {
@@ -278,12 +433,17 @@ onMounted(async () => {
   initLocale()
   initTheme()
   readContext()
+  await loadApiProfiles()
   window.addEventListener('embedded-agent:context-changed', handleContextChanged)
+  document.addEventListener('click', handleDocumentClick, true)
+  window.addEventListener('resize', handleWindowResize)
   await initializeSession()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('embedded-agent:context-changed', handleContextChanged)
+  document.removeEventListener('click', handleDocumentClick, true)
+  window.removeEventListener('resize', handleWindowResize)
   agentApi.value?.dispose?.()
 })
 </script>
@@ -324,6 +484,94 @@ onBeforeUnmount(() => {
 .embedded-agent-header h3 {
   margin: 0;
   font-size: 17px;
+}
+
+.embedded-agent-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.embedded-profile-switcher {
+  position: relative;
+}
+
+.embedded-profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: var(--bg-color-secondary);
+  color: var(--text-color);
+  cursor: pointer;
+  min-width: 116px;
+  max-width: 180px;
+}
+
+.embedded-profile-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.embedded-profile-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.embedded-profile-caret {
+  color: var(--text-color-muted);
+}
+
+.embedded-profile-dropdown {
+  min-width: 180px;
+  background: var(--bg-color-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  padding: 6px;
+}
+
+.embedded-profile-empty {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-color-muted);
+}
+
+.embedded-profile-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-color);
+  padding: 9px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.embedded-profile-option:hover {
+  background: var(--hover-bg);
+}
+
+.embedded-profile-option.active {
+  color: var(--primary-color);
+  background: var(--primary-ghost);
+}
+
+.embedded-profile-check {
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.embedded-profile-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .context-send-btn {

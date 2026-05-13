@@ -915,6 +915,9 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     ipcMain.handle('hydro-agent:reopen', async (event, { client, sessionId } = {}) => {
       return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.reopen(sessionId, normalizedClient))
     })
+    ipcMain.handle('hydro-agent:switchApiProfile', async (event, { client, sessionId, profileId } = {}) => {
+      return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.switchApiProfile(sessionId, profileId, normalizedClient))
+    })
     ipcMain.handle('hydro-agent:clearAndRecreate', async (event, { client, sessionId, overrides } = {}) => {
       return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.clearAndRecreate(sessionId, overrides || {}, normalizedClient))
     })

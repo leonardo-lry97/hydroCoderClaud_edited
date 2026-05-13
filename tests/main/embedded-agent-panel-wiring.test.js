@@ -26,6 +26,9 @@ describe('embedded agent panel wiring', () => {
     expect(source).toContain('window.localStorage.getItem')
     expect(source).toContain('window.localStorage.setItem')
     expect(source).toContain('createHydroAgentApiAdapter')
+    expect(source).toContain('window.electronAPI.listAPIProfiles')
+    expect(source).toContain('switchAgentApiProfile')
+    expect(source).toContain('embedded-profile-switcher')
     expect(source).toContain(':agent-api="agentApi"')
     expect(source).toContain('@request-clear-session="handleClearSession"')
     expect(source).toContain('contextProvider')
@@ -35,6 +38,7 @@ describe('embedded agent panel wiring', () => {
     const source = fs.readFileSync(adapterPath, 'utf-8')
 
     expect(source).toContain('createAgentSession: (options) => hydroAgent.createSession(options)')
+    expect(source).toContain('switchAgentApiProfile: ({ sessionId, profileId }) => hydroAgent.switchApiProfile(sessionId, profileId)')
     expect(source).toContain('clearAndRecreateAgentSession')
     expect(source).toContain('sendAgentMessage: ({ sessionId, message, model, modelTier, maxTurns }) =>')
     expect(source).toContain('hydroAgent.onEvent(null')

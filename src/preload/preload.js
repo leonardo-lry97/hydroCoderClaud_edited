@@ -180,6 +180,11 @@ const hydroAgent = {
     client: buildHydroAgentClientPayload(),
     sessionId
   }),
+  switchApiProfile: (sessionId, profileId) => ipcRenderer.invoke('hydro-agent:switchApiProfile', {
+    client: buildHydroAgentClientPayload(),
+    sessionId,
+    profileId
+  }),
   clearAndRecreate: (sessionId, overrides = {}) => ipcRenderer.invoke('hydro-agent:clearAndRecreate', {
     client: buildHydroAgentClientPayload(),
     sessionId,

@@ -66,6 +66,7 @@ export function createHydroAgentApiAdapter(hydroAgent) {
     cancelAgentGeneration: (sessionId) => hydroAgent.cancel(sessionId),
     closeAgentSession: (sessionId) => hydroAgent.close(sessionId),
     reopenAgentSession: (sessionId) => hydroAgent.reopen(sessionId),
+    switchAgentApiProfile: ({ sessionId, profileId }) => hydroAgent.switchApiProfile(sessionId, profileId),
     clearAndRecreateAgentSession: ({ sessionId, overrides }) =>
       hydroAgent.clearAndRecreate(sessionId, overrides || {}),
     setAgentModel: (sessionId, model) => hydroAgent.setModel(sessionId, model),
