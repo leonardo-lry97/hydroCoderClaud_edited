@@ -13,7 +13,10 @@ describe('useAgentPanel filters', () => {
           { id: 'scheduled-1', source: 'scheduled', cwd: 'C:/scheduled-a', updatedAt: '2026-04-22T03:00:00.000Z' },
           { id: 'scheduled-2', source: 'scheduled', cwd: 'C:/shared', updatedAt: '2026-04-21T03:00:00.000Z' },
           { id: 'ding-1', type: 'dingtalk', source: 'dingtalk', cwd: 'C:/dingtalk-a', updatedAt: '2026-04-20T03:00:00.000Z' },
-          { id: 'wx-1', type: 'weixin', source: 'weixin', cwd: 'C:/weixin-a', updatedAt: '2026-04-20T04:00:00.000Z' }
+          { id: 'wx-1', type: 'weixin', source: 'weixin', cwd: 'C:/weixin-a', updatedAt: '2026-04-20T04:00:00.000Z' },
+          { id: 'embed-owner', ownerClientId: 'embed:hydrology-workbench', source: 'manual', cwd: 'C:/embed-owner', updatedAt: '2026-04-22T04:00:00.000Z' },
+          { id: 'embed-type', clientType: 'embedded', source: 'manual', cwd: 'C:/embed-type', updatedAt: '2026-04-22T05:00:00.000Z' },
+          { id: 'embed-workspace', source: 'manual', cwd: 'C:/Users/demo/AppData/Roaming/Hydro/embedded-apps/hydrology-workbench/workspace', updatedAt: '2026-04-22T06:00:00.000Z' }
         ])
       }
     }
@@ -30,6 +33,9 @@ describe('useAgentPanel filters', () => {
       'C:/shared',
       'C:/weixin-a'
     ])
+    expect(panel.conversations.value.map(conv => conv.id)).not.toContain('embed-owner')
+    expect(panel.conversations.value.map(conv => conv.id)).not.toContain('embed-type')
+    expect(panel.conversations.value.map(conv => conv.id)).not.toContain('embed-workspace')
 
     panel.selectedSource.value = 'scheduled'
     await nextTick()

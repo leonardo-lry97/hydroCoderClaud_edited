@@ -163,8 +163,9 @@ const hydroAgent = {
     sessionId,
     message: typeof payload === 'string' ? payload : payload.message,
     options: {
-      model: typeof payload === 'string' ? undefined : (payload.model || payload.modelTier),
-      maxTurns: typeof payload === 'string' ? undefined : payload.maxTurns
+      ...(typeof payload === 'string' ? {} : (payload.options || {})),
+      model: typeof payload === 'string' ? undefined : (payload.model || payload.modelTier || payload.options?.model),
+      maxTurns: typeof payload === 'string' ? undefined : (payload.maxTurns || payload.options?.maxTurns)
     }
   }),
   cancel: (sessionId) => ipcRenderer.invoke('hydro-agent:cancel', {
@@ -178,6 +179,11 @@ const hydroAgent = {
   reopen: (sessionId) => ipcRenderer.invoke('hydro-agent:reopen', {
     client: buildHydroAgentClientPayload(),
     sessionId
+  }),
+  clearAndRecreate: (sessionId, overrides = {}) => ipcRenderer.invoke('hydro-agent:clearAndRecreate', {
+    client: buildHydroAgentClientPayload(),
+    sessionId,
+    overrides
   }),
   setModel: (sessionId, model) => ipcRenderer.invoke('hydro-agent:setModel', {
     client: buildHydroAgentClientPayload(),

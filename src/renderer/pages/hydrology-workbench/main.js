@@ -9,6 +9,7 @@ import {
   normalizeStation,
   validateStation
 } from './station-model'
+import { mountHydrologyAgentPanel } from './agent-panel'
 
 setPageTitle('hydrologyWorkbench')
 
@@ -50,11 +51,8 @@ const tabContentEl = document.getElementById('tabContent')
 const stationForm = document.getElementById('stationForm')
 const stationFormError = document.getElementById('stationFormError')
 const resetStationBtn = document.getElementById('resetStationBtn')
-const agentStatusEl = document.getElementById('agentStatus')
-const cwdStatusEl = document.getElementById('cwdStatus')
-const agentContextEl = document.getElementById('agentContext')
-const agentLogEl = document.getElementById('agentLog')
-const connectAgentBtn = document.getElementById('connectAgentBtn')
+const hydrologyAgentPanelEl = document.getElementById('hydrologyAgentPanel')
+let agentPanel = null
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -218,9 +216,6 @@ function renderHeader(station) {
     : '请从左侧站点树选择站点'
   activeFunctionTitleEl.textContent = activeFunction.label
   activeFunctionMetaEl.textContent = activeFunction.meta
-  agentContextEl.textContent = station
-    ? `当前上下文：${station.name} / ${activeFunction.label}。后续发送给 Agent 时会附带站点和功能信息。`
-    : '选择站点和功能后，Agent 将获得当前业务上下文。'
 }
 
 function renderWorkbench() {
@@ -229,6 +224,7 @@ function renderWorkbench() {
   renderFunctionTabs()
   renderHeader(station)
   renderTabContent(station)
+  agentPanel?.notifyContextChanged()
 }
 
 function collectStationFromForm() {
@@ -266,37 +262,19 @@ function collectStationFromForm() {
   })
 }
 
-function appendAgentLog(kind, payload) {
-  const stamp = new Date().toLocaleTimeString()
-  agentLogEl.textContent = `[${stamp}] ${kind}\n${JSON.stringify(payload, null, 2)}\n\n${agentLogEl.textContent}`
-}
-
-async function connectAgent() {
-  if (!window.hydroAgent) {
-    appendAgentLog('connect:error', { message: 'window.hydroAgent 不可用，请在 Hydro Desktop 内打开。' })
-    return
-  }
-
-  connectAgentBtn.disabled = true
-  agentStatusEl.textContent = 'connecting'
-  try {
-    const result = await window.hydroAgent.connect({
+function getAgentContext() {
+  const station = getSelectedStation()
+  const activeFunction = getActiveFunction()
+  return {
+    title: station ? `${station.name} / ${activeFunction.label}` : activeFunction.label,
+    summary: station
+      ? `当前站点：${station.name}（${station.code}），当前功能：${activeFunction.label}。`
+      : '当前未选择站点。',
+    payload: {
       appId: 'hydrology-workbench',
-      clientMeta: {
-        page: 'hydrology-workbench',
-        domain: 'hydrology-station-data',
-        stationId: selectedStationId,
-        functionKey: activeFunctionKey
-      }
-    })
-    agentStatusEl.textContent = result.clientId || 'connected'
-    cwdStatusEl.textContent = result.defaultCwd || '已连接'
-    appendAgentLog('connect:ok', result)
-  } catch (error) {
-    agentStatusEl.textContent = 'error'
-    appendAgentLog('connect:error', { message: error.message })
-  } finally {
-    connectAgentBtn.disabled = false
+      station,
+      function: activeFunction
+    }
   }
 }
 
@@ -336,12 +314,9 @@ newStationBtn.addEventListener('click', () => {
   renderStationForm(createEmptyStation())
 })
 
-connectAgentBtn.addEventListener('click', () => {
-  connectAgent()
+agentPanel = mountHydrologyAgentPanel({
+  target: hydrologyAgentPanelEl,
+  getContext: getAgentContext
 })
 
-agentStatusEl.textContent = window.hydroAgent ? 'available' : 'missing'
 renderWorkbench()
-appendAgentLog('bootstrap', {
-  bridgeAvailable: !!window.hydroAgent
-})

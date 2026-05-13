@@ -149,12 +149,17 @@ const props = defineProps({
   modelId: {
     type: String,
     default: null
+  },
+  agentApi: {
+    type: Object,
+    default: null
   }
 })
 
 const emit = defineEmits(['ready', 'preview-image', 'preview-link', 'preview-path', 'agent-done', 'request-clear-session'])
 const resolvedApiProfileId = ref(props.apiProfileId)
 const resolvedModelId = ref(props.modelId)
+const resolvedAgentApi = computed(() => props.agentApi || window.electronAPI)
 
 // 使用 Agent 对话 composable
 const {
@@ -191,6 +196,7 @@ const {
   enableSlashCommands: !['dingtalk', 'weixin'].includes(props.sessionType),
   sessionCwd: props.sessionCwd,
   apiProfileId: props.apiProfileId,
+  agentApi: props.agentApi,
   onClearRequested: () => {
     emit('request-clear-session')
   }
@@ -484,7 +490,7 @@ const startQueuePersistence = () => {
         // 用户点击停止清空队列时，必须清空数据库中的队列，否则重新打开会话时队列又出现
         try {
           const plainQueue = newQueue ? JSON.parse(JSON.stringify(newQueue)) : []  // 深拷贝避免 Proxy
-          await window.electronAPI?.saveAgentQueue({
+          await resolvedAgentApi.value?.saveAgentQueue?.({
             sessionId: props.sessionId,
             queue: plainQueue
           })
@@ -512,9 +518,9 @@ onMounted(async () => {
   // 先注册流式监听器，再加载历史消息，确保钉钉第一条消息的 streaming 事件不被错过
   setupStreamListeners()
   await loadQueueSetting()
-  if (window.electronAPI?.getAgentSession) {
+  if (resolvedAgentApi.value?.getAgentSession) {
     try {
-      const latestSession = await window.electronAPI.getAgentSession(props.sessionId)
+      const latestSession = await resolvedAgentApi.value.getAgentSession(props.sessionId)
       if (latestSession) {
         resolvedApiProfileId.value = latestSession.apiProfileId !== undefined
           ? latestSession.apiProfileId
@@ -544,7 +550,7 @@ onMounted(async () => {
   await nextTick()  // 确保 ChatInput 组件已渲染
 
   try {
-    const result = await window.electronAPI?.getAgentQueue(props.sessionId)
+    const result = await resolvedAgentApi.value?.getAgentQueue?.(props.sessionId)
     console.log('[AgentChatTab] 📖 Loading queue for session:', props.sessionId, result)
     console.log('[AgentChatTab] 🔍 chatInputRef.value:', chatInputRef.value)
     console.log('[AgentChatTab] 🔍 chatInputRef.value?.messageQueue:', chatInputRef.value?.messageQueue)
@@ -624,7 +630,7 @@ onBeforeUnmount(async () => {
     try {
       const plainQueue = JSON.parse(JSON.stringify(currentQueue))
       // CRITICAL: 使用 await 确保保存完成后再卸载
-      await window.electronAPI?.saveAgentQueue({
+      await resolvedAgentApi.value?.saveAgentQueue?.({
         sessionId: props.sessionId,
         queue: plainQueue
       })
@@ -651,7 +657,8 @@ onUnmounted(() => {
 
 defineExpose({
   focus: () => chatInputRef.value?.focus(),
-  insertText: (text) => chatInputRef.value?.insertText(text)
+  insertText: (text) => chatInputRef.value?.insertText(text),
+  sendMessage: (text) => handleSend(text)
 })
 </script>
 

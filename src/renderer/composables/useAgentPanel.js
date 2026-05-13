@@ -35,6 +35,16 @@ export function unmarkSessionClosed(sessionId) {
   console.log('[useAgentPanel] ✅ Unmarked session as closed:', sessionId)
 }
 
+function isEmbeddedAppConversation(conv) {
+  const ownerClientId = typeof conv?.ownerClientId === 'string' ? conv.ownerClientId : ''
+  const clientType = typeof conv?.clientType === 'string' ? conv.clientType : ''
+  const cwd = typeof conv?.cwd === 'string' ? conv.cwd.replace(/\\/g, '/') : ''
+
+  return ownerClientId.startsWith('embed:') ||
+    clientType === 'embedded' ||
+    cwd.includes('/embedded-apps/')
+}
+
 export function useAgentPanel() {
   const conversations = ref([])
   const loading = ref(false)
@@ -54,7 +64,9 @@ export function useAgentPanel() {
     loading.value = true
     try {
       const list = await window.electronAPI.listAgentSessions()
-      conversations.value = Array.isArray(list) ? list : []
+      conversations.value = Array.isArray(list)
+        ? list.filter(conv => !isEmbeddedAppConversation(conv))
+        : []
     } catch (err) {
       console.error('[useAgentPanel] loadConversations error:', err)
       conversations.value = []

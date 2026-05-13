@@ -27,6 +27,9 @@ describe('agent sdk return rendering', () => {
 
     expect(source).toContain('handleSystemStatus')
     expect(source).toContain('handleOtherMessage')
+    expect(source).toContain('isHiddenStructuredSystemStatus')
+    expect(source).toContain("subtype === 'task_started'")
+    expect(source).toContain("subtype === 'task_completed'")
     expect(source).toContain('onAgentSystemStatus')
     expect(source).toContain('onAgentOtherMessage')
     expect(preloadSource).toContain("['onAgentOtherMessage', 'agent:otherMessage']")

@@ -26,8 +26,14 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
+  height: 100%;
   min-height: 100vh;
   background:
     linear-gradient(135deg, rgba(11, 107, 88, 0.12), transparent 36%),
@@ -35,6 +41,7 @@ body {
     var(--bg);
   color: var(--ink);
   font-family: "Segoe UI", "PingFang SC", sans-serif;
+  overflow: hidden;
 }
 
 button,
@@ -53,12 +60,15 @@ p {
 .workbench-shell {
   display: grid;
   grid-template-columns: 310px minmax(0, 1fr) 360px;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .station-pane,
 .assistant-pane {
   min-width: 0;
+  min-height: 0;
   padding: 24px;
   border-color: var(--line);
   background: rgba(251, 253, 248, 0.72);
@@ -72,17 +82,22 @@ p {
 
 .station-pane {
   border-right: 1px solid var(--line);
+  overflow: auto;
 }
 
 .assistant-pane {
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--line);
+  padding: 16px;
+  overflow: hidden;
 }
 
 .workspace-pane {
   min-width: 0;
+  min-height: 0;
   padding: 26px;
+  overflow: auto;
 }
 
 .eyebrow {
@@ -365,29 +380,11 @@ p {
   cursor: wait;
 }
 
-.agent-status {
-  padding: 14px 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-}
-
-.agent-status strong {
-  color: var(--ink);
-}
-
-.agent-log {
+.agent-panel-mount {
   flex: 1;
-  min-height: 260px;
-  margin: 18px 0 0;
-  padding: 14px;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--panel-muted);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .empty-state {

@@ -35,6 +35,7 @@ export const MessageRole = {
 export function useAgentChat(sessionId, options = {}) {
   const { t } = useLocale()
   const slashCommandsEnabled = options.enableSlashCommands !== false
+  const agentApi = options.agentApi || (typeof window !== 'undefined' ? window.electronAPI : null)
 
   const messages = ref([])
   const isStreaming = ref(false)
@@ -137,7 +138,7 @@ export function useAgentChat(sessionId, options = {}) {
   watch(selectedModel, (newVal, oldVal) => {
     const nextModel = normalizeModelValue(newVal)
     const prevModel = normalizeModelValue(oldVal)
-    const canSetModelLive = !!window.electronAPI?.setAgentModel
+    const canSetModelLive = !!agentApi?.setAgentModel
     const changeSource = selectedModelChangeSource
 
     console.log('[useAgentChat] selectedModel changed:', {
@@ -155,7 +156,7 @@ export function useAgentChat(sessionId, options = {}) {
     }
 
     if (canSetModelLive) {
-      window.electronAPI.setAgentModel(sessionId, nextModel)
+      agentApi.setAgentModel(sessionId, nextModel)
         .then(result => {
           if (result?.ignored) {
             console.warn('[useAgentChat] setAgentModel ignored by main process:', {
@@ -242,13 +243,37 @@ export function useAgentChat(sessionId, options = {}) {
     'status'
   ])
 
-  const summarizeSystemStatus = (value) => stringifyDisplayValue(value, [
-    'message',
-    'text',
-    'status',
-    'summary',
-    'detail'
-  ])
+  const isHiddenStructuredSystemStatus = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+
+    const subtype = typeof value.subtype === 'string' ? value.subtype.toLowerCase() : ''
+    const taskType = typeof value.task_type === 'string' ? value.task_type.toLowerCase() : ''
+    const description = typeof value.description === 'string' ? value.description.trim() : ''
+
+    if (subtype === 'task_started' || subtype === 'task_completed' || subtype === 'task_finished') {
+      return true
+    }
+
+    if (taskType && description && value.tool_use_id) {
+      return true
+    }
+
+    return false
+  }
+
+  const summarizeSystemStatus = (value) => {
+    if (isHiddenStructuredSystemStatus(value)) {
+      return ''
+    }
+
+    return stringifyDisplayValue(value, [
+      'message',
+      'text',
+      'status',
+      'summary',
+      'detail'
+    ])
+  }
 
   const summarizeOtherMessage = (value) => {
     const directText = stringifyDisplayValue(value, [
@@ -297,10 +322,10 @@ export function useAgentChat(sessionId, options = {}) {
    * 加载历史消息
    */
   const loadMessages = async () => {
-    if (!window.electronAPI?.getAgentMessages) return
+    if (!agentApi?.getAgentMessages) return
 
     try {
-      const history = await window.electronAPI.getAgentMessages(sessionId)
+      const history = await agentApi.getAgentMessages(sessionId)
       if (Array.isArray(history) && history.length > 0) {
         if (messages.value.length > 0) {
           // 已有消息（如钉钉实时注入），将历史插入到前面，避免覆盖运行时状态
@@ -473,7 +498,7 @@ export function useAgentChat(sessionId, options = {}) {
       autoSubmit: false
     })
 
-    if (!window.electronAPI?.getAgentSupportedCommands) {
+    if (!agentApi?.getAgentSupportedCommands) {
       if (fallbackCommands.length > 0) {
         setSdkSlashCommands(fallbackCommands)
       }
@@ -481,7 +506,7 @@ export function useAgentChat(sessionId, options = {}) {
     }
 
     try {
-      const supported = await window.electronAPI.getAgentSupportedCommands(sessionId)
+      const supported = await agentApi.getAgentSupportedCommands(sessionId)
       const normalized = normalizeSlashCommands(supported, {
         source: 'sdk',
         icon: 'zap',
@@ -501,12 +526,12 @@ export function useAgentChat(sessionId, options = {}) {
   }
 
   const syncActiveSessionState = async () => {
-    if (!window.electronAPI?.getAgentInitResult) {
+    if (!agentApi?.getAgentInitResult) {
       return
     }
 
     try {
-      const initResult = await window.electronAPI.getAgentInitResult(sessionId)
+      const initResult = await agentApi.getAgentInitResult(sessionId)
       if (!initResult || initResult.error) {
         console.log('[useAgentChat] syncActiveSessionState: no active init result', {
           sessionId,
@@ -654,10 +679,10 @@ export function useAgentChat(sessionId, options = {}) {
     const userMessages = messages.value.filter(m => m.role === MessageRole.USER)
     if (userMessages.length === 1 && trimmed && !isActualSlashCommand && !trimmed.startsWith('@')) {
       const autoTitle = trimmed.length > 10 ? trimmed.slice(0, 10) + '…' : trimmed
-      window.electronAPI?.renameAgentSession?.({ sessionId, title: autoTitle }).catch(() => {})
+      agentApi?.renameAgentSession?.({ sessionId, title: autoTitle }).catch(() => {})
     } else if (userMessages.length === 1 && hasImages && !trimmed) {
       // 第一条消息是纯图片，标题设为 [图片]
-      window.electronAPI?.renameAgentSession?.({ sessionId, title: '[图片]' }).catch(() => {})
+      agentApi?.renameAgentSession?.({ sessionId, title: '[图片]' }).catch(() => {})
     }
 
     isStreaming.value = true
@@ -681,7 +706,7 @@ export function useAgentChat(sessionId, options = {}) {
         messageKind: typeof originalMessage === 'string' ? 'text' : 'multimodal',
         imageCount: Array.isArray(originalMessage?.images) ? originalMessage.images.length : 0
       })
-      await window.electronAPI.sendAgentMessage(sendOptions)
+      await agentApi.sendAgentMessage(sendOptions)
     } catch (err) {
       console.error('[useAgentChat] sendMessage error:', err)
       error.value = err.message || 'Failed to send message'
@@ -699,7 +724,7 @@ export function useAgentChat(sessionId, options = {}) {
       // CRITICAL: 先设置中断标志，阻止队列自动消费
       isInterrupting.value = true
       console.log('[useAgentChat] 🛑 User interrupting, blocking auto-consume')
-      await window.electronAPI.cancelAgentGeneration(sessionId)
+      await agentApi.cancelAgentGeneration(sessionId)
       return true
     } catch (err) {
       console.error('[useAgentChat] cancel error:', err)
@@ -975,7 +1000,7 @@ export function useAgentChat(sessionId, options = {}) {
     isCompacting.value = true
 
     try {
-      await window.electronAPI.compactAgentConversation(sessionId)
+      await agentApi.compactAgentConversation(sessionId)
     } catch (err) {
       console.error('[useAgentChat] compact error:', err)
       error.value = err.message || 'Compact failed'
@@ -1050,14 +1075,14 @@ export function useAgentChat(sessionId, options = {}) {
   }
 
   const submitInteractionAnswer = async ({ interactionId, answers, questions, annotations, updatedInput, updatedPermissions, decisionClassification, behavior }) => {
-    if (!window.electronAPI?.respondAgentInteraction) return { error: 'Interaction API unavailable' }
+    if (!agentApi?.respondAgentInteraction) return { error: 'Interaction API unavailable' }
     try {
       const plainAnswers = answers ? JSON.parse(JSON.stringify(answers)) : []
       const plainQuestions = questions ? JSON.parse(JSON.stringify(questions)) : []
       const plainAnnotations = annotations ? JSON.parse(JSON.stringify(annotations)) : undefined
       const plainUpdatedInput = updatedInput ? JSON.parse(JSON.stringify(updatedInput)) : undefined
       const plainUpdatedPermissions = updatedPermissions ? JSON.parse(JSON.stringify(updatedPermissions)) : undefined
-      const result = await window.electronAPI.respondAgentInteraction({
+      const result = await agentApi.respondAgentInteraction({
         sessionId,
         interactionId,
         answers: plainAnswers,
@@ -1076,9 +1101,9 @@ export function useAgentChat(sessionId, options = {}) {
   }
 
   const cancelInteraction = async ({ interactionId, reason }) => {
-    if (!window.electronAPI?.cancelAgentInteraction) return { error: 'Interaction API unavailable' }
+    if (!agentApi?.cancelAgentInteraction) return { error: 'Interaction API unavailable' }
     try {
-      const result = await window.electronAPI.cancelAgentInteraction({
+      const result = await agentApi.cancelAgentInteraction({
         sessionId,
         interactionId,
         reason
@@ -1095,53 +1120,53 @@ export function useAgentChat(sessionId, options = {}) {
    * 避免钉钉消息触发时 streaming 事件已发出但监听器尚未注册
    */
   const setupStreamListeners = () => {
-    if (!window.electronAPI) return
+    if (!agentApi) return
 
-    if (window.electronAPI.onAgentInit) {
-      cleanupFns.push(window.electronAPI.onAgentInit(handleInit))
+    if (agentApi.onAgentInit) {
+      cleanupFns.push(agentApi.onAgentInit(handleInit))
     }
-    if (window.electronAPI.onAgentMessage) {
-      cleanupFns.push(window.electronAPI.onAgentMessage(handleMessage))
+    if (agentApi.onAgentMessage) {
+      cleanupFns.push(agentApi.onAgentMessage(handleMessage))
     }
-    if (window.electronAPI.onAgentStream) {
-      cleanupFns.push(window.electronAPI.onAgentStream(handleStream))
+    if (agentApi.onAgentStream) {
+      cleanupFns.push(agentApi.onAgentStream(handleStream))
     }
-    if (window.electronAPI.onAgentResult) {
-      cleanupFns.push(window.electronAPI.onAgentResult(handleResult))
+    if (agentApi.onAgentResult) {
+      cleanupFns.push(agentApi.onAgentResult(handleResult))
     }
-    if (window.electronAPI.onAgentError) {
-      cleanupFns.push(window.electronAPI.onAgentError(handleError))
+    if (agentApi.onAgentError) {
+      cleanupFns.push(agentApi.onAgentError(handleError))
     }
-    if (window.electronAPI.onAgentCliError) {
-      cleanupFns.push(window.electronAPI.onAgentCliError(handleCliError))
+    if (agentApi.onAgentCliError) {
+      cleanupFns.push(agentApi.onAgentCliError(handleCliError))
     }
-    if (window.electronAPI.onAgentToolProgress) {
-      cleanupFns.push(window.electronAPI.onAgentToolProgress(handleToolProgress))
+    if (agentApi.onAgentToolProgress) {
+      cleanupFns.push(agentApi.onAgentToolProgress(handleToolProgress))
     }
-    if (window.electronAPI.onAgentSystemStatus) {
-      cleanupFns.push(window.electronAPI.onAgentSystemStatus(handleSystemStatus))
+    if (agentApi.onAgentSystemStatus) {
+      cleanupFns.push(agentApi.onAgentSystemStatus(handleSystemStatus))
     }
-    if (window.electronAPI.onAgentOtherMessage) {
-      cleanupFns.push(window.electronAPI.onAgentOtherMessage(handleOtherMessage))
+    if (agentApi.onAgentOtherMessage) {
+      cleanupFns.push(agentApi.onAgentOtherMessage(handleOtherMessage))
     }
-    if (window.electronAPI.onAgentStatusChange) {
-      cleanupFns.push(window.electronAPI.onAgentStatusChange(handleStatusChange))
+    if (agentApi.onAgentStatusChange) {
+      cleanupFns.push(agentApi.onAgentStatusChange(handleStatusChange))
     }
-    if (window.electronAPI.onAgentCompacted) {
-      cleanupFns.push(window.electronAPI.onAgentCompacted(handleCompacted))
+    if (agentApi.onAgentCompacted) {
+      cleanupFns.push(agentApi.onAgentCompacted(handleCompacted))
     }
-    if (window.electronAPI.onAgentUsage) {
-      cleanupFns.push(window.electronAPI.onAgentUsage(handleUsage))
+    if (agentApi.onAgentUsage) {
+      cleanupFns.push(agentApi.onAgentUsage(handleUsage))
     }
-    if (window.electronAPI.onAgentInteractionRequest) {
-      cleanupFns.push(window.electronAPI.onAgentInteractionRequest(handleInteractionRequest))
+    if (agentApi.onAgentInteractionRequest) {
+      cleanupFns.push(agentApi.onAgentInteractionRequest(handleInteractionRequest))
     }
-    if (window.electronAPI.onAgentInteractionResolved) {
-      cleanupFns.push(window.electronAPI.onAgentInteractionResolved(handleInteractionResolved))
+    if (agentApi.onAgentInteractionResolved) {
+      cleanupFns.push(agentApi.onAgentInteractionResolved(handleInteractionResolved))
     }
     // macOS: 窗口重建后所有 Agent 会话已关闭，重置前端状态
-    if (window.electronAPI.onAgentAllSessionsClosed) {
-      cleanupFns.push(window.electronAPI.onAgentAllSessionsClosed(() => {
+    if (agentApi.onAgentAllSessionsClosed) {
+      cleanupFns.push(agentApi.onAgentAllSessionsClosed(() => {
         isStreaming.value = false
         hasActiveSession.value = false
       }))
@@ -1284,3 +1309,4 @@ export function useAgentChat(sessionId, options = {}) {
     cleanup
   }
 }
+
