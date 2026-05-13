@@ -63,6 +63,7 @@
             :model-id="modelId"
             :agent-api="agentApi"
             @ready="handleReady"
+            @model-selected="handleModelSelected"
             @request-clear-session="handleClearSession"
           />
         </div>
@@ -146,6 +147,27 @@ const currentProfileName = computed(() => {
   const active = apiProfiles.value.find(profile => profile.id === currentApiProfileId.value)
   return active?.name || '默认 API'
 })
+
+const persistAppPreferences = async (updates = {}) => {
+  if (!window.electronAPI?.updateEmbeddedAppPreferences || !props.appId) return null
+
+  try {
+    const next = await window.electronAPI.updateEmbeddedAppPreferences({
+      appId: props.appId,
+      updates
+    })
+    if (next?.apiProfileId !== undefined) {
+      currentApiProfileId.value = next.apiProfileId || null
+    }
+    if (next?.modelId !== undefined) {
+      currentModelId.value = next.modelId || null
+    }
+    return next
+  } catch (err) {
+    console.warn('[EmbeddedAgentPanel] Failed to persist embedded app preferences:', err)
+    return null
+  }
+}
 
 const getLastSessionStorageKey = () => `embedded-agent:last-session:${props.appId}`
 
@@ -262,6 +284,22 @@ const loadApiProfiles = async () => {
   }
 }
 
+const loadAppPreferences = async () => {
+  if (!window.electronAPI?.getEmbeddedAppPreferences || !props.appId) return
+
+  try {
+    const preferences = await window.electronAPI.getEmbeddedAppPreferences(props.appId)
+    if (preferences?.apiProfileId !== undefined) {
+      currentApiProfileId.value = preferences.apiProfileId || currentApiProfileId.value || null
+    }
+    if (preferences?.modelId !== undefined) {
+      currentModelId.value = preferences.modelId || currentModelId.value || null
+    }
+  } catch (err) {
+    console.warn('[EmbeddedAgentPanel] Failed to load embedded app preferences:', err)
+  }
+}
+
 const syncSessionProfileSnapshot = async () => {
   if (!sessionId.value || !agentApi.value?.getAgentSession) return
 
@@ -332,6 +370,10 @@ const handleSwitchProfile = async (profile) => {
     currentApiProfileId.value = profile.id
     currentModelId.value = result?.modelId !== undefined ? (result.modelId || null) : null
     await syncSessionProfileSnapshot()
+    await persistAppPreferences({
+      apiProfileId: currentApiProfileId.value,
+      modelId: currentModelId.value
+    })
     message.success(`已切换到 ${profile.name}`)
   } catch (err) {
     error.value = err.message || String(err)
@@ -339,6 +381,16 @@ const handleSwitchProfile = async (profile) => {
   } finally {
     switchingProfile.value = false
   }
+}
+
+const handleModelSelected = async ({ modelId } = {}) => {
+  const normalizedModelId = typeof modelId === 'string' ? modelId.trim() : ''
+  if (!normalizedModelId || normalizedModelId === currentModelId.value) return
+
+  currentModelId.value = normalizedModelId
+  await persistAppPreferences({
+    modelId: normalizedModelId
+  })
 }
 
 const initializeSession = async () => {
@@ -424,6 +476,10 @@ const handleClearSession = async () => {
       return
     }
     applySession(session)
+    await persistAppPreferences({
+      apiProfileId: currentApiProfileId.value,
+      modelId: currentModelId.value
+    })
   } catch (err) {
     error.value = err.message || String(err)
   }
@@ -433,6 +489,7 @@ onMounted(async () => {
   initLocale()
   initTheme()
   readContext()
+  await loadAppPreferences()
   await loadApiProfiles()
   window.addEventListener('embedded-agent:context-changed', handleContextChanged)
   document.addEventListener('click', handleDocumentClick, true)

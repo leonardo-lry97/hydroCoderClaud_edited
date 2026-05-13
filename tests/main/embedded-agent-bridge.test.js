@@ -18,6 +18,8 @@ describe('embedded hydro agent bridge wiring', () => {
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:switchApiProfile'")
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:listDir'")
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:searchFiles'")
+    expect(source).toContain("ipcRenderer.invoke('embedded-app:getPreferences'")
+    expect(source).toContain("ipcRenderer.invoke('embedded-app:updatePreferences'")
     expect(source).toContain('hydroAgentState.defaultCwd = result?.defaultCwd || null')
   })
 
@@ -33,6 +35,8 @@ describe('embedded hydro agent bridge wiring', () => {
     expect(source).toContain("ipcMain.handle('hydro-agent:respondInteraction'")
     expect(source).toContain("ipcMain.handle('hydro-agent:listDir'")
     expect(source).toContain("ipcMain.handle('hydro-agent:searchFiles'")
+    expect(source).toContain("ipcMain.handle('embedded-app:getPreferences'")
+    expect(source).toContain("ipcMain.handle('embedded-app:updatePreferences'")
     expect(source).toContain("sender.send('hydro-agent:event', payload)")
     expect(source).toContain("path.join(app.getPath('userData'), 'embedded-apps', safeAppId, 'workspace')")
     expect(source).toContain('defaultCwd: client.defaultCwd')

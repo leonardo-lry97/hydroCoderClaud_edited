@@ -156,7 +156,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['ready', 'preview-image', 'preview-link', 'preview-path', 'agent-done', 'request-clear-session'])
+const emit = defineEmits(['ready', 'preview-image', 'preview-link', 'preview-path', 'agent-done', 'request-clear-session', 'model-selected'])
 const resolvedApiProfileId = ref(props.apiProfileId)
 const resolvedModelId = ref(props.modelId)
 const resolvedAgentApi = computed(() => props.agentApi || window.electronAPI)
@@ -586,6 +586,18 @@ watch(() => [props.apiProfileId, props.modelId], ([apiProfileId, modelId]) => {
   const normalizedModelId = normalizeModelValue(modelId)
   resolvedModelId.value = normalizedModelId || null
   void initDefaultModel(resolvedApiProfileId.value, resolvedModelId.value)
+})
+
+watch(selectedModel, (modelId, previousModelId) => {
+  const normalizedModelId = normalizeModelValue(modelId)
+  const normalizedPreviousModelId = normalizeModelValue(previousModelId)
+  const persistedModelId = normalizeModelValue(props.modelId)
+
+  if (!normalizedModelId || normalizedModelId === normalizedPreviousModelId || normalizedModelId === persistedModelId) {
+    return
+  }
+
+  emit('model-selected', { modelId: normalizedModelId })
 })
 
 // 在组件卸载前保存队列（此时子组件还存在）

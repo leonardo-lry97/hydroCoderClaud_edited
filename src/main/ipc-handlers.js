@@ -95,7 +95,7 @@ function getEmbeddedAppWorkspaceDir(appId) {
   return workspaceDir
 }
 
-function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSessionManager, agentSessionManager, capabilityManager, updateManager, dingtalkBridge, notebookManager, scheduledTaskService, weixinNotifyService, weixinBridge, localAgentApiServer = null) {
+function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSessionManager, agentSessionManager, capabilityManager, updateManager, dingtalkBridge, notebookManager, embeddedAppPreferencesManager, scheduledTaskService, weixinNotifyService, weixinBridge, localAgentApiServer = null) {
   const translate = (key, params = {}) => typeof tMain === 'function'
     ? tMain(configManager, key, params)
     : key
@@ -1036,6 +1036,24 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
       icon: app.icon,
       label: translate(app.labelKey || app.titleKey || app.id)
     }));
+  });
+
+  ipcMain.handle('embedded-app:getPreferences', async (_event, appId) => {
+    if (!embeddedAppPreferencesManager) {
+      return {
+        appId: typeof appId === 'string' ? appId.trim() : '',
+        apiProfileId: null,
+        modelId: null
+      }
+    }
+    return embeddedAppPreferencesManager.getPreferences(appId)
+  });
+
+  ipcMain.handle('embedded-app:updatePreferences', async (_event, { appId, updates } = {}) => {
+    if (!embeddedAppPreferencesManager) {
+      throw new Error('Embedded app preferences manager not available')
+    }
+    return embeddedAppPreferencesManager.updatePreferences(appId, updates || {})
   });
 
   ipcMain.handle('embedded-app:open', async (_event, menuKey) => {

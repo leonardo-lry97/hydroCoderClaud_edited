@@ -128,6 +128,10 @@ class ConfigManager {
           enabled: false
         },
 
+        embeddedApps: {
+          preferences: {}
+        }
+
       }
     };
 

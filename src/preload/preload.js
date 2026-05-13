@@ -413,6 +413,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openAppearanceSettings: () => ipcRenderer.invoke('window:openAppearanceSettings'),
   openSettingsWorkbench: (options) => ipcRenderer.invoke('window:openSettingsWorkbench', options),
   'embedded-app:list': () => ipcRenderer.invoke('embedded-app:list'),
+  getEmbeddedAppPreferences: (appId) => ipcRenderer.invoke('embedded-app:getPreferences', appId),
+  updateEmbeddedAppPreferences: ({ appId, updates }) => ipcRenderer.invoke('embedded-app:updatePreferences', { appId, updates }),
   'embedded-app:open': (menuKey) => ipcRenderer.invoke('embedded-app:open', menuKey),
   openEmbeddedAppDemo: () => ipcRenderer.invoke('window:openEmbeddedAppDemo'),
   openProviderManager: () => ipcRenderer.invoke('window:openProviderManager'),

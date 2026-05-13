@@ -225,6 +225,11 @@ describe('ConfigManager', () => {
       expect(config.updateMirrorUrl).toBe('')
     })
 
+    it('应该初始化 embedded app 偏好存储结构', () => {
+      const config = configManager.getConfig()
+      expect(config.settings.embeddedApps).toEqual({ preferences: {} })
+    })
+
     it('删除默认服务商后，重载配置不应自动补回', async () => {
       await configManager.deleteServiceProviderDefinition('other')
 

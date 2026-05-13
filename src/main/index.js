@@ -16,6 +16,7 @@ const { NotebookManager } = require('./managers/notebook-manager');
 const { ScheduledTaskService } = require('./managers/scheduled-task-service');
 const { WeixinNotifyService } = require('./managers/weixin-notify-service');
 const { WeixinBridge } = require('./managers/weixin-bridge');
+const { EmbeddedAppPreferencesManager } = require('./managers/embedded-app-preferences-manager');
 const { LocalAgentApiServer } = require('./agent-platform/local-agent-api-server');
 const { setupIPCHandlers } = require('./ipc-handlers');
 const { createTrayController } = require('./tray-controller');
@@ -36,6 +37,7 @@ let capabilityManager = null;
 let updateManager = null;
 let dingtalkBridge = null;
 let notebookManager = null;
+let embeddedAppPreferencesManager = null;
 let scheduledTaskService = null;
 let weixinNotifyService = null;
 let weixinBridge = null;
@@ -460,6 +462,7 @@ if (hasSingleInstanceLock) {
 
     // 初始化 Notebook 管理器（需要 configManager 和 agentSessionManager）
     notebookManager = new NotebookManager(configManager, agentSessionManager)
+    embeddedAppPreferencesManager = new EmbeddedAppPreferencesManager(configManager)
 
     // 初始化定时任务服务（需要 configManager 和 agentSessionManager）
     scheduledTaskService = new ScheduledTaskService(configManager, agentSessionManager)
@@ -486,6 +489,7 @@ if (hasSingleInstanceLock) {
       updateManager,
       dingtalkBridge,
       notebookManager,
+      embeddedAppPreferencesManager,
       scheduledTaskService,
       weixinNotifyService,
       weixinBridge,
