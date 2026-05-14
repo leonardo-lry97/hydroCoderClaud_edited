@@ -598,6 +598,7 @@ p {
 }
 
 .trend-chart-shell {
+  position: relative;
   overflow: hidden;
   border: 1px solid var(--border-color);
   border-radius: 14px;
@@ -610,6 +611,21 @@ p {
   display: block;
   width: 100%;
   height: 340px;
+}
+
+.trend-grid-line.minor {
+  stroke: rgba(148, 163, 184, 0.08);
+  stroke-width: 1;
+}
+
+.trend-grid-line.major {
+  stroke: rgba(100, 116, 139, 0.2);
+  stroke-width: 1.1;
+}
+
+.trend-grid-line.major.key {
+  stroke: rgba(37, 99, 235, 0.22);
+  stroke-width: 1.25;
 }
 
 .trend-slot-point {
@@ -638,9 +654,95 @@ p {
   font-size: 11px;
 }
 
+.trend-axis-label.minor {
+  fill: rgba(100, 116, 139, 0.78);
+  font-size: 10px;
+}
+
+.trend-axis-label.major {
+  fill: var(--text-color-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .trend-axis-unit,
 .trend-window-label {
   fill: var(--text-color-secondary);
+  font-size: 12px;
+}
+
+.trend-hover-layer {
+  pointer-events: none;
+}
+
+.trend-hover-crosshair {
+  display: none;
+  stroke: rgba(37, 99, 235, 0.45);
+  stroke-width: 1.25;
+  stroke-dasharray: 5 4;
+}
+
+.trend-hover-marker {
+  display: none;
+  stroke-width: 2;
+  filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.18));
+}
+
+.trend-hover-card {
+  position: absolute;
+  z-index: 2;
+  min-width: 220px;
+  max-width: 240px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.trend-hover-time {
+  color: var(--text-color);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trend-hover-meta {
+  margin-top: 4px;
+  color: var(--text-color-muted);
+  font-size: 11px;
+}
+
+.trend-hover-metrics {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trend-hover-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-color-secondary);
+  font-size: 12px;
+}
+
+.trend-hover-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trend-hover-row i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.trend-hover-row strong {
+  color: var(--text-color);
   font-size: 12px;
 }
 

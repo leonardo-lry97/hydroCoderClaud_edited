@@ -76,6 +76,7 @@ let realtimeState = {
   selectedSlotId: null,
   slotDetail: null,
   trend: null,
+  trendHoverModel: null,
   error: '',
   trendError: '',
   correctionError: ''
@@ -341,6 +342,7 @@ function formatAxisTimeLabel(timestamp, mode = 'auto') {
   const hour = `${date.getHours()}`.padStart(2, '0')
   const minute = `${date.getMinutes()}`.padStart(2, '0')
   if (mode === 'date') return `${month}-${day}`
+  if (mode === 'dayhour') return `${month}-${day} ${hour}:00`
   if (mode === 'time') return `${hour}:${minute}`
   return `${month}-${day} ${hour}:${minute}`
 }
@@ -411,6 +413,197 @@ function getTrendAxisLabelStrategy(range, innerWidth) {
   }
 }
 
+function alignTrendTick(timestamp, stepHours) {
+  const aligned = new Date(timestamp)
+  aligned.setMinutes(0, 0, 0)
+  const currentHour = aligned.getHours()
+  const remainder = currentHour % stepHours
+  aligned.setHours(currentHour - remainder)
+  if (aligned.getTime() < timestamp) {
+    aligned.setHours(aligned.getHours() + stepHours)
+  }
+  return aligned.getTime()
+}
+
+function buildTrendTicks(range, step) {
+  const stepHours = Math.max(1, Math.round(step / (60 * 60 * 1000)))
+  const ticks = []
+  for (let current = alignTrendTick(range.start, stepHours); current <= range.end; current += step) {
+    ticks.push(current)
+  }
+  return ticks
+}
+
+function buildTrendAxisModel(range, innerWidth) {
+  const span = range.end - range.start
+  const spanHours = span / (60 * 60 * 1000)
+  let minorBase = 60 * 60 * 1000
+  let majorBase = 3 * 60 * 60 * 1000
+  let minorLabelMode = 'time'
+  let majorLabelMode = 'dayhour'
+
+  if (spanHours > 12 && spanHours <= 36) {
+    minorBase = 2 * 60 * 60 * 1000
+    majorBase = 6 * 60 * 60 * 1000
+  } else if (spanHours > 36 && spanHours <= 96) {
+    minorBase = 6 * 60 * 60 * 1000
+    majorBase = 24 * 60 * 60 * 1000
+    majorLabelMode = 'date'
+  } else if (spanHours > 96) {
+    minorBase = 12 * 60 * 60 * 1000
+    majorBase = 24 * 60 * 60 * 1000
+    minorLabelMode = 'date'
+    majorLabelMode = 'date'
+  }
+
+  const minorStrategy = getTrendAxisLabelStrategy(
+    { start: range.start, end: range.end },
+    innerWidth
+  )
+  const minorStep = Math.max(minorBase, minorStrategy.step)
+  const majorStep = Math.max(majorBase, minorStep * Math.ceil(majorBase / minorStep))
+  const majorTicks = buildTrendTicks(range, majorStep)
+  const majorTickSet = new Set(majorTicks)
+  const minorTicks = buildTrendTicks(range, minorStep).filter((tick) => !majorTickSet.has(tick))
+
+  return {
+    minorTicks,
+    majorTicks,
+    minorLabelMode,
+    majorLabelMode,
+    spanHours
+  }
+}
+
+function isTrendKeyTimestamp(timestamp, spanHours) {
+  const date = new Date(timestamp)
+  const hour = date.getHours()
+  if (hour === 0) return true
+  if (spanHours <= 36) {
+    return hour === 6 || hour === 12 || hour === 18
+  }
+  return false
+}
+
+function buildTrendHoverCardMarkup(slotModel) {
+  const metricRows = slotModel.markers
+    .map((marker) => `
+      <div class="trend-hover-row">
+        <span><i style="background:${escapeAttribute(marker.color)}"></i>${escapeHtml(marker.label)}</span>
+        <strong>${escapeHtml(formatNumericValue(marker.value))}</strong>
+      </div>
+    `)
+    .join('')
+
+  return `
+    <div class="trend-hover-time">${escapeHtml(formatDateTimeLabel(slotModel.slotTime))}</div>
+    <div class="trend-hover-meta">${escapeHtml(describeCompareStatus(slotModel.compareStatus))} · ${slotModel.anomalyCount || 0} 项异常</div>
+    <div class="trend-hover-metrics">${metricRows}</div>
+  `
+}
+
+function bindTrendChartHover() {
+  const shell = document.getElementById('trendChartShell')
+  const svg = shell?.querySelector('.trend-chart-svg')
+  const hoverCard = shell?.querySelector('[data-trend-hover-card]')
+  const crosshair = svg?.querySelector('[data-trend-hover-crosshair]')
+  const hoverMarkers = Array.from(svg?.querySelectorAll('[data-trend-hover-marker]') || [])
+  const hoverModel = realtimeState.trendHoverModel
+
+  if (!shell || !svg || !hoverCard || !crosshair || !hoverModel?.slots?.length) {
+    return
+  }
+
+  const markerMap = new Map(hoverMarkers.map((node) => [node.dataset.trendHoverMarker, node]))
+
+  const hideHover = () => {
+    hoverCard.hidden = true
+    crosshair.style.display = 'none'
+    markerMap.forEach((node) => {
+      node.style.display = 'none'
+    })
+  }
+
+  const showHover = (slotModel) => {
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return
+
+    crosshair.style.display = 'block'
+    crosshair.setAttribute('x1', slotModel.x.toFixed(2))
+    crosshair.setAttribute('x2', slotModel.x.toFixed(2))
+    crosshair.setAttribute('y1', hoverModel.paddingTop.toFixed(2))
+    crosshair.setAttribute('y2', (hoverModel.height - hoverModel.paddingBottom).toFixed(2))
+
+    markerMap.forEach((node, sourceType) => {
+      const marker = slotModel.markers.find((item) => item.sourceType === sourceType)
+      if (!marker) {
+        node.style.display = 'none'
+        return
+      }
+      node.style.display = 'block'
+      node.setAttribute('cx', marker.x.toFixed(2))
+      node.setAttribute('cy', marker.y.toFixed(2))
+      node.setAttribute('fill', marker.color)
+      node.setAttribute('stroke', '#ffffff')
+    })
+
+    hoverCard.hidden = false
+    hoverCard.innerHTML = buildTrendHoverCardMarkup(slotModel)
+
+    const anchorPoint = svg.createSVGPoint()
+    anchorPoint.x = slotModel.x
+    anchorPoint.y = hoverModel.paddingTop + 12
+    const screenPoint = anchorPoint.matrixTransform(ctm)
+    const shellRect = shell.getBoundingClientRect()
+    const cardWidth = 220
+    const cardHeight = hoverCard.offsetHeight || 140
+    const preferRight = screenPoint.x - shellRect.left + 14
+    const preferLeft = screenPoint.x - shellRect.left - cardWidth - 14
+    const left = preferRight + cardWidth > shellRect.width - 8
+      ? Math.max(12, preferLeft)
+      : Math.max(12, preferRight)
+    const top = Math.min(12, Math.max(12, shellRect.height - cardHeight - 12))
+    hoverCard.style.left = `${left}px`
+    hoverCard.style.top = `${top}px`
+  }
+
+  const findNearestSlot = (clientX, clientY) => {
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return null
+    const point = svg.createSVGPoint()
+    point.x = clientX
+    point.y = clientY
+    const localPoint = point.matrixTransform(ctm.inverse())
+    if (
+      localPoint.x < hoverModel.paddingLeft - 12
+      || localPoint.x > hoverModel.width - hoverModel.paddingRight + 12
+      || localPoint.y < hoverModel.paddingTop - 12
+      || localPoint.y > hoverModel.height - hoverModel.paddingBottom + 12
+    ) {
+      return null
+    }
+    return hoverModel.slots.reduce((nearest, current) => {
+      if (!nearest) return current
+      return Math.abs(current.x - localPoint.x) < Math.abs(nearest.x - localPoint.x) ? current : nearest
+    }, null)
+  }
+
+  svg.addEventListener('mousemove', (event) => {
+    const slotModel = findNearestSlot(event.clientX, event.clientY)
+    if (!slotModel) {
+      hideHover()
+      return
+    }
+    showHover(slotModel)
+  })
+
+  svg.addEventListener('mouseleave', () => {
+    hideHover()
+  })
+
+  hideHover()
+}
+
 function getTrendVisibleSeries() {
   return [
     { key: 'manualValue', sourceType: 'manual', name: '人工值' },
@@ -453,7 +646,10 @@ function zoomTrendView(direction, slots) {
 function buildTrendChartSvg(slots) {
   const sortedSlots = sortRealtimeSlots(slots)
   const range = getVisibleTrendRange(sortedSlots)
-  if (range.start == null || range.end == null) return ''
+  if (range.start == null || range.end == null) {
+    realtimeState.trendHoverModel = null
+    return ''
+  }
 
   const visibleSlots = sortedSlots.filter((slot) => {
     const time = new Date(String(slot.slotTime).replace(' ', 'T')).getTime()
@@ -475,14 +671,20 @@ function buildTrendChartSvg(slots) {
     }))
     .filter((item) => item.points.length > 0)
 
-  if (series.length === 0) return ''
+  if (series.length === 0) {
+    realtimeState.trendHoverModel = null
+    return ''
+  }
 
   const flatPoints = series.flatMap((item) => item.points.map((point) => ({
     time: new Date(String(point.slotTime).replace(' ', 'T')).getTime(),
     value: Number(point.value)
   }))).filter((item) => !Number.isNaN(item.time) && !Number.isNaN(item.value))
 
-  if (flatPoints.length === 0) return ''
+  if (flatPoints.length === 0) {
+    realtimeState.trendHoverModel = null
+    return ''
+  }
 
   const minX = range.start
   const maxX = range.end
@@ -496,7 +698,7 @@ function buildTrendChartSvg(slots) {
   const paddingLeft = 72
   const paddingRight = 26
   const paddingTop = 20
-  const paddingBottom = 58
+  const paddingBottom = 74
   const innerWidth = width - paddingLeft - paddingRight
   const innerHeight = height - paddingTop - paddingBottom
   const getX = (value) => (maxX === minX ? paddingLeft + innerWidth / 2 : paddingLeft + ((value - minX) / (maxX - minX)) * innerWidth)
@@ -516,18 +718,21 @@ function buildTrendChartSvg(slots) {
     <text x="${paddingLeft - 12}" y="${(tick.y + 4).toFixed(2)}" text-anchor="end" class="trend-axis-label">${tick.value.toFixed(2)}</text>
   `).join('')
 
-  const xAxisStrategy = getTrendAxisLabelStrategy(range, innerWidth)
-  const xStep = xAxisStrategy.step
-  const xTicks = []
-  for (let current = Math.ceil(range.start / xStep) * xStep; current <= range.end; current += xStep) {
-    xTicks.push(current)
-  }
-
-  const xGridLines = xTicks.map((tick) => {
+  const axisModel = buildTrendAxisModel(range, innerWidth)
+  const minorGridLines = axisModel.minorTicks.map((tick) => {
     const x = getX(tick)
     return `
-      <line x1="${x.toFixed(2)}" y1="${paddingTop}" x2="${x.toFixed(2)}" y2="${height - paddingBottom}" stroke="rgba(148, 163, 184, 0.08)" stroke-width="1" />
-      <text x="${x.toFixed(2)}" y="${height - 20}" text-anchor="middle" class="trend-axis-label">${escapeHtml(formatAxisTimeLabel(tick, xAxisStrategy.mode))}</text>
+      <line x1="${x.toFixed(2)}" y1="${paddingTop}" x2="${x.toFixed(2)}" y2="${height - paddingBottom}" class="trend-grid-line minor" />
+      <text x="${x.toFixed(2)}" y="${height - 30}" text-anchor="middle" class="trend-axis-label minor">${escapeHtml(formatAxisTimeLabel(tick, axisModel.minorLabelMode))}</text>
+    `
+  }).join('')
+
+  const majorGridLines = axisModel.majorTicks.map((tick) => {
+    const x = getX(tick)
+    const keyClass = isTrendKeyTimestamp(tick, axisModel.spanHours) ? ' key' : ''
+    return `
+      <line x1="${x.toFixed(2)}" y1="${paddingTop}" x2="${x.toFixed(2)}" y2="${height - paddingBottom}" class="trend-grid-line major${keyClass}" />
+      <text x="${x.toFixed(2)}" y="${height - 10}" text-anchor="middle" class="trend-axis-label major">${escapeHtml(formatAxisTimeLabel(tick, axisModel.majorLabelMode))}</text>
     `
   }).join('')
 
@@ -571,17 +776,63 @@ function buildTrendChartSvg(slots) {
     return `<path d="${path}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"${dash} />${circles}`
   }).join('')
 
+  const hoverSlots = visibleSlots
+    .map((slot) => {
+      const time = new Date(String(slot.slotTime).replace(' ', 'T')).getTime()
+      if (Number.isNaN(time)) return null
+      const markers = getTrendVisibleSeries()
+        .map((item) => {
+          if (typeof slot[item.key] !== 'number') return null
+          return {
+            sourceType: item.sourceType,
+            label: item.name,
+            value: Number(slot[item.key]),
+            color: TREND_SERIES_COLORS[item.sourceType] || '#64748b',
+            x: getX(time),
+            y: getY(Number(slot[item.key]))
+          }
+        })
+        .filter(Boolean)
+      if (markers.length === 0) return null
+      return {
+        slotId: slot.id,
+        slotTime: slot.slotTime,
+        compareStatus: slot.compareStatus,
+        anomalyCount: slot.anomalyCount || 0,
+        x: getX(time),
+        markers
+      }
+    })
+    .filter(Boolean)
+
+  realtimeState.trendHoverModel = {
+    width,
+    height,
+    paddingTop,
+    paddingRight,
+    paddingBottom,
+    paddingLeft,
+    slots: hoverSlots
+  }
+
   return `
     <svg viewBox="0 0 ${width} ${height}" class="trend-chart-svg" role="img" aria-label="实时过程图">
       <rect x="${paddingLeft}" y="${paddingTop}" width="${innerWidth}" height="${innerHeight}" rx="16" fill="rgba(148, 163, 184, 0.04)" />
       ${anomalyBands}
       ${yGridLines}
-      ${xGridLines}
+      ${minorGridLines}
+      ${majorGridLines}
       ${lineMarkup}
+      <g class="trend-hover-layer" aria-hidden="true">
+        <line data-trend-hover-crosshair class="trend-hover-crosshair" x1="0" y1="0" x2="0" y2="0" />
+        ${['manual', 'telemetry', 'video_ocr', 'corrected'].map((sourceType) => `
+          <circle data-trend-hover-marker="${sourceType}" class="trend-hover-marker" cx="0" cy="0" r="${sourceType === 'corrected' ? 5 : 4}"></circle>
+        `).join('')}
+      </g>
       <line x1="${paddingLeft}" y1="${height - paddingBottom}" x2="${width - paddingRight}" y2="${height - paddingBottom}" stroke="rgba(148, 163, 184, 0.34)" stroke-width="1" />
       <line x1="${paddingLeft}" y1="${paddingTop}" x2="${paddingLeft}" y2="${height - paddingBottom}" stroke="rgba(148, 163, 184, 0.34)" stroke-width="1" />
       <text x="20" y="${paddingTop + 8}" class="trend-axis-unit">${escapeHtml(getTrendUnit())}</text>
-      <text x="${width - paddingRight}" y="${height - 4}" text-anchor="end" class="trend-window-label">${escapeHtml(viewWindowSummary)}</text>
+      <text x="${width - paddingRight}" y="${paddingTop + 12}" text-anchor="end" class="trend-window-label">${escapeHtml(viewWindowSummary)}</text>
     </svg>
   `
 }
@@ -632,8 +883,9 @@ function renderTrendPanel(slots) {
           <span>${escapeHtml(stats.rangeLabel)}</span>
         </div>
       </div>
-      <div class="trend-chart-shell">
+      <div class="trend-chart-shell" id="trendChartShell">
         ${sortedSlots.length > 0 ? buildTrendChartSvg(sortedSlots) : '<div class="empty-state compact">当前筛选条件下暂无实时数据。</div>'}
+        <div class="trend-hover-card" data-trend-hover-card hidden></div>
       </div>
       <div class="trend-legend">
         ${[
@@ -896,6 +1148,8 @@ function renderRealtimeView(station) {
       renderWorkbench()
     })
   })
+
+  bindTrendChartHover()
 
   document.getElementById('closeRealtimeDetailBtn')?.addEventListener('click', () => {
     realtimeState.selectedSlotId = null
