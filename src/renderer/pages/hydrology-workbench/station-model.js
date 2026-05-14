@@ -27,69 +27,6 @@ export const DEFAULT_STATION_SCHEDULE = {
   waterLevelExcerptEnabled: true
 }
 
-export const initialStations = [
-  {
-    id: 'st-qingxi',
-    code: 'QX001',
-    name: '青溪站',
-    basin: '青溪流域',
-    river: '青溪',
-    longitude: 118.3214,
-    latitude: 29.7812,
-    elevation: 42.5,
-    observationTypes: [OBSERVATION_TYPES.waterLevel, OBSERVATION_TYPES.airTemperature],
-    status: 'active',
-    timezone: 'Asia/Shanghai',
-    dataSources: {
-      manual: true,
-      videoOcr: true,
-      telemetry: false
-    },
-    schedule: { ...DEFAULT_STATION_SCHEDULE },
-    validationRules: structuredClone(DEFAULT_STATION_RULES)
-  },
-  {
-    id: 'st-dongzha',
-    code: 'DZ012',
-    name: '东闸站',
-    basin: '东闸片区',
-    river: '东干渠',
-    longitude: 118.4568,
-    latitude: 29.6974,
-    elevation: 36.2,
-    observationTypes: [OBSERVATION_TYPES.waterLevel],
-    status: 'active',
-    timezone: 'Asia/Shanghai',
-    dataSources: {
-      manual: true,
-      videoOcr: false,
-      telemetry: true
-    },
-    schedule: { ...DEFAULT_STATION_SCHEDULE },
-    validationRules: structuredClone(DEFAULT_STATION_RULES)
-  },
-  {
-    id: 'st-xiqiao',
-    code: 'XQ008',
-    name: '西桥站',
-    basin: '城区河网',
-    river: '西桥河',
-    longitude: 118.2091,
-    latitude: 29.7448,
-    elevation: 40.1,
-    observationTypes: [OBSERVATION_TYPES.airTemperature],
-    status: 'maintenance',
-    timezone: 'Asia/Shanghai',
-    dataSources: {
-      manual: true,
-      videoOcr: false,
-      telemetry: false
-    },
-    schedule: { ...DEFAULT_STATION_SCHEDULE },
-    validationRules: structuredClone(DEFAULT_STATION_RULES)
-  }
-]
-
 export function createEmptyStation() {
   return {
     id: '',

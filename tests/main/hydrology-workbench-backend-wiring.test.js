@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const hydrologyMainPath = path.resolve(__dirname, '../../src/renderer/pages/hydrology-workbench/main.js')
+
+describe('hydrology workbench backend wiring', () => {
+  it('loads and saves station data through the backend API bridge', () => {
+    const source = fs.readFileSync(hydrologyMainPath, 'utf-8')
+
+    expect(source).toContain('window.electronAPI?.listHydrologyStations')
+    expect(source).toContain('await window.electronAPI.listHydrologyStations()')
+    expect(source).toContain('window.electronAPI?.getHydrologyStation')
+    expect(source).toContain('await window.electronAPI.getHydrologyStation(stationId)')
+    expect(source).toContain('window.electronAPI?.saveHydrologyStation')
+    expect(source).toContain('await window.electronAPI.saveHydrologyStation(nextStation)')
+    expect(source).toContain('window.electronAPI?.deleteHydrologyStation')
+    expect(source).toContain('await window.electronAPI.deleteHydrologyStation(stationId)')
+    expect(source).toContain('window.electronAPI?.listHydrologyRealtimeSlots')
+    expect(source).toContain('await window.electronAPI.listHydrologyRealtimeSlots({')
+    expect(source).toContain('window.electronAPI?.getHydrologyRealtimeSlotDetail')
+    expect(source).toContain('await window.electronAPI.getHydrologyRealtimeSlotDetail(slotId)')
+    expect(source).toContain('window.electronAPI?.listHydrologyRealtimeTrend')
+    expect(source).toContain('await window.electronAPI.listHydrologyRealtimeTrend({')
+    expect(source).toContain('window.electronAPI?.seedHydrologyRealtimeData')
+    expect(source).toContain('await window.electronAPI.seedHydrologyRealtimeData(station.id)')
+    expect(source).toContain('window.electronAPI?.applyHydrologyRealtimeCorrection')
+    expect(source).toContain('await window.electronAPI.applyHydrologyRealtimeCorrection({')
+    expect(source).toContain('await loadStations()')
+    expect(source).toContain('async function selectStation(stationId)')
+    expect(source).toContain('function renderRealtimeView(station)')
+    expect(source).toContain('async function loadRealtimeSlots()')
+    expect(source).toContain('function renderTrendPanel(')
+    expect(source).toContain('async function loadRealtimeTrend()')
+    expect(source).toContain('async function applyRealtimeFilters(formData)')
+    expect(source).toContain("data-trend-preset=")
+    expect(source).toContain("data-trend-zoom=")
+    expect(source).toContain("data-trend-series=")
+    expect(source).toContain("class=\"trend-axis-label\"")
+    expect(source).toContain("class=\"trend-axis-unit\"")
+    expect(source).toContain("function getVisibleTrendRange(sortedSlots)")
+    expect(source).toContain("function getTrendAxisLabelStrategy(range, innerWidth)")
+    expect(source).toContain("function zoomTrendView(direction, slots)")
+    expect(source).toContain("const xAxisStrategy = getTrendAxisLabelStrategy(range, innerWidth)")
+    expect(source).not.toContain('window.confirm(')
+    expect(source).toContain('function openDeleteConfirm(station)')
+    expect(source).toContain('function showCreateStationForm()')
+  })
+})

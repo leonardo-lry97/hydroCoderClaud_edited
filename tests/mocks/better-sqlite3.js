@@ -206,7 +206,7 @@ class Statement {
 
   _updateRowFromParams(row, params) {
     // 解析 SET 子句
-    const setMatch = this.sql.match(/SET\s+(.+?)\s+WHERE/i)
+    const setMatch = this.sql.match(/SET\s+([\s\S]+?)\s+WHERE/i)
     if (!setMatch) return
 
     const setParts = setMatch[1].split(',').map(s => s.trim())
@@ -251,40 +251,40 @@ class Statement {
   }
 
   _applyWhere(rows, params) {
-    // 简单的 id = ? 匹配
-    if (this.sql.includes('id = ?')) {
-      const idParam = params[0]
-      return rows.filter(row => row.id === idParam)
-    }
+    const whereMatch = this.sql.match(/WHERE\s+(.+?)(?:\s+ORDER\s+BY|\s+LIMIT|$)/i)
+    if (!whereMatch) return rows
 
-    // scope 筛选
-    if (this.sql.includes('scope = ?')) {
-      const scope = params[0]
-      rows = rows.filter(row => row.scope === scope)
-    }
+    const conditions = [...whereMatch[1].matchAll(/(\w+)\s*=\s*\?/gi)]
+    if (conditions.length === 0) return rows
 
-    // project_id 筛选
-    if (this.sql.includes('project_id = ?')) {
-      const projectId = params[params.length - 1]
-      rows = rows.filter(row => row.project_id === projectId)
-    }
-
-    return rows
+    return rows.filter((row) => conditions.every((match, index) => row[match[1]] === params[index]))
   }
 
   _applyOrderBy(rows) {
-    // 默认按 is_favorite DESC, usage_count DESC, updated_at DESC
+    const orderMatch = this.sql.match(/ORDER\s+BY\s+(.+)$/i)
+    if (!orderMatch) return rows
+
+    const fields = orderMatch[1]
+      .split(',')
+      .map((item) => item.trim())
+      .map((item) => {
+        const [column, direction = 'ASC'] = item.split(/\s+/)
+        return { column, direction: direction.toUpperCase() }
+      })
+
     return rows.sort((a, b) => {
-      // 收藏优先
-      if ((b.is_favorite || 0) !== (a.is_favorite || 0)) {
-        return (b.is_favorite || 0) - (a.is_favorite || 0)
+      for (const field of fields) {
+        const av = a[field.column]
+        const bv = b[field.column]
+        if (av === bv) continue
+
+        const result = typeof av === 'number' && typeof bv === 'number'
+          ? av - bv
+          : String(av || '').localeCompare(String(bv || ''))
+
+        return field.direction === 'DESC' ? -result : result
       }
-      // 使用次数
-      if ((b.usage_count || 0) !== (a.usage_count || 0)) {
-        return (b.usage_count || 0) - (a.usage_count || 0)
-      }
-      // 更新时间
-      return (b.updated_at || '').localeCompare(a.updated_at || '')
+      return 0
     })
   }
 

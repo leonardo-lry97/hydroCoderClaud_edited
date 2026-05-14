@@ -37,9 +37,13 @@ const dingtalkHandlersMod = safeRequire('./ipc-handlers/dingtalk-handlers', 'din
 const notebookHandlersMod = safeRequire('./ipc-handlers/notebook-handlers', 'notebook-handlers');
 const scheduledTaskHandlersMod = safeRequire('./ipc-handlers/scheduled-task-handlers', 'scheduled-task-handlers');
 const weixinNotifyHandlersMod = safeRequire('./ipc-handlers/weixin-notify-handlers', 'weixin-notify-handlers');
+const hydrologyHandlersMod = safeRequire('./ipc-handlers/hydrology-handlers', 'hydrology-handlers');
 const ipcUtilsMod = safeRequire('./utils/ipc-utils', 'ipc-utils');
 const appI18nMod = safeRequire('./utils/app-i18n', 'app-i18n');
 const embeddedAppRegistryMod = safeRequire('./embedded-app-registry', 'embedded-app-registry');
+const hydrologyDatabaseMod = safeRequire('./hydrology/hydrology-database', 'hydrology-database');
+const stationServiceMod = safeRequire('./hydrology/station-service', 'station-service');
+const realtimeServiceMod = safeRequire('./hydrology/realtime-service', 'realtime-service');
 
 const setupConfigHandlers = configHandlersMod?.setupConfigHandlers;
 const setupSessionHandlers = sessionHandlersMod?.setupSessionHandlers;
@@ -58,10 +62,14 @@ const setupDingTalkHandlers = dingtalkHandlersMod?.setupDingTalkHandlers;
 const setupNotebookHandlers = notebookHandlersMod?.setupNotebookHandlers;
 const setupScheduledTaskHandlers = scheduledTaskHandlersMod?.setupScheduledTaskHandlers;
 const setupWeixinNotifyHandlers = weixinNotifyHandlersMod?.setupWeixinNotifyHandlers;
+const setupHydrologyHandlers = hydrologyHandlersMod?.setupHydrologyHandlers;
 const createIPCHandler = ipcUtilsMod?.createIPCHandler;
 const tMain = appI18nMod?.tMain;
 const listEmbeddedApps = embeddedAppRegistryMod?.listEmbeddedApps;
 const getEmbeddedAppByMenuKey = embeddedAppRegistryMod?.getEmbeddedAppByMenuKey;
+const HydrologyDatabase = hydrologyDatabaseMod?.HydrologyDatabase;
+const StationService = stationServiceMod?.StationService;
+const RealtimeService = realtimeServiceMod?.RealtimeService;
 
 // Bind ipcMain to createIPCHandler for local use
 const registerHandler = (channelName, handler) => {
@@ -116,6 +124,14 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
   // 初始化共享数据库
   const sessionDatabase = new SessionDatabase();
   sessionDatabase.init();
+  const hydrologyDatabase = HydrologyDatabase ? new HydrologyDatabase() : null
+  hydrologyDatabase?.init()
+  const stationService = hydrologyDatabase && StationService
+    ? new StationService(hydrologyDatabase)
+    : null
+  const realtimeService = hydrologyDatabase && RealtimeService
+    ? new RealtimeService(hydrologyDatabase)
+    : null
 
   // 初始化文件读取服务（实时读取 ~/.claude 目录）
   const sessionHistoryService = new SessionHistoryService();
@@ -1059,6 +1075,13 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
   ipcMain.handle('embedded-app:open', async (_event, menuKey) => {
     return openEmbeddedAppWindow(menuKey);
   });
+
+  if (setupHydrologyHandlers && stationService) {
+    setupHydrologyHandlers(ipcMain, {
+      stationService,
+      realtimeService
+    })
+  }
 
   ipcMain.handle('window:openEmbeddedAppDemo', async () => {
     return openEmbeddedAppWindow('embedded-app-demo');
