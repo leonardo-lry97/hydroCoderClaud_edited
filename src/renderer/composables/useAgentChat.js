@@ -250,7 +250,7 @@ export function useAgentChat(sessionId, options = {}) {
     const taskType = typeof value.task_type === 'string' ? value.task_type.toLowerCase() : ''
     const description = typeof value.description === 'string' ? value.description.trim() : ''
 
-    if (subtype === 'task_started' || subtype === 'task_completed' || subtype === 'task_finished') {
+    if (subtype.startsWith('task_')) {
       return true
     }
 
@@ -276,6 +276,10 @@ export function useAgentChat(sessionId, options = {}) {
   }
 
   const summarizeOtherMessage = (value) => {
+    if (isHiddenStructuredSystemStatus(value)) {
+      return ''
+    }
+
     const directText = stringifyDisplayValue(value, [
       'message',
       'text',

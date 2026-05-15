@@ -52,6 +52,7 @@ import {
   bindTrendChartHoverView,
   bindTrendViewportInteractionsView,
   renderRealtimeDetailModalView,
+  renderSlotCheckResultModalView,
   renderRealtimeViewSection
 } from './realtime-view'
 
@@ -61,7 +62,7 @@ const stationFunctions = [
   {
     key: 'basic',
     label: '基础信息管理',
-    meta: '站点基础资料、观测类别、数据源和校验阈值'
+    meta: '站点基础资料、观测类别和数据源'
   },
   {
     key: 'realtime',
@@ -71,7 +72,12 @@ const stationFunctions = [
   {
     key: 'review',
     label: '审核任务状态',
-    meta: '缺测、边界、时序、变幅、毛刺和一致性检查'
+    meta: '单时槽质量检查结果与规则判定明细'
+  },
+  {
+    key: 'rule-config',
+    label: '规则与算法配置',
+    meta: '站点级规则开关、阈值参数与算法使用配置'
   },
   {
     key: 'results',
@@ -125,14 +131,17 @@ let realtimeState = {
   trendHoverModel: null,
   error: '',
   trendError: '',
-  correctionError: ''
+  correctionError: '',
+  slotCheckResult: null
 }
 let reviewState = {
   selectedObservationType: OBSERVATION_TYPES.waterLevel,
   statusFilter: 'all',
   tasks: [],
   selectedTaskId: null,
-  error: ''
+  error: '',
+  runSummary: null,
+  lastSlotCheck: null
 }
 
 const stationTreeEl = document.getElementById('stationTree')
@@ -145,6 +154,8 @@ const activeFunctionMetaEl = document.getElementById('activeFunctionMeta')
 const tabContentEl = document.getElementById('tabContent')
 const stationForm = document.getElementById('stationForm')
 const stationFormError = document.getElementById('stationFormError')
+const ruleConfigForm = document.getElementById('ruleConfigForm')
+const ruleConfigFormError = document.getElementById('ruleConfigFormError')
 const resetStationBtn = document.getElementById('resetStationBtn')
 const deleteStationBtn = document.getElementById('deleteStationBtn')
 const deleteConfirmOverlayEl = document.getElementById('deleteConfirmOverlay')
@@ -206,6 +217,7 @@ function renderFunctionTabs() {
     escapeHtml,
     onSwitchFunction: async (functionKey) => {
       activeFunctionKey = functionKey
+      realtimeState.slotCheckResult = null
       if (activeFunctionKey === 'realtime') {
         realtimeState.selectedSlotId = null
         realtimeState.slotDetail = null
@@ -235,6 +247,26 @@ function renderStationForm(station) {
   })
 }
 
+function renderRuleConfigForm(station) {
+  const waterLevelRules = station?.validationRules?.waterLevel || {}
+  const airTemperatureRules = station?.validationRules?.airTemperature || {}
+
+  stationForm.hidden = true
+  ruleConfigForm.hidden = false
+  ruleConfigForm.dataset.stationId = station?.id || ''
+  ruleConfigForm.elements.waterLevelSectionMinElevation.value = waterLevelRules.sectionMinElevation ?? 0
+  ruleConfigForm.elements.waterLevelSectionMaxElevation.value = waterLevelRules.sectionMaxElevation ?? 50
+  ruleConfigForm.elements.waterLevelMaxHourlyDelta.value = waterLevelRules.maxHourlyDelta ?? 0.1
+  ruleConfigForm.elements.waterLevelManualVideoTolerance.value = waterLevelRules.manualVideoTolerance ?? 0.1
+  ruleConfigForm.elements.waterLevelRequireManualObservation.checked = waterLevelRules.requireManualObservation !== false
+  ruleConfigForm.elements.waterLevelRequireVideoReference.checked = waterLevelRules.requireVideoReference !== false
+  document.getElementById('airTemperatureMinDisplay').textContent = String(airTemperatureRules.min ?? -50)
+  document.getElementById('airTemperatureMaxDisplay').textContent = String(airTemperatureRules.max ?? 60)
+  document.getElementById('airTemperatureMaxHourlyChangeDisplay').textContent = String(airTemperatureRules.maxHourlyChange ?? 8)
+  document.getElementById('airTemperatureSpikeThresholdDisplay').textContent = String(airTemperatureRules.spikeThreshold ?? 6)
+  ruleConfigFormError.textContent = ''
+}
+
 function closeDeleteConfirm() {
   pendingDeleteStationId = null
   deleteConfirmOverlayEl.hidden = true
@@ -254,6 +286,11 @@ function renderPlaceholderRows(rows) {
   })
 }
 
+function renderRuleConfigView(station) {
+  tabContentEl.innerHTML = ''
+  renderRuleConfigForm(station)
+}
+
 function renderReviewTaskView(station) {
   tabContentEl.innerHTML = renderReviewView(station, reviewState, {
     describeObservationType
@@ -263,6 +300,7 @@ function renderReviewTaskView(station) {
     button.addEventListener('click', async () => {
       reviewState.selectedObservationType = button.dataset.reviewObservationType
       reviewState.selectedTaskId = null
+      reviewState.lastSlotCheck = null
       await loadReviewTasks()
       renderWorkbench()
       notifyAgentContextChanged()
@@ -274,6 +312,22 @@ function renderReviewTaskView(station) {
     const formData = new FormData(event.currentTarget)
     reviewState.statusFilter = String(formData.get('status') || 'all').trim() || 'all'
     reviewState.selectedTaskId = null
+    reviewState.lastSlotCheck = null
+    await loadReviewTasks()
+    renderWorkbench()
+    notifyAgentContextChanged()
+  })
+
+  document.getElementById('reviewRunCheckBtn')?.addEventListener('click', async () => {
+    await runReviewQualityCheck()
+    await loadReviewTasks()
+    renderWorkbench()
+    notifyAgentContextChanged()
+  })
+
+  document.getElementById('reviewClearSlotFocusBtn')?.addEventListener('click', async () => {
+    reviewState.lastSlotCheck = null
+    reviewState.selectedTaskId = null
     await loadReviewTasks()
     renderWorkbench()
     notifyAgentContextChanged()
@@ -284,6 +338,13 @@ function renderReviewTaskView(station) {
       reviewState.selectedTaskId = row.dataset.reviewTaskId
       renderWorkbench()
       notifyAgentContextChanged()
+    })
+  })
+
+  tabContentEl.querySelectorAll('[data-review-open-slot]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      await openReviewTaskSlot(button.dataset.reviewOpenSlot, button.dataset.reviewSlotTime)
     })
   })
 
@@ -571,6 +632,14 @@ function renderRealtimeDetailModal(detail) {
   })
 }
 
+function renderSlotCheckResultModal(result) {
+  return renderSlotCheckResultModalView(result, {
+    escapeHtml,
+    formatDateTimeLabel,
+    describeObservationType
+  })
+}
+
 function renderRealtimeView(station) {
   renderRealtimeViewSection(station, {
     tabContentEl,
@@ -583,6 +652,7 @@ function renderRealtimeView(station) {
     compareStatusOptions: COMPARE_STATUS_OPTIONS,
     renderTrendPanel,
     renderRealtimeDetailModal,
+    renderSlotCheckResultModal,
     formatDateTimeLabel,
     formatNumericValue,
     describeCompareStatus,
@@ -596,12 +666,15 @@ function renderRealtimeView(station) {
     zoomTrendView,
     bindTrendChartHover,
     bindTrendViewportInteractions,
-    submitRealtimeCorrection
+    submitRealtimeCorrection,
+    runSlotQualityCheck,
+    openReviewTaskBoard
   })
 }
 
 function renderTabContent(station) {
   stationForm.hidden = true
+  ruleConfigForm.hidden = true
   if (!station) {
     tabContentEl.innerHTML = '<div class="empty-state">请先选择或新建站点。</div>'
     return
@@ -620,6 +693,11 @@ function renderTabContent(station) {
 
   if (activeFunctionKey === 'review') {
     renderReviewTaskView(station)
+    return
+  }
+
+  if (activeFunctionKey === 'rule-config') {
+    renderRuleConfigView(station)
     return
   }
 
@@ -653,6 +731,7 @@ function renderWorkbench() {
 
 async function selectStation(stationId) {
   selectedStationId = stationId
+  realtimeState.slotCheckResult = null
 
   if (!stationId) {
     renderWorkbench()
@@ -708,6 +787,43 @@ async function loadStations() {
   } catch (err) {
     console.error('[HydrologyWorkbench] Failed to load stations:', err)
   }
+}
+
+async function openReviewTaskSlot(taskId, slotTime) {
+  const station = getSelectedStation()
+  if (!station || !taskId || !slotTime) {
+    return
+  }
+
+  reviewState.selectedTaskId = taskId
+  realtimeState.selectedObservationType = reviewState.selectedObservationType
+  activeFunctionKey = 'realtime'
+
+  try {
+    await loadRealtimeSlots()
+    const matchedSlot = realtimeState.slots.find((item) => item.slotTime === slotTime) || null
+    if (matchedSlot) {
+      realtimeState.selectedSlotId = matchedSlot.id
+      await loadRealtimeSlotDetail(matchedSlot.id)
+    }
+    renderWorkbench()
+    notifyAgentContextChanged()
+  } catch (err) {
+    reviewState.error = err?.message || String(err)
+    activeFunctionKey = 'review'
+    renderWorkbench()
+  }
+}
+
+async function openReviewTaskBoard() {
+  realtimeState.slotCheckResult = null
+  reviewState.selectedObservationType = realtimeState.selectedObservationType
+  reviewState.selectedTaskId = null
+  reviewState.lastSlotCheck = null
+  activeFunctionKey = 'review'
+  await loadReviewTasks()
+  renderWorkbench()
+  notifyAgentContextChanged()
 }
 
 async function loadRealtimeSlots() {
@@ -776,6 +892,67 @@ async function resolveReviewTask(taskId, payload) {
   }
 }
 
+async function runReviewQualityCheck() {
+  const station = getSelectedStation()
+  if (!station || !window.electronAPI?.runHydrologyQualityCheck) {
+    return
+  }
+
+  reviewState.error = ''
+  reviewState.lastSlotCheck = null
+  try {
+    reviewState.runSummary = await window.electronAPI.runHydrologyQualityCheck({
+      stationId: station.id,
+      observationType: reviewState.selectedObservationType
+    })
+  } catch (err) {
+    reviewState.error = err?.message || String(err)
+  }
+}
+
+async function runSlotQualityCheck({ slotId, slotTime } = {}) {
+  const station = getSelectedStation()
+  if (!station || !slotTime || !window.electronAPI?.runHydrologyQualityCheck) {
+    return
+  }
+
+  realtimeState.error = ''
+  reviewState.error = ''
+
+  try {
+    const summary = await window.electronAPI.runHydrologyQualityCheck({
+      stationId: station.id,
+      observationType: realtimeState.selectedObservationType,
+      fromTime: slotTime,
+      toTime: slotTime
+    })
+    const slotResult = Array.isArray(summary?.slotResults)
+      ? summary.slotResults.find((item) => item.slotTime === slotTime) || summary.slotResults[0] || null
+      : null
+
+    realtimeState.slotCheckResult = {
+      stationId: station.id,
+      stationCode: station.code,
+      stationName: station.name,
+      observationType: realtimeState.selectedObservationType,
+      slotId: slotId || slotResult?.slotId || null,
+      slotTime,
+      slot: slotResult?.slot || null,
+      hitCount: slotResult?.hitCount || 0,
+      hitRuleCodes: Array.isArray(slotResult?.hitRuleCodes) ? slotResult.hitRuleCodes : [],
+      hitsBySeverity: slotResult?.hitsBySeverity || {},
+      hits: Array.isArray(slotResult?.hits) ? slotResult.hits : [],
+      ruleEvaluations: Array.isArray(slotResult?.ruleEvaluations) ? slotResult.ruleEvaluations : []
+    }
+    if (slotId) realtimeState.selectedSlotId = slotId
+    renderWorkbench()
+    notifyAgentContextChanged()
+  } catch (err) {
+    realtimeState.error = err?.message || String(err)
+    renderWorkbench()
+  }
+}
+
 function resetRealtimeFilters() {
   resetRealtimeFiltersAction({
     realtimeState,
@@ -799,6 +976,7 @@ async function seedRealtimeData() {
   }
 
   realtimeState.error = ''
+  realtimeState.slotCheckResult = null
   try {
     await window.electronAPI.seedHydrologyRealtimeData(station.id)
     await loadRealtimeSlots()
@@ -818,6 +996,7 @@ async function submitRealtimeCorrection(form) {
   }
 
   realtimeState.correctionError = ''
+  realtimeState.slotCheckResult = null
   const formData = new FormData(form)
   try {
     await window.electronAPI.applyHydrologyRealtimeCorrection({
@@ -840,6 +1019,7 @@ async function submitRealtimeCorrection(form) {
 function showCreateStationForm() {
   selectedStationId = null
   activeFunctionKey = 'basic'
+  realtimeState.slotCheckResult = null
   renderWorkbench()
   renderStationForm(createEmptyStation())
   notifyAgentContextChanged()
@@ -869,12 +1049,30 @@ function collectStationFromForm() {
       waterLevelStatAt: formData.get('waterLevelStatAt'),
       meteorologicalStatAt: formData.get('meteorologicalStatAt'),
       waterLevelExcerptEnabled: true
-    },
+    }
+  })
+}
+
+function collectRuleConfigFromForm() {
+  const stationId = ruleConfigForm.dataset.stationId
+  const currentStation = stations.find((station) => station.id === stationId)
+  if (!currentStation) {
+    throw new Error('当前站点不存在，无法保存规则配置')
+  }
+
+  const formData = new FormData(ruleConfigForm)
+  return normalizeStation({
+    ...currentStation,
     validationRules: {
-      ...(currentStation?.validationRules || {}),
+      ...(currentStation.validationRules || {}),
       waterLevel: {
-        ...(currentStation?.validationRules?.waterLevel || {}),
-        maxHourlyChange: Number(formData.get('waterLevelMaxHourlyChange') || 0)
+        ...(currentStation.validationRules?.waterLevel || {}),
+        sectionMinElevation: Number(formData.get('waterLevelSectionMinElevation') || 0),
+        sectionMaxElevation: Number(formData.get('waterLevelSectionMaxElevation') || 50),
+        maxHourlyDelta: Number(formData.get('waterLevelMaxHourlyDelta') || 0.1),
+        manualVideoTolerance: Number(formData.get('waterLevelManualVideoTolerance') || 0.1),
+        requireManualObservation: formData.has('waterLevelRequireManualObservation'),
+        requireVideoReference: formData.has('waterLevelRequireVideoReference')
       }
     }
   })
@@ -925,6 +1123,25 @@ stationForm.addEventListener('submit', async (event) => {
     notifyAgentContextChanged()
   } catch (err) {
     stationFormError.textContent = err?.message || String(err)
+  }
+})
+
+ruleConfigForm.addEventListener('submit', async (event) => {
+  event.preventDefault()
+  ruleConfigFormError.textContent = ''
+
+  try {
+    const nextStation = collectRuleConfigFromForm()
+    const saved = window.electronAPI?.saveHydrologyStation
+      ? await window.electronAPI.saveHydrologyStation(nextStation)
+      : nextStation
+
+    await loadStations()
+    selectedStationId = saved?.id || nextStation.id || selectedStationId
+    renderWorkbench()
+    notifyAgentContextChanged()
+  } catch (err) {
+    ruleConfigFormError.textContent = err?.message || String(err)
   }
 })
 

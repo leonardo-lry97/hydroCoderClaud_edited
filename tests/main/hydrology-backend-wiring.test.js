@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const preloadPath = path.resolve(__dirname, '../../src/preload/preload.js')
 const ipcHandlersPath = path.resolve(__dirname, '../../src/main/ipc-handlers.js')
 const hydrologyHandlersPath = path.resolve(__dirname, '../../src/main/ipc-handlers/hydrology-handlers.js')
+const hydrologyDatabasePath = path.resolve(__dirname, '../../src/main/hydrology/hydrology-database.js')
 
 describe('hydrology backend wiring', () => {
   it('exposes hydrology station APIs in preload', () => {
@@ -22,6 +23,7 @@ describe('hydrology backend wiring', () => {
     expect(source).toContain("listHydrologyRealtimeTrend: (filters) => ipcRenderer.invoke('hydrology:realtime:trend', filters)")
     expect(source).toContain("applyHydrologyRealtimeCorrection: (payload) => ipcRenderer.invoke('hydrology:realtime:applyCorrection', payload)")
     expect(source).toContain("listHydrologyReviewTasks: (filters) => ipcRenderer.invoke('hydrology:review:listTasks', filters)")
+    expect(source).toContain("runHydrologyQualityCheck: (payload) => ipcRenderer.invoke('hydrology:review:runQualityCheck', payload)")
     expect(source).toContain("resolveHydrologyReviewTask: ({ taskId, payload }) => ipcRenderer.invoke('hydrology:review:resolveTask', { taskId, payload })")
   })
 
@@ -38,6 +40,7 @@ describe('hydrology backend wiring', () => {
     expect(source).toContain("createIPCHandler(ipcMain, 'hydrology:realtime:trend'")
     expect(source).toContain("createIPCHandler(ipcMain, 'hydrology:realtime:applyCorrection'")
     expect(source).toContain("createIPCHandler(ipcMain, 'hydrology:review:listTasks'")
+    expect(source).toContain("createIPCHandler(ipcMain, 'hydrology:review:runQualityCheck'")
     expect(source).toContain("createIPCHandler(ipcMain, 'hydrology:review:resolveTask'")
   })
 
@@ -49,9 +52,12 @@ describe('hydrology backend wiring', () => {
     expect(source).toContain("safeRequire('./hydrology/realtime-service', 'realtime-service')")
     expect(source).toContain("safeRequire('./hydrology/realtime-demo-seeder', 'realtime-demo-seeder')")
     expect(source).toContain("safeRequire('./hydrology/review-task-service', 'review-task-service')")
+    expect(source).toContain("safeRequire('./hydrology/quality-check-service', 'quality-check-service')")
+    expect(source).toContain('const QualityCheckService = qualityCheckServiceMod?.QualityCheckService')
     expect(source).toContain('const hydrologyDatabase = HydrologyDatabase ? new HydrologyDatabase() : null')
     expect(source).toContain('const reviewTaskService = hydrologyDatabase && ReviewTaskService')
     expect(source).toContain('const realtimeService = hydrologyDatabase && RealtimeService')
+    expect(source).toContain('const qualityCheckService = stationService && realtimeService && QualityCheckService')
     expect(source).toContain("new RealtimeService(hydrologyDatabase, { reviewTaskService })")
     expect(source).toContain('const realtimeDemoSeeder = realtimeService && RealtimeDemoSeeder')
     expect(source).toContain('setupHydrologyHandlers(ipcMain, {')
@@ -59,5 +65,17 @@ describe('hydrology backend wiring', () => {
     expect(source).toContain('realtimeService')
     expect(source).toContain('realtimeDemoSeeder')
     expect(source).toContain('reviewTaskService')
+    expect(source).toContain('qualityCheckService')
+  })
+
+  it('persists corrected slot value separately from manual slot value', () => {
+    const source = fs.readFileSync(hydrologyDatabasePath, 'utf-8')
+
+    expect(source).toContain('corrected_value REAL')
+    expect(source).toContain('ALTER TABLE hydrology_observation_slots ADD COLUMN corrected_value REAL')
+    expect(source).toContain('resolution_note TEXT')
+    expect(source).toContain('ALTER TABLE hydrology_observation_anomalies ADD COLUMN resolution_note TEXT')
+    expect(source).toContain('SET manual_value = ?, corrected_value = ?, telemetry_value = ?, video_ocr_value = ?, chosen_value = ?')
+    expect(source).toContain('manual_value, corrected_value, telemetry_value, video_ocr_value, chosen_value')
   })
 })

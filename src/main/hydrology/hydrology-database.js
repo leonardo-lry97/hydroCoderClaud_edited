@@ -82,6 +82,7 @@ class HydrologyDatabase {
         observation_type TEXT NOT NULL,
         slot_time TEXT NOT NULL,
         manual_value REAL,
+        corrected_value REAL,
         telemetry_value REAL,
         video_ocr_value REAL,
         chosen_value REAL,
@@ -144,6 +145,22 @@ class HydrologyDatabase {
         updated_at INTEGER NOT NULL
       )
     `)
+
+    try {
+      this.db.exec('ALTER TABLE hydrology_observation_slots ADD COLUMN corrected_value REAL')
+    } catch (err) {
+      if (!String(err?.message || err).includes('duplicate column name')) {
+        throw err
+      }
+    }
+
+    try {
+      this.db.exec('ALTER TABLE hydrology_observation_anomalies ADD COLUMN resolution_note TEXT')
+    } catch (err) {
+      if (!String(err?.message || err).includes('duplicate column name')) {
+        throw err
+      }
+    }
   }
 
   createObservation(observation) {
@@ -198,11 +215,12 @@ class HydrologyDatabase {
     if (existing) {
       this.db.prepare(`
         UPDATE hydrology_observation_slots
-        SET manual_value = ?, telemetry_value = ?, video_ocr_value = ?, chosen_value = ?,
+        SET manual_value = ?, corrected_value = ?, telemetry_value = ?, video_ocr_value = ?, chosen_value = ?,
             compare_status = ?, missing_flags = ?, has_anomaly = ?, anomaly_count = ?, updated_at = ?
         WHERE id = ?
       `).run(
         slot.manualValue,
+        slot.correctedValue,
         slot.telemetryValue,
         slot.videoOcrValue,
         slot.chosenValue,
@@ -220,17 +238,18 @@ class HydrologyDatabase {
     this.db.prepare(`
       INSERT INTO hydrology_observation_slots (
         id, station_id, observation_type, slot_time,
-        manual_value, telemetry_value, video_ocr_value, chosen_value,
+        manual_value, corrected_value, telemetry_value, video_ocr_value, chosen_value,
         compare_status, missing_flags, has_anomaly, anomaly_count,
         created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       slot.stationId,
       slot.observationType,
       slot.slotTime,
       slot.manualValue,
+      slot.correctedValue,
       slot.telemetryValue,
       slot.videoOcrValue,
       slot.chosenValue,
@@ -272,6 +291,13 @@ class HydrologyDatabase {
       WHERE station_id = ?
       ORDER BY slot_time DESC
     `).all(stationId)
+  }
+
+  getPreviousObservationSlot(stationId, observationType, slotTime) {
+    const rows = this.listObservationSlots(stationId, observationType)
+      .filter((row) => String(row.slot_time || '').localeCompare(String(slotTime || '')) < 0)
+      .sort((left, right) => String(right.slot_time || '').localeCompare(String(left.slot_time || '')))
+    return rows[0] || null
   }
 
   createCorrection(correction) {

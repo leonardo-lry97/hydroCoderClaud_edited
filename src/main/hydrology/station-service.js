@@ -6,11 +6,12 @@ const OBSERVATION_TYPES = {
 
 const DEFAULT_STATION_RULES = {
   waterLevel: {
-    min: 0,
-    max: 50,
-    maxHourlyChange: 2,
-    spikeThreshold: 1.5,
-    compareVideoOcr: true
+    sectionMinElevation: 0,
+    sectionMaxElevation: 50,
+    maxHourlyDelta: 0.1,
+    manualVideoTolerance: 0.1,
+    requireManualObservation: true,
+    requireVideoReference: true
   },
   airTemperature: {
     min: -50,
@@ -60,6 +61,25 @@ function normalizeNumber(value) {
 
 function normalizeStation(rawStation = {}) {
   const defaults = createDefaultStation()
+  const rawWaterLevelRules = rawStation.validationRules?.waterLevel || {}
+  const normalizedWaterLevelRules = {
+    ...DEFAULT_STATION_RULES.waterLevel,
+    ...rawWaterLevelRules,
+    sectionMinElevation: normalizeNumber(
+      rawWaterLevelRules.sectionMinElevation ?? rawWaterLevelRules.min ?? DEFAULT_STATION_RULES.waterLevel.sectionMinElevation
+    ),
+    sectionMaxElevation: normalizeNumber(
+      rawWaterLevelRules.sectionMaxElevation ?? rawWaterLevelRules.max ?? DEFAULT_STATION_RULES.waterLevel.sectionMaxElevation
+    ),
+    maxHourlyDelta: normalizeNumber(
+      rawWaterLevelRules.maxHourlyDelta ?? rawWaterLevelRules.maxHourlyChange ?? DEFAULT_STATION_RULES.waterLevel.maxHourlyDelta
+    ),
+    manualVideoTolerance: normalizeNumber(
+      rawWaterLevelRules.manualVideoTolerance ?? DEFAULT_STATION_RULES.waterLevel.manualVideoTolerance
+    ),
+    requireManualObservation: rawWaterLevelRules.requireManualObservation !== false,
+    requireVideoReference: rawWaterLevelRules.requireVideoReference ?? rawWaterLevelRules.compareVideoOcr ?? DEFAULT_STATION_RULES.waterLevel.requireVideoReference
+  }
   const station = {
     ...defaults,
     ...rawStation,
@@ -73,8 +93,7 @@ function normalizeStation(rawStation = {}) {
     },
     validationRules: {
       waterLevel: {
-        ...DEFAULT_STATION_RULES.waterLevel,
-        ...(rawStation.validationRules?.waterLevel || {})
+        ...normalizedWaterLevelRules
       },
       airTemperature: {
         ...DEFAULT_STATION_RULES.airTemperature,

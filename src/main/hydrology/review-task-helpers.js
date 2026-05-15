@@ -33,7 +33,7 @@ function resolveAnomalyType(hit) {
 
 function isPersistableObservationAnomalyHit(hit) {
   const anomalyType = resolveAnomalyType(hit)
-  return typeof anomalyType === 'string' && anomalyType.startsWith('missing_')
+  return typeof anomalyType === 'string' && !anomalyType.startsWith('missing_video_reference')
 }
 
 function toObservationAnomalyPayload(hit, overrides = {}) {

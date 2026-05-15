@@ -123,6 +123,100 @@ source_*  →  governance_observations  →  observation_slots  →  anomalies /
 - `chosen_value` 是治理后参与统计或摘录的值
 - `compare_status` 记录各来源是否一致
 
+### 5.3 当前实现中的采用值生成机制
+
+为避免后续规则设计、质量检查与人工修正讨论时出现歧义，这里补充说明当前 desktop 实现里的真实执行语义。
+
+#### 当前时槽主值定义
+
+当前系统中的：
+
+- `manual_value`：人工来源值
+- `telemetry_value`：遥测参考值
+- `video_ocr_value`：视频识别值
+- `chosen_value`：当前时槽的**候选采用值 / 当前生效主值**
+
+说明：
+
+- 当前实现里，`chosen_value` 不是人工单独确认后才生成的最终正式值
+- 它是在时槽聚合阶段，由系统根据来源优先级自动选出来的当前主值
+- 后续若需要更严格区分，可再扩展“候选采用值”和“审核确认采用值”两个层次；首版先统一按 `chosen_value` 使用
+
+#### 当前自动选值优先级
+
+当前实现中，`chosen_value` 的来源优先级固定为：
+
+1. `corrected`：人工修正后生效值
+2. `manual`：人工观测值
+3. `telemetry`：遥测参考值
+4. `video_ocr`：视频识别值
+
+即：
+
+```text
+corrected > manual > telemetry > video_ocr
+```
+
+如果更高优先级的值存在，则更低优先级的值不会成为当前 `chosen_value`。
+
+#### 当前观测写入后的时槽刷新机制
+
+当前实现中，只要通过程序正常写入某个来源观测值，系统就会立即刷新该时槽聚合结果。
+
+执行链路如下：
+
+```text
+写入 hydrology_observations
+  → 重新聚合该 station_id + observation_type + slot_time
+  → 重新计算 manual_value / telemetry_value / video_ocr_value / chosen_value
+  → 回写 hydrology_observation_slots
+```
+
+说明：
+
+- 当前这是服务层行为，不是数据库触发器行为
+- 也就是说，只要走程序内统一的数据写入链路，就会触发时槽刷新
+- 若绕开服务层直接改数据库，则不会自动刷新时槽聚合
+
+#### 当前人工修正后的回刷机制
+
+当前实现中，人工修正不会直接覆盖历史观测链，而是按两步执行：
+
+```text
+写入 hydrology_manual_corrections
+  → 再写入一条 source_type = corrected 的观测记录
+  → 触发该时槽重新聚合
+  → chosen_value 切换为修正值
+```
+
+这意味着：
+
+- `hydrology_manual_corrections` 保存“修正行为留痕”
+- `hydrology_observations` 中的 `corrected` 记录保存“修正后的值本身”
+- 二者组合后，既能保留审计链，也能让当前时槽主值立刻生效
+
+#### 当前实现中的最新时槽语义
+
+当前实现已经收紧为三层分离语义：
+
+- `manual_value`：原始人工观测值
+- `corrected_value`：人工修正后值
+- `chosen_value`：当前采用值
+
+其中：
+
+- `manual_value` 用于判断人工观测是否缺失
+- `corrected_value` 用于保留人工修正后的当前值
+- `chosen_value` 继续按优先级代表当前业务主值
+
+也就是说，当前实现不再让修正值覆盖 `manual_value`。
+
+这样做的直接好处是：
+
+- “人工值缺失”规则不会被修正值掩盖
+- “人工值与视频值对比”默认仍以原始人工值为准
+- “边界值 / 时序 / 统计类规则”继续稳定使用 `chosen_value`
+
 ## 6. 结果层
 
 ### 6.1 `observation_anomalies`

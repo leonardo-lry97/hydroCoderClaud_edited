@@ -46,6 +46,7 @@ const stationServiceMod = safeRequire('./hydrology/station-service', 'station-se
 const realtimeServiceMod = safeRequire('./hydrology/realtime-service', 'realtime-service');
 const realtimeDemoSeederMod = safeRequire('./hydrology/realtime-demo-seeder', 'realtime-demo-seeder');
 const reviewTaskServiceMod = safeRequire('./hydrology/review-task-service', 'review-task-service');
+const qualityCheckServiceMod = safeRequire('./hydrology/quality-check-service', 'quality-check-service');
 
 const setupConfigHandlers = configHandlersMod?.setupConfigHandlers;
 const setupSessionHandlers = sessionHandlersMod?.setupSessionHandlers;
@@ -74,6 +75,7 @@ const StationService = stationServiceMod?.StationService;
 const RealtimeService = realtimeServiceMod?.RealtimeService;
 const RealtimeDemoSeeder = realtimeDemoSeederMod?.RealtimeDemoSeeder;
 const ReviewTaskService = reviewTaskServiceMod?.ReviewTaskService;
+const QualityCheckService = qualityCheckServiceMod?.QualityCheckService;
 
 // Bind ipcMain to createIPCHandler for local use
 const registerHandler = (channelName, handler) => {
@@ -138,6 +140,9 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     : null
   const realtimeService = hydrologyDatabase && RealtimeService
     ? new RealtimeService(hydrologyDatabase, { reviewTaskService })
+    : null
+  const qualityCheckService = stationService && realtimeService && QualityCheckService
+    ? new QualityCheckService({ stationService, realtimeService })
     : null
   const realtimeDemoSeeder = realtimeService && RealtimeDemoSeeder
     ? new RealtimeDemoSeeder(realtimeService)
@@ -1091,7 +1096,8 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
       stationService,
       realtimeService,
       realtimeDemoSeeder,
-      reviewTaskService
+      reviewTaskService,
+      qualityCheckService
     })
   }
 

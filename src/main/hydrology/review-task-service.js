@@ -13,21 +13,31 @@ class ReviewTaskService {
   }
 
   syncSlotReviewTasks(input = {}) {
-    const { station, slot, observations = [], expectedSources = {} } = input
+    const {
+      station,
+      slot,
+      previousSlot = null,
+      observations = [],
+      expectedSources = {},
+      stationRules = {}
+    } = input
     if (!station?.id || !slot?.slotTime || !slot?.observationType) {
       return []
     }
 
-    const hits = this.ruleEngine.run({
+    const executionResult = this.ruleEngine.evaluate({
       station,
       slot,
+      previousSlot,
       observations,
       expectedSources,
+      stationRules,
       metadata: {
         stationCode: station.code,
         stationName: station.name
       }
     })
+    const hits = Array.isArray(executionResult?.hits) ? executionResult.hits : []
     const activeRuleCodes = hits
       .map((hit) => String(hit.ruleCode || '').trim())
       .filter(Boolean)
@@ -60,7 +70,10 @@ class ReviewTaskService {
       this.db.updateAnomalyStatus(anomalyPayload)
     }
 
-    return hits
+    return {
+      hits,
+      ruleEvaluations: Array.isArray(executionResult?.evaluations) ? executionResult.evaluations : []
+    }
   }
 
   listReviewTasks(filters = {}) {

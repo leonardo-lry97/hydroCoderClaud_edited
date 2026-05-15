@@ -81,7 +81,6 @@ export function renderStationFormView({
   stationForm.elements.telemetry.checked = !!nextStation.dataSources?.telemetry
   stationForm.elements.waterLevelStatAt.value = nextStation.schedule?.waterLevelStatAt || '00:00'
   stationForm.elements.meteorologicalStatAt.value = nextStation.schedule?.meteorologicalStatAt || '20:00'
-  stationForm.elements.waterLevelMaxHourlyChange.value = nextStation.validationRules?.waterLevel?.maxHourlyChange ?? 2
   stationForm.querySelectorAll('input[name="observationTypes"]').forEach((input) => {
     input.checked = (nextStation.observationTypes || []).includes(input.value)
   })

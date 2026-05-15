@@ -426,6 +426,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listHydrologyRealtimeTrend: (filters) => ipcRenderer.invoke('hydrology:realtime:trend', filters),
   applyHydrologyRealtimeCorrection: (payload) => ipcRenderer.invoke('hydrology:realtime:applyCorrection', payload),
   listHydrologyReviewTasks: (filters) => ipcRenderer.invoke('hydrology:review:listTasks', filters),
+  runHydrologyQualityCheck: (payload) => ipcRenderer.invoke('hydrology:review:runQualityCheck', payload),
   resolveHydrologyReviewTask: ({ taskId, payload }) => ipcRenderer.invoke('hydrology:review:resolveTask', { taskId, payload }),
   openEmbeddedAppDemo: () => ipcRenderer.invoke('window:openEmbeddedAppDemo'),
   openProviderManager: () => ipcRenderer.invoke('window:openProviderManager'),

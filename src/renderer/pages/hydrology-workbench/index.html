@@ -81,7 +81,6 @@
             </label>
             <label>水位统计时间<input name="waterLevelStatAt" value="00:00"></label>
             <label>气象统计时间<input name="meteorologicalStatAt" value="20:00"></label>
-            <label>水位最大时变幅<input name="waterLevelMaxHourlyChange" type="number" step="0.01"></label>
           </div>
 
           <div id="stationFormError" class="form-error"></div>
@@ -89,6 +88,82 @@
             <button class="primary-action" type="submit">保存站点</button>
             <button id="resetStationBtn" class="secondary-action" type="button">新建站点</button>
             <button id="deleteStationBtn" class="danger-action" type="button">删除站点</button>
+          </div>
+        </form>
+
+        <form id="ruleConfigForm" class="station-form" hidden>
+          <div class="rule-config-layout">
+            <section class="rule-config-section">
+              <div class="realtime-table-head">
+                <div class="section-title">水位规则参数</div>
+                <div class="table-page-meta">站点级规则阈值</div>
+              </div>
+              <div class="form-grid compact rule-config-form-grid">
+                <label>断面最低高程<input name="waterLevelSectionMinElevation" type="number" step="0.01"></label>
+                <label>断面最高高程<input name="waterLevelSectionMaxElevation" type="number" step="0.01"></label>
+                <label>最大时变幅<input name="waterLevelMaxHourlyDelta" type="number" step="0.01"></label>
+                <label>人工视频容差<input name="waterLevelManualVideoTolerance" type="number" step="0.01"></label>
+              </div>
+              <div class="form-line">
+                <span>启用项</span>
+                <label><input name="waterLevelRequireManualObservation" type="checkbox"> 要求人工观测</label>
+                <label><input name="waterLevelRequireVideoReference" type="checkbox"> 视频缺失提示</label>
+              </div>
+            </section>
+
+            <section class="rule-config-section">
+              <div class="realtime-table-head">
+                <div class="section-title">算法使用说明</div>
+                <div class="table-page-meta">当前阶段以内置规则算法为主</div>
+              </div>
+              <div class="data-surface compact-surface rule-config-surface">
+                <div class="data-row">
+                  <strong>边界值算法</strong>
+                  <span>采用断面最高/最低高程进行越界判断</span>
+                </div>
+                <div class="data-row">
+                  <strong>人工/视频差值算法</strong>
+                  <span>按人工视频容差阈值比较</span>
+                </div>
+                <div class="data-row">
+                  <strong>小时变幅算法</strong>
+                  <span>按最大时变幅检查相邻时槽变化</span>
+                </div>
+                <div class="data-row">
+                  <strong>毛刺/突变检测</strong>
+                  <span>预留，后续独立细化</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="rule-config-section">
+              <div class="realtime-table-head">
+                <div class="section-title">气温规则预留</div>
+                <div class="table-page-meta">保持结构一致，暂以默认参数展示</div>
+              </div>
+              <div class="data-surface compact-surface rule-config-surface">
+                <div class="data-row">
+                  <strong>最小值</strong>
+                  <span id="airTemperatureMinDisplay">-50</span>
+                </div>
+                <div class="data-row">
+                  <strong>最大值</strong>
+                  <span id="airTemperatureMaxDisplay">60</span>
+                </div>
+                <div class="data-row">
+                  <strong>最大时变幅</strong>
+                  <span id="airTemperatureMaxHourlyChangeDisplay">8</span>
+                </div>
+                <div class="data-row">
+                  <strong>毛刺阈值</strong>
+                  <span id="airTemperatureSpikeThresholdDisplay">6</span>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div id="ruleConfigFormError" class="form-error"></div>
+          <div class="form-actions">
+            <button class="primary-action" type="submit">保存规则配置</button>
           </div>
         </form>
 

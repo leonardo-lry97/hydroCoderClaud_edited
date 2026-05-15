@@ -108,10 +108,14 @@ describe('Hydrology realtime backend', () => {
     }).find((item) => item.id === slot.id)
 
     expect(refreshed.chosenValue).toBe(4.99)
+    expect(refreshed.correctedValue).toBe(4.99)
     expect(refreshed.hasAnomaly).toBe(false)
     const detail = realtimeService.getRealtimeSlotDetail(slot.id)
-    expect(detail.slot.manualValue).toBe(4.99)
-    expect(detail.anomalies).toEqual([])
+    expect(detail.slot.manualValue).toBe(slot.manualValue)
+    expect(detail.slot.correctedValue).toBe(4.99)
+    expect(detail.manualObservation?.value).toBe(slot.manualValue)
+    expect(detail.correctedObservation?.value).toBe(4.99)
+    expect(detail.anomalies.some((item) => item.anomalyType === 'water_level_hourly_delta_exceeded')).toBe(true)
   })
 
   it('supports realtime filters and trend queries', async () => {

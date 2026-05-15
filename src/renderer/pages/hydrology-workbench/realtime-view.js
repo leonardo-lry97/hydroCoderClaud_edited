@@ -31,6 +31,11 @@ export function renderRealtimeDetailModalView(detail, deps = {}) {
             <span>${escapeHtml(detail.manualObservation?.observedAt ? formatDateTimeLabel(detail.manualObservation.observedAt) : '无人工记录')}</span>
           </div>
           <div class="detail-card">
+            <label>人工修正值</label>
+            <strong>${detail.correctedObservation?.value ?? detail.slot.correctedValue ?? '--'}</strong>
+            <span>${escapeHtml(detail.correctedObservation?.observedAt ? formatDateTimeLabel(detail.correctedObservation.observedAt) : '无修正记录')}</span>
+          </div>
+          <div class="detail-card">
             <label>视频识别</label>
             <strong>${detail.videoOcrObservation?.value ?? '--'}</strong>
             <span>${escapeHtml(detail.videoOcrObservation?.observedAt ? formatDateTimeLabel(detail.videoOcrObservation.observedAt) : '无识别记录')}</span>
@@ -72,6 +77,123 @@ export function renderRealtimeDetailModalView(detail, deps = {}) {
             <button type="submit" class="primary-action">提交修正</button>
           </div>
         </form>
+      </div>
+    </div>
+  `
+}
+
+function describeSeverity(value) {
+  if (value === 'critical') return '严重'
+  if (value === 'warning') return '警告'
+  return '提示'
+}
+
+function describeRuleCategory(value) {
+  if (value === 'completeness') return '完整性'
+  if (value === 'consistency') return '一致性'
+  if (value === 'reasonability') return '合理性'
+  if (value === 'sequence_quality') return '时序质量'
+  return value || '--'
+}
+
+function describeEvaluationStatus(value) {
+  if (value === 'hit') return '命中'
+  if (value === 'passed') return '通过'
+  if (value === 'skipped') return '跳过'
+  if (value === 'error') return '异常'
+  return value || '--'
+}
+
+function getEvaluationSeverityLabel(item) {
+  if (!item || (item.status !== 'hit' && item.status !== 'error')) return '--'
+  return item.severity ? describeSeverity(item.severity) : '--'
+}
+
+export function renderSlotCheckResultModalView(result, deps = {}) {
+  const {
+    escapeHtml,
+    formatDateTimeLabel,
+    describeObservationType
+  } = deps
+
+  if (!result) return ''
+
+  const hits = Array.isArray(result.hits) ? result.hits : []
+  const evaluations = Array.isArray(result.ruleEvaluations) ? result.ruleEvaluations : []
+  const hasIssues = hits.length > 0
+
+  return `
+    <div id="slotCheckResultOverlay" class="realtime-detail-overlay slot-check-overlay">
+      <div class="realtime-detail-card slot-check-card" role="dialog" aria-modal="true" aria-labelledby="slotCheckResultTitle">
+        <div class="realtime-detail-head">
+          <div>
+            <h4 id="slotCheckResultTitle">本次检查结果</h4>
+            <p>${escapeHtml(formatDateTimeLabel(result.slotTime))} · ${escapeHtml(describeObservationType(result.observationType))}</p>
+          </div>
+          <button type="button" id="closeSlotCheckResultBtn" class="secondary-action">关闭</button>
+        </div>
+        <section class="slot-check-summary ${hasIssues ? 'has-issue' : 'is-clean'}">
+          <strong>${hasIssues ? `命中 ${hits.length} 条规则` : '检查通过'}</strong>
+          <span>${hasIssues ? '已生成审核任务，可进入任务池继续处理。' : '未生成审核任务。'}</span>
+        </section>
+        <section class="slot-check-meta">
+          <span><strong>时槽</strong> ${escapeHtml(result.slotTime)}</span>
+          <span><strong>采用值</strong> ${escapeHtml(String(result.slot?.chosenValue ?? '--'))}</span>
+          <span><strong>人工值</strong> ${escapeHtml(String(result.slot?.manualValue ?? '--'))}</span>
+          <span><strong>遥测值</strong> ${escapeHtml(String(result.slot?.telemetryValue ?? '--'))}</span>
+          <span><strong>视频值</strong> ${escapeHtml(String(result.slot?.videoOcrValue ?? '--'))}</span>
+        </section>
+        <section class="slot-check-hit-panel">
+          <div class="realtime-table-head">
+            <div class="section-title">规则/算法执行结果</div>
+            <div class="table-page-meta">${evaluations.length} 条规则，命中 ${hits.length} 条</div>
+          </div>
+          <div class="realtime-table-shell">
+            <table class="realtime-table">
+              <thead>
+                <tr>
+                  <th>规则</th>
+                  <th>状态</th>
+                  <th>类别</th>
+                  <th>级别</th>
+                  <th>判定结果</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${evaluations.length > 0 ? evaluations.map((item) => `
+                  <tr>
+                    <td>${escapeHtml(item.ruleCode || '--')} · ${escapeHtml(item.ruleName || '--')}</td>
+                    <td>${escapeHtml(describeEvaluationStatus(item.status))}</td>
+                    <td>${escapeHtml(describeRuleCategory(item.ruleCategory))}</td>
+                    <td>${escapeHtml(getEvaluationSeverityLabel(item))}</td>
+                    <td>${escapeHtml(item.decisionMessage || '--')}</td>
+                  </tr>
+                `).join('') : `
+                  <tr>
+                    <td colspan="5">当前时槽未返回规则执行结果。</td>
+                  </tr>
+                `}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        ${hasIssues ? '' : '<div class="empty-state compact">本时槽未发现需要进入审核任务池的问题。</div>'}
+        <section class="slot-check-detail-surface data-surface compact-surface">
+          ${evaluations.length > 0 ? evaluations.map((item) => `
+            <div class="data-row">
+              <strong>${escapeHtml(item.ruleCode || '--')} · ${escapeHtml(describeEvaluationStatus(item.status))}</strong>
+              <span>${escapeHtml(item.evidenceSummary || '--')}</span>
+              <span>${escapeHtml(item.suggestedAction || (item.status === 'passed' ? '无需处理' : '--'))}</span>
+              <em>${escapeHtml(JSON.stringify(item.metrics || {}))}</em>
+            </div>
+          `).join('') : `
+            <div class="empty-state compact">当前时槽未返回算法/规则执行明细。</div>
+          `}
+        </section>
+        <div class="form-actions">
+          ${hasIssues ? '<button type="button" class="secondary-action" id="openReviewTaskBoardBtn">查看审核任务</button>' : ''}
+          <button type="button" class="primary-action" id="closeSlotCheckResultPrimaryBtn">完成</button>
+        </div>
       </div>
     </div>
   `
@@ -373,6 +495,7 @@ export function renderRealtimeViewSection(station, deps = {}) {
     compareStatusOptions,
     renderTrendPanel,
     renderRealtimeDetailModal,
+    renderSlotCheckResultModal,
     formatDateTimeLabel,
     formatNumericValue,
     describeCompareStatus,
@@ -386,7 +509,9 @@ export function renderRealtimeViewSection(station, deps = {}) {
     zoomTrendView,
     bindTrendChartHover,
     bindTrendViewportInteractions,
-    submitRealtimeCorrection
+    submitRealtimeCorrection,
+    runSlotQualityCheck,
+    openReviewTaskBoard
   } = deps
 
   const slots = sortRealtimeSlots(realtimeState.slots)
@@ -397,6 +522,7 @@ export function renderRealtimeViewSection(station, deps = {}) {
   const pageStart = (currentPage - 1) * pageSize
   const pagedSlots = slots.slice(pageStart, pageStart + pageSize)
   const detail = realtimeState.slotDetail
+  const slotCheckResult = realtimeState.slotCheckResult
   const canViewAirTemperature = station.observationTypes?.includes(observationTypes.airTemperature)
 
   tabContentEl.innerHTML = `
@@ -450,6 +576,7 @@ export function renderRealtimeViewSection(station, deps = {}) {
                   <th>采用值</th>
                   <th>对比状态</th>
                   <th>异常</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -462,6 +589,16 @@ export function renderRealtimeViewSection(station, deps = {}) {
                     <td>${formatNumericValue(slot.chosenValue)}</td>
                     <td>${escapeHtml(describeCompareStatus(slot.compareStatus))}</td>
                     <td>${slot.hasAnomaly ? `${slot.anomalyCount} 项` : '无'}</td>
+                    <td>
+                      <button
+                        type="button"
+                        class="secondary-action compact-action"
+                        data-slot-review="${escapeAttribute(slot.id)}"
+                        data-slot-time="${escapeAttribute(slot.slotTime)}"
+                      >
+                        审核
+                      </button>
+                    </td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -485,6 +622,7 @@ export function renderRealtimeViewSection(station, deps = {}) {
         `}
       </section>
       ${renderRealtimeDetailModal(detail)}
+      ${renderSlotCheckResultModal(slotCheckResult)}
     </section>
   `
 
@@ -496,6 +634,7 @@ export function renderRealtimeViewSection(station, deps = {}) {
       realtimeState.trendPreset = '24h'
       realtimeState.selectedSlotId = null
       realtimeState.slotDetail = null
+      realtimeState.slotCheckResult = null
       await loadRealtimeSlots()
       renderWorkbench()
     })
@@ -520,6 +659,7 @@ export function renderRealtimeViewSection(station, deps = {}) {
     realtimeState.trendPreset = '24h'
     realtimeState.selectedSlotId = null
     realtimeState.slotDetail = null
+    realtimeState.slotCheckResult = null
     await loadRealtimeSlots()
     renderWorkbench()
   })
@@ -528,6 +668,16 @@ export function renderRealtimeViewSection(station, deps = {}) {
     button.addEventListener('click', async () => {
       await loadRealtimeSlotDetail(button.dataset.slotId)
       renderWorkbench()
+    })
+  })
+
+  tabContentEl.querySelectorAll('[data-slot-review]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      await runSlotQualityCheck({
+        slotId: button.dataset.slotReview,
+        slotTime: button.dataset.slotTime
+      })
     })
   })
 
@@ -593,5 +743,26 @@ export function renderRealtimeViewSection(station, deps = {}) {
   document.getElementById('realtimeCorrectionForm')?.addEventListener('submit', async (event) => {
     event.preventDefault()
     await submitRealtimeCorrection(event.currentTarget)
+  })
+
+  document.getElementById('closeSlotCheckResultBtn')?.addEventListener('click', () => {
+    realtimeState.slotCheckResult = null
+    renderWorkbench()
+  })
+
+  document.getElementById('closeSlotCheckResultPrimaryBtn')?.addEventListener('click', () => {
+    realtimeState.slotCheckResult = null
+    renderWorkbench()
+  })
+
+  document.getElementById('slotCheckResultOverlay')?.addEventListener('click', (event) => {
+    if (event.target.id === 'slotCheckResultOverlay') {
+      realtimeState.slotCheckResult = null
+      renderWorkbench()
+    }
+  })
+
+  document.getElementById('openReviewTaskBoardBtn')?.addEventListener('click', async () => {
+    await openReviewTaskBoard()
   })
 }

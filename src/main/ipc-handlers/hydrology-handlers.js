@@ -1,7 +1,7 @@
 const { createIPCHandler } = require('../utils/ipc-utils')
 
 function setupHydrologyHandlers(ipcMain, services = {}) {
-  const { stationService, realtimeService, realtimeDemoSeeder, reviewTaskService } = services
+  const { stationService, realtimeService, realtimeDemoSeeder, reviewTaskService, qualityCheckService } = services
   if (!stationService) {
     console.warn('[IPC] StationService not available, skipping hydrology handlers')
     return
@@ -74,6 +74,13 @@ function setupHydrologyHandlers(ipcMain, services = {}) {
       throw new Error('ReviewTaskService not available')
     }
     return reviewTaskService.resolveReviewTask(taskId, payload || {})
+  })
+
+  createIPCHandler(ipcMain, 'hydrology:review:runQualityCheck', async (payload = {}) => {
+    if (!qualityCheckService) {
+      throw new Error('QualityCheckService not available')
+    }
+    return qualityCheckService.runStationQualityCheck(payload || {})
   })
 }
 

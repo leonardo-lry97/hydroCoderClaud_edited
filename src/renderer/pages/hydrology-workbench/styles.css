@@ -295,19 +295,21 @@ p {
   display: grid;
   grid-template-columns: 1.1fr 1fr 0.8fr 1.4fr;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   background: var(--panel-bg);
   align-items: center;
 }
 
 .data-row strong {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .data-row span,
 .data-row em {
   color: var(--text-color-muted);
+  font-size: 12px;
+  line-height: 1.45;
   font-style: normal;
 }
 
@@ -808,12 +810,6 @@ p {
   gap: 16px;
 }
 
-.review-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
 .review-task-panel,
 .review-detail-panel {
   display: grid;
@@ -826,6 +822,83 @@ p {
 
 .review-detail-surface .data-row {
   grid-template-columns: 148px minmax(0, 1fr);
+}
+
+.review-toolbar,
+.review-summary-bar,
+.review-run-meta,
+.review-detail-meta,
+.review-slot-focus,
+.rule-config-layout {
+  display: grid;
+  gap: 10px;
+}
+
+.review-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.review-inline-summary,
+.review-slot-focus,
+.review-summary-bar,
+.review-run-meta,
+.review-detail-meta {
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--panel-bg-subtle, var(--panel-bg));
+}
+
+.review-inline-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+}
+
+.review-inline-summary.has-issue {
+  border-color: rgba(var(--danger-color-rgb, 220, 76, 70), 0.24);
+  background: rgba(var(--danger-color-rgb, 220, 76, 70), 0.06);
+}
+
+.review-inline-summary.is-clean {
+  border-color: rgba(var(--success-color-rgb, 34, 197, 94), 0.22);
+  background: rgba(var(--success-color-rgb, 34, 197, 94), 0.06);
+}
+
+.review-slot-focus {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: center;
+}
+
+.review-summary-bar,
+.review-run-meta,
+.review-detail-meta {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.compact-review-surface .data-row {
+  grid-template-columns: 150px minmax(0, 1fr);
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.rule-config-layout {
+  margin-top: 4px;
+}
+
+.rule-config-section {
+  display: grid;
+  gap: 12px;
+}
+
+.rule-config-form-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.rule-config-surface .data-row {
+  grid-template-columns: 180px minmax(0, 1fr);
 }
 
 .review-resolved-card {
@@ -871,7 +944,7 @@ p {
 
 .realtime-table th,
 .realtime-table td {
-  padding: 12px 14px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border-color);
   text-align: left;
   white-space: nowrap;
@@ -885,6 +958,11 @@ p {
   color: var(--text-color-secondary);
   font-size: 12px;
   font-weight: 700;
+}
+
+.realtime-table td {
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .realtime-table tbody tr {
@@ -938,20 +1016,20 @@ p {
 .detail-card label,
 .detail-card span {
   color: var(--text-color-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-style: normal;
 }
 
 .detail-card {
   flex: 1;
   min-width: 0;
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 
 .detail-card strong {
   display: block;
-  margin: 6px 0 4px;
-  font-size: 18px;
+  margin: 5px 0 3px;
+  font-size: 16px;
 }
 
 .compact-surface {
@@ -989,6 +1067,52 @@ p {
   box-shadow: var(--panel-shadow-soft);
 }
 
+.slot-check-card {
+  width: min(1040px, 100%);
+}
+
+.slot-check-summary,
+.slot-check-meta {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--panel-bg-subtle, var(--panel-bg));
+}
+
+.slot-check-summary.has-issue {
+  border-color: rgba(var(--danger-color-rgb, 220, 76, 70), 0.24);
+  background: rgba(var(--danger-color-rgb, 220, 76, 70), 0.06);
+}
+
+.slot-check-summary.is-clean {
+  border-color: rgba(var(--success-color-rgb, 34, 197, 94), 0.22);
+  background: rgba(var(--success-color-rgb, 34, 197, 94), 0.06);
+}
+
+.slot-check-summary strong {
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.slot-check-summary span {
+  color: var(--text-color-muted);
+}
+
+.slot-check-meta {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-top: 14px;
+}
+
+.slot-check-hit-panel {
+  margin-top: 16px;
+}
+
+.slot-check-detail-surface .data-row {
+  grid-template-columns: 160px 1.3fr 1fr 1.1fr;
+}
+
 .realtime-detail-head {
   display: flex;
   justify-content: space-between;
@@ -1004,10 +1128,18 @@ p {
 
 .realtime-detail-head p {
   color: var(--text-color-muted);
+  font-size: 12px;
 }
 
 .correction-form {
   margin-top: 16px;
+}
+
+.compact-action {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
 }
 
 .correction-form .form-grid {
@@ -1094,8 +1226,14 @@ p {
     grid-template-columns: 1fr;
   }
 
-  .review-summary-grid,
-  .review-detail-surface .data-row {
+  .review-detail-surface .data-row,
+  .compact-review-surface .data-row,
+  .review-toolbar,
+  .review-slot-focus,
+  .review-summary-bar,
+  .review-run-meta,
+  .review-detail-meta,
+  .rule-config-form-grid {
     grid-template-columns: 1fr;
   }
 

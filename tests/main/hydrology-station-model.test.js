@@ -14,8 +14,33 @@ describe('hydrology station model', () => {
     expect(station.observationTypes).toEqual([stationModel.OBSERVATION_TYPES.waterLevel])
     expect(station.schedule.waterLevelStatAt).toBe('00:00')
     expect(station.schedule.meteorologicalStatAt).toBe('20:00')
-    expect(station.validationRules.waterLevel.compareVideoOcr).toBe(true)
+    expect(station.validationRules.waterLevel.sectionMinElevation).toBe(0)
+    expect(station.validationRules.waterLevel.sectionMaxElevation).toBe(50)
+    expect(station.validationRules.waterLevel.maxHourlyDelta).toBe(0.1)
+    expect(station.validationRules.waterLevel.manualVideoTolerance).toBe(0.1)
+    expect(station.validationRules.waterLevel.requireManualObservation).toBe(true)
+    expect(station.validationRules.waterLevel.requireVideoReference).toBe(true)
     expect(station).not.toHaveProperty('region')
+  })
+
+  it('maps legacy water-level rule fields into the new rule profile', () => {
+    const station = stationModel.normalizeStation({
+      code: 'QX002',
+      name: '兼容站',
+      validationRules: {
+        waterLevel: {
+          min: 1.2,
+          max: 8.8,
+          maxHourlyChange: 0.35,
+          compareVideoOcr: false
+        }
+      }
+    })
+
+    expect(station.validationRules.waterLevel.sectionMinElevation).toBe(1.2)
+    expect(station.validationRules.waterLevel.sectionMaxElevation).toBe(8.8)
+    expect(station.validationRules.waterLevel.maxHourlyDelta).toBe(0.35)
+    expect(station.validationRules.waterLevel.requireVideoReference).toBe(false)
   })
 
   it('validates required station identity and coordinate bounds', () => {

@@ -144,8 +144,11 @@ function parseStationRow(row) {
   if (!row) return null
   return {
     id: row.id,
+    code: row.code || '',
+    name: row.name || '',
     observationTypes: JSON.parse(row.observation_types || '[]'),
-    dataSources: JSON.parse(row.data_sources || '{}')
+    dataSources: JSON.parse(row.data_sources || '{}'),
+    validationRules: JSON.parse(row.validation_rules || '{}')
   }
 }
 
@@ -187,6 +190,10 @@ function getExpectedSources(station, observationType) {
     telemetry: !!dataSources.telemetry,
     videoOcr: observationType === 'waterLevel' && !!dataSources.videoOcr
   }
+}
+
+function getStationRuleProfile(station, observationType) {
+  return station?.validationRules?.[observationType] || {}
 }
 
 function getTelemetrySlotWindow(slotTime) {
@@ -295,6 +302,7 @@ class RealtimeService {
         observationType: row.observation_type,
         slotTime: row.slot_time,
         manualValue: row.manual_value,
+        correctedValue: row.corrected_value ?? null,
         telemetryValue: row.telemetry_value,
         videoOcrValue: row.video_ocr_value,
         chosenValue: row.chosen_value,
@@ -324,6 +332,7 @@ class RealtimeService {
     )
 
     const manualObservation = observations.find((item) => item.sourceType === SOURCE_TYPES.manual) || null
+    const correctedObservation = observations.find((item) => item.sourceType === SOURCE_TYPES.corrected) || null
     const telemetryObservations = observations.filter((item) => item.sourceType === SOURCE_TYPES.telemetry)
     const videoOcrObservation = observations.find((item) => item.sourceType === SOURCE_TYPES.videoOcr) || null
     const slotPayload = {
@@ -356,6 +365,7 @@ class RealtimeService {
         observationType: slot.observation_type,
         slotTime: slot.slot_time,
         manualValue: slot.manual_value,
+        correctedValue: slot.corrected_value ?? null,
         telemetryValue: slot.telemetry_value,
         videoOcrValue: slot.video_ocr_value,
         chosenValue: slot.chosen_value,
@@ -363,6 +373,7 @@ class RealtimeService {
         missingFlags: JSON.parse(slot.missing_flags || '[]')
       },
       manualObservation,
+      correctedObservation,
       telemetryObservations,
       videoOcrObservation,
       anomalies: Array.from(anomalyMap.values())
@@ -414,6 +425,7 @@ class RealtimeService {
     const slots = this.listRealtimeSlots(normalized)
     const slotSeries = [
       { name: '人工值', sourceType: SOURCE_TYPES.manual, accessor: (slot) => slot.manualValue },
+      { name: '人工修正值', sourceType: SOURCE_TYPES.corrected, accessor: (slot) => slot.correctedValue },
       { name: '遥测参考值', sourceType: SOURCE_TYPES.telemetry, accessor: (slot) => slot.telemetryValue },
       { name: '视频识别值', sourceType: SOURCE_TYPES.videoOcr, accessor: (slot) => slot.videoOcrValue }
     ]
@@ -490,7 +502,7 @@ class RealtimeService {
     const chosenValue = corrected?.value ?? manual?.value ?? telemetry?.value ?? videoOcr?.value ?? null
     const compareStatus = buildCompareStatus([manual?.value, telemetry?.value, videoOcr?.value].filter((item) => item != null))
     const missingFlags = buildMissingFlags({
-      manualValue: manual?.value ?? corrected?.value ?? null,
+      manualValue: manual?.value ?? null,
       telemetryValue: telemetry?.value ?? null,
       videoOcrValue: videoOcr?.value ?? null
     }, expectedSources)
@@ -505,7 +517,8 @@ class RealtimeService {
       stationId,
       observationType,
       slotTime,
-      manualValue: corrected?.value ?? manual?.value ?? null,
+      manualValue: manual?.value ?? null,
+      correctedValue: corrected?.value ?? null,
       telemetryValue: telemetry?.value ?? null,
       videoOcrValue: videoOcr?.value ?? null,
       chosenValue,
@@ -517,15 +530,36 @@ class RealtimeService {
   }
 
   syncReviewTasksForSlot(stationId, observationType, slotTime, slotAggregate = null) {
-    if (!this.reviewTaskService) return []
+    if (!this.reviewTaskService) {
+      return {
+        hits: [],
+        ruleEvaluations: []
+      }
+    }
 
     const slot = slotAggregate || this.buildSlotAggregate(stationId, observationType, slotTime)
+    const previousSlotRow = this.db.getPreviousObservationSlot(stationId, observationType, slotTime)
     const observations = filterObservationsForSlot(
       this.db.listObservationsBySlot(stationId, observationType, slotTime).map(parseRow),
       slotTime
     )
     const station = parseStationRow(this.db.getStationById?.(stationId))
     const expectedSources = getExpectedSources(station, observationType)
+    const stationRules = getStationRuleProfile(station, observationType)
+    const previousSlot = previousSlotRow
+      ? {
+          stationId: previousSlotRow.station_id,
+          observationType: previousSlotRow.observation_type,
+          slotTime: previousSlotRow.slot_time,
+          manualValue: previousSlotRow.manual_value,
+          correctedValue: previousSlotRow.corrected_value ?? null,
+          telemetryValue: previousSlotRow.telemetry_value,
+          videoOcrValue: previousSlotRow.video_ocr_value,
+          chosenValue: previousSlotRow.chosen_value,
+          compareStatus: previousSlotRow.compare_status,
+          missingFlags: JSON.parse(previousSlotRow.missing_flags || '[]')
+        }
+      : null
 
     return this.reviewTaskService.syncSlotReviewTasks({
       station,
@@ -535,8 +569,10 @@ class RealtimeService {
         observationType,
         slotTime
       },
+      previousSlot,
       observations,
-      expectedSources
+      expectedSources,
+      stationRules
     })
   }
 }

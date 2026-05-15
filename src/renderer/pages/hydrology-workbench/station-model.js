@@ -7,11 +7,12 @@ export const OBSERVATION_TYPES = {
 
 export const DEFAULT_STATION_RULES = {
   waterLevel: {
-    min: 0,
-    max: 50,
-    maxHourlyChange: 2,
-    spikeThreshold: 1.5,
-    compareVideoOcr: true
+    sectionMinElevation: 0,
+    sectionMaxElevation: 50,
+    maxHourlyDelta: 0.1,
+    manualVideoTolerance: 0.1,
+    requireManualObservation: true,
+    requireVideoReference: true
   },
   airTemperature: {
     min: -50,
@@ -51,6 +52,17 @@ export function createEmptyStation() {
 }
 
 export function normalizeStation(rawStation = {}) {
+  const rawWaterLevelRules = rawStation.validationRules?.waterLevel || {}
+  const normalizedWaterLevelRules = {
+    ...DEFAULT_STATION_RULES.waterLevel,
+    ...rawWaterLevelRules,
+    sectionMinElevation: rawWaterLevelRules.sectionMinElevation ?? rawWaterLevelRules.min ?? DEFAULT_STATION_RULES.waterLevel.sectionMinElevation,
+    sectionMaxElevation: rawWaterLevelRules.sectionMaxElevation ?? rawWaterLevelRules.max ?? DEFAULT_STATION_RULES.waterLevel.sectionMaxElevation,
+    maxHourlyDelta: rawWaterLevelRules.maxHourlyDelta ?? rawWaterLevelRules.maxHourlyChange ?? DEFAULT_STATION_RULES.waterLevel.maxHourlyDelta,
+    manualVideoTolerance: rawWaterLevelRules.manualVideoTolerance ?? DEFAULT_STATION_RULES.waterLevel.manualVideoTolerance,
+    requireManualObservation: rawWaterLevelRules.requireManualObservation !== false,
+    requireVideoReference: rawWaterLevelRules.requireVideoReference ?? rawWaterLevelRules.compareVideoOcr ?? DEFAULT_STATION_RULES.waterLevel.requireVideoReference
+  }
   const station = {
     ...createEmptyStation(),
     ...rawStation,
@@ -64,8 +76,7 @@ export function normalizeStation(rawStation = {}) {
     },
     validationRules: {
       waterLevel: {
-        ...DEFAULT_STATION_RULES.waterLevel,
-        ...(rawStation.validationRules?.waterLevel || {})
+        ...normalizedWaterLevelRules
       },
       airTemperature: {
         ...DEFAULT_STATION_RULES.airTemperature,
