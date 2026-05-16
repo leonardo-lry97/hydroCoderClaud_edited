@@ -20,6 +20,7 @@ const GOVERNANCE_STATUS = {
 }
 
 const { ReviewTaskService } = require('./review-task-service')
+const { parseReviewTaskRow } = require('./review-task-helpers')
 
 function pad(value) {
   return String(value).padStart(2, '0')
@@ -448,6 +449,10 @@ class RealtimeService {
         anomalyMap.set(dedupeKey, item)
       }
     })
+    const reviewTasks = this.db
+      .listReviewTasks(slot.station_id, slot.observation_type, 'all')
+      .filter((row) => row.slot_time === slot.slot_time)
+      .map(parseReviewTaskRow)
 
     return {
       slot: {
@@ -469,7 +474,8 @@ class RealtimeService {
       telemetryObservations,
       videoOcrObservation,
       sourceObservations: observations,
-      anomalies: Array.from(anomalyMap.values())
+      anomalies: Array.from(anomalyMap.values()),
+      reviewTasks
     }
   }
 

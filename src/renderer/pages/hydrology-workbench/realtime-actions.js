@@ -91,7 +91,6 @@ export async function loadRealtimeSlotsAction(deps) {
     if (!hasSelectedSlot) {
       realtimeState.selectedSlotId = null
       realtimeState.slotDetail = null
-      realtimeState.slotDetailSource = null
     }
     await loadRealtimeTrend()
     if (hasSelectedSlot && realtimeState.selectedSlotId) {

@@ -87,6 +87,43 @@ describe('hydrology realtime actions', () => {
     expect(loadRealtimeSlotDetail).toHaveBeenCalledWith('slot-1')
   })
 
+  it('preserves slot detail source when opening a review-linked slot before selected slot is set', async () => {
+    const realtimeState = {
+      selectedObservationType: 'waterLevel',
+      fromTime: '',
+      toTime: '',
+      compareStatus: 'all',
+      hasAnomalyOnly: false,
+      pageSize: 10,
+      page: 1,
+      selectedSlotId: null,
+      slotDetail: null,
+      slotDetailSource: 'review',
+      slots: [],
+      trend: null,
+      error: '',
+      trendError: ''
+    }
+    const listHydrologyRealtimeSlots = vi.fn(async () => [{ id: 'slot-1', slotTime: '2026-05-14 12:00' }])
+    const loadRealtimeTrend = vi.fn(async () => {})
+    const loadRealtimeSlotDetail = vi.fn(async () => {})
+
+    await loadRealtimeSlotsAction({
+      getSelectedStation: () => ({ id: 'station-1', observationTypes: ['waterLevel'] }),
+      realtimeState,
+      observationTypes: {
+        waterLevel: 'waterLevel'
+      },
+      electronAPI: { listHydrologyRealtimeSlots },
+      loadRealtimeTrend,
+      loadRealtimeSlotDetail
+    })
+
+    expect(realtimeState.slotDetailSource).toBe('review')
+    expect(realtimeState.selectedSlotId).toBe(null)
+    expect(realtimeState.slotDetail).toBe(null)
+  })
+
   it('resets realtime filters and viewport state', () => {
     const realtimeState = {
       fromTime: '2026-05-12T00:00',

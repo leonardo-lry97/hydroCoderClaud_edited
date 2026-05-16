@@ -172,6 +172,30 @@ let pendingDeleteStationId = null
 let trendViewportBindingsController = null
 let trendViewportRenderFrame = null
 
+function syncReviewStateWithSlotTasks(slotTasks = []) {
+  const incoming = Array.isArray(slotTasks) ? slotTasks.filter((item) => item?.id) : []
+  if (incoming.length === 0 || !Array.isArray(reviewState.tasks) || reviewState.tasks.length === 0) {
+    return
+  }
+
+  const incomingMap = new Map(incoming.map((item) => [item.id, item]))
+  reviewState.tasks = reviewState.tasks
+    .map((task) => incomingMap.has(task.id) ? { ...task, ...incomingMap.get(task.id) } : task)
+    .filter((task) => {
+      if (reviewState.statusFilter === 'needs_review') {
+        return task.status !== 'resolved'
+      }
+      if (reviewState.statusFilter === 'resolved') {
+        return task.status === 'resolved'
+      }
+      return true
+    })
+
+  if (!reviewState.tasks.some((item) => item.id === reviewState.selectedTaskId)) {
+    reviewState.selectedTaskId = reviewState.tasks[0]?.id || null
+  }
+}
+
 function notifyAgentContextChanged(force = false) {
   agentPanel?.notifyContextChanged(force)
 }
@@ -759,14 +783,18 @@ function renderRealtimeView(station) {
   })
 }
 
-function closeRealtimeDetail() {
+async function closeRealtimeDetail() {
   const source = realtimeState.slotDetailSource
+  const slotTasks = realtimeState.slotDetail?.reviewTasks || []
   realtimeState.selectedSlotId = null
   realtimeState.slotDetail = null
   realtimeState.slotDetailSource = null
   realtimeState.correctionError = ''
   if (source === 'review') {
+    syncReviewStateWithSlotTasks(slotTasks)
     activeFunctionKey = 'review'
+    await loadReviewTasks()
+    syncReviewStateWithSlotTasks(slotTasks)
   }
   renderWorkbench()
 }
@@ -1150,6 +1178,11 @@ async function mutateRealtimeObservation(payload = {}, mode = 'update') {
     } else {
       realtimeState.selectedSlotId = null
       realtimeState.slotDetail = null
+    }
+    if (realtimeState.slotDetailSource === 'review') {
+      syncReviewStateWithSlotTasks(realtimeState.slotDetail?.reviewTasks || [])
+      await loadReviewTasks()
+      syncReviewStateWithSlotTasks(realtimeState.slotDetail?.reviewTasks || [])
     }
     renderWorkbench()
     notifyAgentContextChanged()

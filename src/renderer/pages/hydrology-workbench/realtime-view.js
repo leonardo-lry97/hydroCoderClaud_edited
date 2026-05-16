@@ -101,6 +101,19 @@ export function renderRealtimeDetailModalView(detail, deps = {}) {
             `).join('')}
           </div>
         ` : '<div class="empty-state compact">当前时槽未发现需要提示的异常。</div>'}
+        <div class="section-title">关联审核任务</div>
+        ${(detail.reviewTasks || []).length > 0 ? `
+          <div class="data-surface compact-surface">
+            ${detail.reviewTasks.map((item) => `
+              <div class="data-row anomaly-row">
+                <strong>${escapeHtml(item.ruleCode || '--')}</strong>
+                <span>${escapeHtml(describeSeverity(item.severity || 'info'))}</span>
+                <span>${escapeHtml(describeReviewStatus(item.status))}</span>
+                <em>${escapeHtml(item.title || item.decisionMessage || '')}</em>
+              </div>
+            `).join('')}
+          </div>
+        ` : '<div class="empty-state compact">当前时槽暂无审核任务。</div>'}
         <div class="section-title">5 分钟遥测明细</div>
         <div class="data-surface compact-surface">
           ${slotTelemetryRows.length > 0 ? slotTelemetryRows.map((item) => `
@@ -179,6 +192,14 @@ function describeSeverity(value) {
   if (value === 'critical') return '严重'
   if (value === 'warning') return '警告'
   return '提示'
+}
+
+function describeReviewStatus(value) {
+  if (value === 'resolved') return '已处理'
+  if (value === 'completed') return '已完成'
+  if (value === 'running') return '执行中'
+  if (value === 'pending') return '待执行'
+  return '待复核'
 }
 
 function describeRuleCategory(value) {

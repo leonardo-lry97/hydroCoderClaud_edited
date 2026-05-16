@@ -50,6 +50,8 @@ describe('hydrology workbench backend wiring', () => {
     expect(source).toContain('window.electronAPI?.deleteHydrologyRealtimeObservation')
     expect(source).toContain('await window.electronAPI.deleteHydrologyRealtimeObservation(payload.id)')
     expect(source).toContain('async function mutateRealtimeObservation(payload = {}, mode = \'update\')')
+    expect(source).toContain("if (realtimeState.slotDetailSource === 'review') {")
+    expect(source).toContain('await loadReviewTasks()')
     expect(source).toContain('renderReviewView')
     expect(source).toContain("activeFunctionKey === 'review'")
     expect(source).toContain('window.electronAPI?.listHydrologyReviewTasks')
