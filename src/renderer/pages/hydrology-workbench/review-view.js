@@ -37,8 +37,16 @@ export function renderReviewView(station, reviewState, deps = {}) {
   const tasks = isSlotMode
     ? allTasks.filter((item) => item.slotTime === lastSlotCheck.slotTime)
     : allTasks
-  const selectedTask = tasks.find((item) => item.id === reviewState.selectedTaskId)
-    || tasks[0]
+  const reviewPageSize = reviewState.pageSize || 10
+  const totalPages = Math.max(1, Math.ceil(tasks.length / reviewPageSize))
+  const currentPage = isSlotMode
+    ? 1
+    : Math.min(Math.max(reviewState.page || 1, 1), totalPages)
+  const pageStart = (currentPage - 1) * reviewPageSize
+  const pagedTasks = isSlotMode ? tasks : tasks.slice(pageStart, pageStart + reviewPageSize)
+  const selectedTask = pagedTasks.find((item) => item.id === reviewState.selectedTaskId)
+    || tasks.find((item) => item.id === reviewState.selectedTaskId)
+    || pagedTasks[0]
     || null
   const statusOptions = [
     ['all', '全部状态'],
@@ -101,7 +109,7 @@ export function renderReviewView(station, reviewState, deps = {}) {
       <section class="review-task-panel">
         <div class="realtime-table-head">
           <div class="section-title">${isSlotMode ? '本次规则命中结果' : '审核任务列表'}</div>
-          <div class="table-page-meta">${tasks.length} 条</div>
+          <div class="table-page-meta">${isSlotMode ? `${tasks.length} 条` : `第 ${currentPage} / ${totalPages} 页 · 共 ${tasks.length} 条`}</div>
         </div>
         ${tasks.length === 0 ? `<div class="empty-state compact">${
           isSlotMode
@@ -120,7 +128,7 @@ export function renderReviewView(station, reviewState, deps = {}) {
                 </tr>
               </thead>
               <tbody>
-                ${tasks.map((task) => `
+                ${pagedTasks.map((task) => `
                   <tr class="${task.id === reviewState.selectedTaskId ? 'active' : ''}" data-review-task-id="${escapeHtml(task.id)}">
                     ${isSlotMode ? '' : `<td>${escapeHtml(task.slotTime)}</td>`}
                     <td>${escapeHtml(task.ruleCode)} · ${escapeHtml(task.title)}</td>
@@ -132,6 +140,23 @@ export function renderReviewView(station, reviewState, deps = {}) {
               </tbody>
             </table>
           </div>
+          ${isSlotMode ? '' : `
+            <div class="realtime-pagination">
+              <div class="realtime-pagination-group">
+                <button type="button" class="secondary-action" data-review-page-action="prev" ${currentPage <= 1 ? 'disabled' : ''}>上一页</button>
+                <button type="button" class="secondary-action" data-review-page-action="next" ${currentPage >= totalPages ? 'disabled' : ''}>下一页</button>
+              </div>
+              <label class="realtime-page-size">
+                每页
+                <select id="reviewPageSizeSelect">
+                  ${[10, 20].map((size) => `
+                    <option value="${size}" ${size === reviewPageSize ? 'selected' : ''}>${size}</option>
+                  `).join('')}
+                </select>
+                行
+              </label>
+            </div>
+          `}
         `}
       </section>
       <section class="review-detail-panel">

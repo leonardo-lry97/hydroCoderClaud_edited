@@ -66,6 +66,7 @@ function toTimestamp(value) {
 }
 
 function normalizeObservationInput(input = {}) {
+  const observationId = String(input.id || '').trim() || null
   const stationId = String(input.stationId || '').trim()
   const observationType = String(input.observationType || '').trim()
   const sourceType = String(input.sourceType || '').trim()
@@ -79,6 +80,7 @@ function normalizeObservationInput(input = {}) {
   if (value == null) throw new Error('观测值不能为空')
 
   return {
+    id: observationId,
     stationId,
     observationType,
     sourceType,
@@ -207,6 +209,20 @@ function getTelemetrySlotWindow(slotTime) {
   }
 }
 
+function getTelemetryRepresentativeObservation(observations, slotTime) {
+  if (!Array.isArray(observations) || observations.length === 0) return null
+  const telemetryWindow = getTelemetrySlotWindow(slotTime)
+  if (telemetryWindow.end == null) return null
+
+  for (let index = observations.length - 1; index >= 0; index -= 1) {
+    const item = observations[index]
+    if (toTimestamp(item?.observedAt) === telemetryWindow.end) {
+      return item
+    }
+  }
+  return null
+}
+
 function filterObservationsForSlot(observations, slotTime) {
   if (!Array.isArray(observations) || observations.length === 0) return []
   const telemetryWindow = getTelemetrySlotWindow(slotTime)
@@ -275,19 +291,86 @@ function getSeriesName(sourceType) {
   return sourceType
 }
 
+function getChosenSourceType({ manual, telemetry, videoOcr }) {
+  if (manual?.value != null) return SOURCE_TYPES.manual
+  if (telemetry?.value != null) return SOURCE_TYPES.telemetry
+  if (videoOcr?.value != null) return SOURCE_TYPES.videoOcr
+  return null
+}
+
 class RealtimeService {
   constructor(hydrologyDatabase, options = {}) {
     this.db = hydrologyDatabase
     this.reviewTaskService = options.reviewTaskService || new ReviewTaskService(hydrologyDatabase)
   }
 
+  refreshSlotState(stationId, observationType, slotTime) {
+    const observations = filterObservationsForSlot(
+      this.db.listObservationsBySlot(stationId, observationType, slotTime).map(parseRow),
+      slotTime
+    )
+    if (observations.length === 0) {
+      const existingSlot = this.db.getObservationSlotByKey(stationId, observationType, slotTime)
+      if (existingSlot?.id) {
+        this.db.deleteObservationSlotById(existingSlot.id)
+      }
+      return null
+    }
+
+    const slotAggregate = this.buildSlotAggregate(stationId, observationType, slotTime)
+    this.db.upsertObservationSlot(slotAggregate)
+    this.syncReviewTasksForSlot(stationId, observationType, slotTime, slotAggregate)
+    return slotAggregate
+  }
+
   saveObservation(input) {
     const observation = normalizeObservationInput(input)
     const saved = this.db.createObservation(observation)
-    const slotAggregate = this.buildSlotAggregate(observation.stationId, observation.observationType, observation.slotTime)
-    this.db.upsertObservationSlot(slotAggregate)
-    this.syncReviewTasksForSlot(observation.stationId, observation.observationType, observation.slotTime, slotAggregate)
+    this.refreshSlotState(observation.stationId, observation.observationType, observation.slotTime)
     return parseRow(saved)
+  }
+
+  updateObservation(input = {}) {
+    const observationId = String(input.id || '').trim()
+    if (!observationId) throw new Error('观测记录 ID 不能为空')
+    const existing = this.db.getObservationById(observationId)
+    if (!existing) throw new Error('观测记录不存在')
+    const existingParsed = parseRow(existing)
+    const hasExplicitObservedAt = Object.prototype.hasOwnProperty.call(input, 'observedAt')
+    const hasExplicitSlotTime = Object.prototype.hasOwnProperty.call(input, 'slotTime')
+
+    const observation = normalizeObservationInput({
+      ...existingParsed,
+      slotTime: hasExplicitObservedAt && !hasExplicitSlotTime ? undefined : existingParsed.slotTime,
+      ...input,
+      id: observationId,
+      stationId: existing.station_id,
+      observationType: existing.observation_type,
+      sourceType: existing.source_type
+    })
+    const saved = this.db.updateObservation(observation)
+    if (existingParsed.slotTime !== observation.slotTime) {
+      this.refreshSlotState(existingParsed.stationId, existingParsed.observationType, existingParsed.slotTime)
+    }
+    this.refreshSlotState(observation.stationId, observation.observationType, observation.slotTime)
+    return parseRow(saved)
+  }
+
+  deleteObservation(observationId) {
+    const id = String(observationId || '').trim()
+    if (!id) throw new Error('观测记录 ID 不能为空')
+    const existing = this.db.getObservationById(id)
+    if (!existing) throw new Error('观测记录不存在')
+    const parsed = parseRow(existing)
+    this.db.deleteObservation(id)
+    this.refreshSlotState(parsed.stationId, parsed.observationType, parsed.slotTime)
+    return {
+      id: parsed.id,
+      stationId: parsed.stationId,
+      observationType: parsed.observationType,
+      slotTime: parsed.slotTime,
+      sourceType: parsed.sourceType
+    }
   }
 
   listRealtimeSlots(filters = {}) {
@@ -335,6 +418,12 @@ class RealtimeService {
     const correctedObservation = observations.find((item) => item.sourceType === SOURCE_TYPES.corrected) || null
     const telemetryObservations = observations.filter((item) => item.sourceType === SOURCE_TYPES.telemetry)
     const videoOcrObservation = observations.find((item) => item.sourceType === SOURCE_TYPES.videoOcr) || null
+    const telemetryObservation = getTelemetryRepresentativeObservation(telemetryObservations, slot.slot_time)
+    const chosenSourceType = getChosenSourceType({
+      manual: manualObservation,
+      telemetry: telemetryObservation,
+      videoOcr: videoOcrObservation
+    })
     const slotPayload = {
       id: slot.id,
       slotTime: slot.slot_time,
@@ -342,6 +431,7 @@ class RealtimeService {
       missingFlags: JSON.parse(slot.missing_flags || '[]')
     }
     const persistedAnomalies = this.db.listAnomaliesBySlot(slot.station_id, slot.observation_type, slot.slot_time)
+      .filter((row) => row.status !== 'closed')
       .map((row) => ({
         id: row.id,
         slotTime: row.slot_time,
@@ -351,10 +441,11 @@ class RealtimeService {
         status: row.status
       }))
     const anomalyMap = new Map()
-    persistedAnomalies.forEach((item) => anomalyMap.set(item.id, item))
+    persistedAnomalies.forEach((item) => anomalyMap.set(item.anomalyType || item.id, item))
     buildDerivedAnomalies(slotPayload).forEach((item) => {
-      if (!anomalyMap.has(item.id)) {
-        anomalyMap.set(item.id, item)
+      const dedupeKey = item.anomalyType || item.id
+      if (!anomalyMap.has(dedupeKey)) {
+        anomalyMap.set(dedupeKey, item)
       }
     })
 
@@ -369,6 +460,7 @@ class RealtimeService {
         telemetryValue: slot.telemetry_value,
         videoOcrValue: slot.video_ocr_value,
         chosenValue: slot.chosen_value,
+        chosenSourceType,
         compareStatus: slot.compare_status,
         missingFlags: JSON.parse(slot.missing_flags || '[]')
       },
@@ -376,6 +468,7 @@ class RealtimeService {
       correctedObservation,
       telemetryObservations,
       videoOcrObservation,
+      sourceObservations: observations,
       anomalies: Array.from(anomalyMap.values())
     }
   }
@@ -425,9 +518,9 @@ class RealtimeService {
     const slots = this.listRealtimeSlots(normalized)
     const slotSeries = [
       { name: '人工值', sourceType: SOURCE_TYPES.manual, accessor: (slot) => slot.manualValue },
-      { name: '人工修正值', sourceType: SOURCE_TYPES.corrected, accessor: (slot) => slot.correctedValue },
       { name: '遥测参考值', sourceType: SOURCE_TYPES.telemetry, accessor: (slot) => slot.telemetryValue },
-      { name: '视频识别值', sourceType: SOURCE_TYPES.videoOcr, accessor: (slot) => slot.videoOcrValue }
+      { name: '视频识别值', sourceType: SOURCE_TYPES.videoOcr, accessor: (slot) => slot.videoOcrValue },
+      { name: '采用值', sourceType: 'chosen', accessor: (slot) => slot.chosenValue }
     ]
 
     return {
@@ -493,13 +586,13 @@ class RealtimeService {
     const station = parseStationRow(this.db.getStationById?.(stationId))
     const expectedSources = getExpectedSources(station, observationType)
 
-    const corrected = observations.find((item) => item.sourceType === SOURCE_TYPES.corrected) || null
     const manual = observations.find((item) => item.sourceType === SOURCE_TYPES.manual) || null
     const telemetryList = observations.filter((item) => item.sourceType === SOURCE_TYPES.telemetry)
-    const telemetry = telemetryList.length > 0 ? telemetryList[telemetryList.length - 1] : null
+    const telemetry = getTelemetryRepresentativeObservation(telemetryList, slotTime)
     const videoOcr = observations.find((item) => item.sourceType === SOURCE_TYPES.videoOcr) || null
 
-    const chosenValue = corrected?.value ?? manual?.value ?? telemetry?.value ?? videoOcr?.value ?? null
+    const corrected = observations.find((item) => item.sourceType === SOURCE_TYPES.corrected) || null
+    const chosenValue = manual?.value ?? telemetry?.value ?? videoOcr?.value ?? null
     const compareStatus = buildCompareStatus([manual?.value, telemetry?.value, videoOcr?.value].filter((item) => item != null))
     const missingFlags = buildMissingFlags({
       manualValue: manual?.value ?? null,

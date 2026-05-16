@@ -297,7 +297,7 @@ describe('Hydrology review task backend', () => {
     expect(detail.anomalies.some((item) => item.anomalyType === 'missing_video_reference')).toBe(false)
   })
 
-  it('keeps corrected value separate from manual-missing and manual-video rules', async () => {
+  it('keeps corrected record separate from manual-missing and manual-video rules', async () => {
     const { HydrologyDatabase } = await import('../../src/main/hydrology/hydrology-database.js')
     const { StationService } = await import('../../src/main/hydrology/station-service.js')
     const { RealtimeService, SOURCE_TYPES } = await import('../../src/main/hydrology/realtime-service.js')
@@ -369,7 +369,7 @@ describe('Hydrology review task backend', () => {
 
     expect(detail.slot.manualValue).toBeNull()
     expect(detail.slot.correctedValue).toBe(5.19)
-    expect(detail.slot.chosenValue).toBe(5.19)
+    expect(detail.slot.chosenValue).toBe(5.18)
     expect(detail.anomalies.some((item) => item.anomalyType === 'missing_manual')).toBe(true)
     expect(detail.anomalies.some((item) => item.anomalyType === 'water_level_manual_video_diff')).toBe(false)
   })

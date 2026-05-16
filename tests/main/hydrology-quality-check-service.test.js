@@ -73,7 +73,7 @@ describe('Hydrology quality check service', () => {
     expect(result.slotResults[0].ruleEvaluations.some((item) => item.ruleCode === 'WL-B-001')).toBe(true)
   })
 
-  it('keeps missing-manual hit active when slot only has corrected chosen value', async () => {
+  it('keeps missing-manual hit active when slot has corrected record but no manual value', async () => {
     const { HydrologyDatabase } = await import('../../src/main/hydrology/hydrology-database.js')
     const { StationService } = await import('../../src/main/hydrology/station-service.js')
     const { RealtimeService, SOURCE_TYPES } = await import('../../src/main/hydrology/realtime-service.js')
@@ -139,7 +139,7 @@ describe('Hydrology quality check service', () => {
     expect(result.hitRuleCodes).not.toContain('WL-V-001')
     expect(result.slotResults[0].slot.manualValue).toBeNull()
     expect(result.slotResults[0].slot.correctedValue).toBe(4.92)
-    expect(result.slotResults[0].slot.chosenValue).toBe(4.92)
+    expect(result.slotResults[0].slot.chosenValue).toBe(4.9)
     expect(result.slotResults[0].hits.some((item) => item.ruleCode === 'WL-C-002')).toBe(true)
     expect(result.slotResults[0].hits.some((item) => item.ruleCode === 'WL-V-001')).toBe(false)
     expect(result.slotResults[0].ruleEvaluations.some((item) => item.ruleCode === 'WL-C-002' && item.status === 'hit')).toBe(true)

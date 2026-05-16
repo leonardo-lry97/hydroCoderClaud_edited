@@ -270,8 +270,8 @@ export function buildTrendChartSvg(slots, deps) {
         ${lineMarkup}
         <g class="trend-hover-layer" aria-hidden="true">
           <line data-trend-hover-crosshair class="trend-hover-crosshair" x1="0" y1="0" x2="0" y2="0" />
-          ${['manual', 'telemetry', 'video_ocr', 'corrected'].map((sourceType) => `
-            <circle data-trend-hover-marker="${sourceType}" class="trend-hover-marker" cx="0" cy="0" r="${sourceType === 'corrected' ? 5 : 4}"></circle>
+          ${['manual', 'telemetry', 'video_ocr', 'chosen'].map((sourceType) => `
+            <circle data-trend-hover-marker="${sourceType}" class="trend-hover-marker" cx="0" cy="0" r="${sourceType === 'chosen' ? 5 : 4}"></circle>
           `).join('')}
         </g>
         <line x1="${paddingLeft}" y1="${height - paddingBottom}" x2="${width - paddingRight}" y2="${height - paddingBottom}" stroke="rgba(148, 163, 184, 0.34)" stroke-width="1" />
@@ -369,7 +369,7 @@ export function renderTrendPanel(slots, deps) {
             { sourceType: 'manual', name: '人工值' },
             { sourceType: 'telemetry', name: '遥测参考值' },
             { sourceType: 'video_ocr', name: '视频识别值' },
-            { sourceType: 'corrected', name: '采用值' }
+            { sourceType: 'chosen', name: '采用值' }
           ].map((series) => `
             <button type="button" class="trend-legend-item ${realtimeState.trendSeriesVisibility[series.sourceType] === false ? 'muted' : 'active'}" data-trend-series="${escapeAttribute(series.sourceType)}">
               <i style="background:${escapeAttribute(trendSeriesColors[series.sourceType] || '#64748b')}"></i>

@@ -37,11 +37,15 @@ export async function loadRealtimeSlotDetailAction(slotId, deps) {
   if (!slotId || !electronAPI?.getHydrologyRealtimeSlotDetail) {
     realtimeState.selectedSlotId = null
     realtimeState.slotDetail = null
+    realtimeState.slotDetailSource = null
     return
   }
 
   realtimeState.selectedSlotId = slotId
   realtimeState.slotDetail = await electronAPI.getHydrologyRealtimeSlotDetail(slotId)
+  if (!realtimeState.slotDetailSource) {
+    realtimeState.slotDetailSource = 'realtime'
+  }
 }
 
 export async function loadRealtimeSlotsAction(deps) {
@@ -59,6 +63,7 @@ export async function loadRealtimeSlotsAction(deps) {
     realtimeState.slots = []
     realtimeState.selectedSlotId = null
     realtimeState.slotDetail = null
+    realtimeState.slotDetailSource = null
     realtimeState.trend = null
     return
   }
@@ -86,6 +91,7 @@ export async function loadRealtimeSlotsAction(deps) {
     if (!hasSelectedSlot) {
       realtimeState.selectedSlotId = null
       realtimeState.slotDetail = null
+      realtimeState.slotDetailSource = null
     }
     await loadRealtimeTrend()
     if (hasSelectedSlot && realtimeState.selectedSlotId) {
@@ -96,6 +102,7 @@ export async function loadRealtimeSlotsAction(deps) {
     realtimeState.slots = []
     realtimeState.selectedSlotId = null
     realtimeState.slotDetail = null
+    realtimeState.slotDetailSource = null
     realtimeState.trend = null
   }
 }

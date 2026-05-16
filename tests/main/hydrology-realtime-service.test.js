@@ -56,6 +56,7 @@ describe('Hydrology realtime backend', () => {
     expect(detail.telemetryObservations.length).toBe(12)
     expect(detail.telemetryObservations[0].observedAt).toBe(telemetryWindow.first)
     expect(detail.telemetryObservations[11].observedAt).toBe(telemetryWindow.last)
+    expect(detail.slot.chosenSourceType).toBeTruthy()
     expect(detail.anomalies).toEqual([])
   })
 
@@ -107,15 +108,16 @@ describe('Hydrology realtime backend', () => {
       observationType: 'waterLevel'
     }).find((item) => item.id === slot.id)
 
-    expect(refreshed.chosenValue).toBe(4.99)
+    expect(refreshed.chosenValue).toBe(slot.manualValue)
     expect(refreshed.correctedValue).toBe(4.99)
     expect(refreshed.hasAnomaly).toBe(false)
     const detail = realtimeService.getRealtimeSlotDetail(slot.id)
     expect(detail.slot.manualValue).toBe(slot.manualValue)
     expect(detail.slot.correctedValue).toBe(4.99)
+    expect(detail.slot.chosenSourceType).toBe('manual')
     expect(detail.manualObservation?.value).toBe(slot.manualValue)
     expect(detail.correctedObservation?.value).toBe(4.99)
-    expect(detail.anomalies.some((item) => item.anomalyType === 'water_level_hourly_delta_exceeded')).toBe(true)
+    expect(detail.anomalies.some((item) => item.anomalyType === 'water_level_hourly_delta_exceeded')).toBe(false)
   })
 
   it('supports realtime filters and trend queries', async () => {
@@ -243,5 +245,236 @@ describe('Hydrology realtime backend', () => {
     expect(detail.telemetryObservations).toHaveLength(12)
     expect(detail.telemetryObservations[0].observedAt).toBe(telemetryWindow.first)
     expect(detail.telemetryObservations[11].observedAt).toBe(telemetryWindow.last)
+  })
+
+  it('updates source observation and refreshes old/new slot aggregates', async () => {
+    const { HydrologyDatabase } = await import('../../src/main/hydrology/hydrology-database.js')
+    const { StationService } = await import('../../src/main/hydrology/station-service.js')
+    const { RealtimeService, SOURCE_TYPES } = await import('../../src/main/hydrology/realtime-service.js')
+
+    const db = new HydrologyDatabase({
+      userDataPath: 'C:/tmp/cc-desktop-test',
+      Database
+    })
+    db.init()
+
+    const stationService = new StationService(db)
+    const realtimeService = new RealtimeService(db)
+    const station = stationService.saveStation({
+      code: 'HD104',
+      name: '更新测试站',
+      observationTypes: ['waterLevel'],
+      dataSources: {
+        manual: true,
+        telemetry: true,
+        videoOcr: true
+      }
+    })
+
+    const manual = realtimeService.saveObservation({
+      stationId: station.id,
+      observationType: 'waterLevel',
+      sourceType: SOURCE_TYPES.manual,
+      observedAt: '2026-05-15T00:00:00.000Z',
+      value: 5.1,
+      unit: 'm'
+    })
+    realtimeService.saveObservation({
+      stationId: station.id,
+      observationType: 'waterLevel',
+      sourceType: SOURCE_TYPES.telemetry,
+      observedAt: manual.observedAt,
+      value: 5.08,
+      unit: 'm'
+    })
+
+    const slotBefore = realtimeService.listRealtimeSlots({
+      stationId: station.id,
+      observationType: 'waterLevel'
+    }).find((item) => item.slotTime === manual.slotTime)
+
+    expect(slotBefore?.manualValue).toBe(5.1)
+
+    const updated = realtimeService.updateObservation({
+      id: manual.id,
+      observedAt: '2026-05-15T01:00:00.000Z',
+      value: 5.32
+    })
+
+    expect(updated.slotTime).not.toBe(manual.slotTime)
+
+    const slotsAfter = realtimeService.listRealtimeSlots({
+      stationId: station.id,
+      observationType: 'waterLevel'
+    })
+    const oldSlot = slotsAfter.find((item) => item.slotTime === manual.slotTime)
+    const newSlot = slotsAfter.find((item) => item.slotTime === updated.slotTime)
+
+    expect(oldSlot?.manualValue).toBeNull()
+    expect(oldSlot?.missingFlags).toContain('missing_manual')
+    expect(newSlot?.manualValue).toBe(5.32)
+  })
+
+  it('deletes source observation and surfaces missing-source state on rerun', async () => {
+    const { HydrologyDatabase } = await import('../../src/main/hydrology/hydrology-database.js')
+    const { StationService } = await import('../../src/main/hydrology/station-service.js')
+    const { RealtimeService, SOURCE_TYPES } = await import('../../src/main/hydrology/realtime-service.js')
+
+    const db = new HydrologyDatabase({
+      userDataPath: 'C:/tmp/cc-desktop-test',
+      Database
+    })
+    db.init()
+
+    const stationService = new StationService(db)
+    const realtimeService = new RealtimeService(db)
+    const station = stationService.saveStation({
+      code: 'HD105',
+      name: '删除测试站',
+      observationTypes: ['waterLevel'],
+      dataSources: {
+        manual: true,
+        telemetry: true,
+        videoOcr: true
+      }
+    })
+
+    const manual = realtimeService.saveObservation({
+      stationId: station.id,
+      observationType: 'waterLevel',
+      sourceType: SOURCE_TYPES.manual,
+      observedAt: '2026-05-15T00:00:00.000Z',
+      value: 5.22,
+      unit: 'm'
+    })
+    realtimeService.saveObservation({
+      stationId: station.id,
+      observationType: 'waterLevel',
+      sourceType: SOURCE_TYPES.telemetry,
+      observedAt: manual.observedAt,
+      value: 5.2,
+      unit: 'm'
+    })
+    realtimeService.saveObservation({
+      stationId: station.id,
+      observationType: 'waterLevel',
+      sourceType: SOURCE_TYPES.videoOcr,
+      observedAt: '2026-05-15T00:00:00.000Z',
+      value: 5.21,
+      unit: 'm'
+    })
+
+    const slot = realtimeService.listRealtimeSlots({
+      stationId: station.id,
+      observationType: 'waterLevel'
+    }).find((item) => item.slotTime === manual.slotTime)
+
+    expect(slot?.missingFlags).toEqual([])
+
+    realtimeService.deleteObservation(manual.id)
+
+    const refreshed = realtimeService.listRealtimeSlots({
+      stationId: station.id,
+      observationType: 'waterLevel'
+    }).find((item) => item.slotTime === manual.slotTime)
+
+    expect(refreshed?.manualValue).toBeNull()
+    expect(refreshed?.missingFlags).toContain('missing_manual')
+
+    const detail = realtimeService.getRealtimeSlotDetail(refreshed.id)
+    expect(detail.manualObservation).toBeNull()
+    expect(detail.sourceObservations.some((item) => item.id === manual.id)).toBe(false)
+    expect(detail.anomalies.filter((item) => item.anomalyType === 'missing_manual')).toHaveLength(1)
+
+    realtimeService.saveObservation({
+      stationId: station.id,
+      observationType: 'waterLevel',
+      sourceType: SOURCE_TYPES.manual,
+      observedAt: manual.observedAt,
+      value: 5.24,
+      unit: 'm'
+    })
+
+    const restored = realtimeService.listRealtimeSlots({
+      stationId: station.id,
+      observationType: 'waterLevel'
+    }).find((item) => item.slotTime === manual.slotTime)
+    const restoredDetail = realtimeService.getRealtimeSlotDetail(restored.id)
+
+    expect(restoredDetail.manualObservation?.value).toBe(5.24)
+    expect(restoredDetail.anomalies.some((item) => item.anomalyType === 'missing_manual')).toBe(false)
+  })
+
+  it('clears slot telemetry representative value when the top-of-hour telemetry is deleted', async () => {
+    const { HydrologyDatabase } = await import('../../src/main/hydrology/hydrology-database.js')
+    const { StationService } = await import('../../src/main/hydrology/station-service.js')
+    const { RealtimeService, SOURCE_TYPES } = await import('../../src/main/hydrology/realtime-service.js')
+
+    const db = new HydrologyDatabase({
+      userDataPath: 'C:/tmp/cc-desktop-test',
+      Database
+    })
+    db.init()
+
+    const stationService = new StationService(db)
+    const realtimeService = new RealtimeService(db)
+    const station = stationService.saveStation({
+      code: 'HD106',
+      name: '遥测代表值站',
+      observationTypes: ['waterLevel'],
+      dataSources: {
+        manual: false,
+        telemetry: true,
+        videoOcr: true
+      }
+    })
+
+    const slotAnchor = new Date('2026-05-15T22:00:00+08:00')
+    for (let minutesBefore = 55; minutesBefore >= 0; minutesBefore -= 5) {
+      const observedAt = new Date(slotAnchor.getTime() - minutesBefore * 60 * 1000)
+      realtimeService.saveObservation({
+        stationId: station.id,
+        observationType: 'waterLevel',
+        sourceType: SOURCE_TYPES.telemetry,
+        observedAt: observedAt.toISOString(),
+        slotTime: '2026-05-15 22:00',
+        value: Number((7 + (55 - minutesBefore) * 0.01).toFixed(2)),
+        unit: 'm'
+      })
+    }
+    realtimeService.saveObservation({
+      stationId: station.id,
+      observationType: 'waterLevel',
+      sourceType: SOURCE_TYPES.videoOcr,
+      observedAt: '2026-05-15T22:02:00+08:00',
+      slotTime: '2026-05-15 22:00',
+      value: 7.08,
+      unit: 'm'
+    })
+
+    const slotBefore = realtimeService.listRealtimeSlots({
+      stationId: station.id,
+      observationType: 'waterLevel'
+    })[0]
+    expect(slotBefore.telemetryValue).toBe(7.55)
+    expect(slotBefore.chosenValue).toBe(7.55)
+
+    const detailBefore = realtimeService.getRealtimeSlotDetail(slotBefore.id)
+    const topOfHourTelemetry = detailBefore.telemetryObservations.find((item) => item.observedAt === '2026-05-15T14:00:00.000Z')
+    expect(topOfHourTelemetry?.value).toBe(7.55)
+
+    realtimeService.deleteObservation(topOfHourTelemetry.id)
+
+    const slotAfter = realtimeService.listRealtimeSlots({
+      stationId: station.id,
+      observationType: 'waterLevel'
+    })[0]
+    expect(slotAfter.telemetryValue).toBeNull()
+    expect(slotAfter.chosenValue).toBe(7.08)
+    expect(slotAfter.missingFlags).toContain('missing_telemetry')
+
+    const detailAfter = realtimeService.getRealtimeSlotDetail(slotAfter.id)
+    expect(detailAfter.telemetryObservations).toHaveLength(11)
+    expect(detailAfter.telemetryObservations.some((item) => item.observedAt === '2026-05-15T14:00:00.000Z')).toBe(false)
   })
 })

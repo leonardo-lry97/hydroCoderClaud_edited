@@ -33,7 +33,7 @@ const trendSeriesColors = {
   manual: '#2563eb',
   telemetry: '#0f766e',
   video_ocr: '#d97706',
-  corrected: '#dc2626'
+  chosen: '#dc2626'
 }
 
 const realtimeState = {
@@ -46,7 +46,7 @@ const realtimeState = {
     manual: true,
     telemetry: true,
     video_ocr: true,
-    corrected: true
+    chosen: true
   },
   trend: {
     series: [
@@ -105,7 +105,7 @@ function createDeps() {
       { key: 'manualValue', sourceType: 'manual', name: '人工值' },
       { key: 'telemetryValue', sourceType: 'telemetry', name: '遥测参考值' },
       { key: 'videoOcrValue', sourceType: 'video_ocr', name: '视频识别值' },
-      { key: 'chosenValue', sourceType: 'corrected', name: '采用值' }
+      { key: 'chosenValue', sourceType: 'chosen', name: '采用值' }
     ],
     getVisibleTrendRange: (sortedSlots) => getVisibleTrendRange(sortedSlots, realtimeState),
     isTrendKeyTimestamp,

@@ -1142,6 +1142,59 @@ p {
   font-size: 12px;
 }
 
+.inline-observation-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.inline-observation-meta {
+  color: var(--text-color-muted);
+  font-size: 12px;
+}
+
+.inline-observation-fields {
+  display: block;
+}
+
+.source-edit-input {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-color-secondary);
+  color: var(--text-color);
+  font-size: 12px;
+  outline: none;
+}
+
+.source-edit-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.12);
+}
+
+.source-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.telemetry-row {
+  grid-template-columns: minmax(180px, 1.2fr) 100px minmax(120px, 0.8fr) minmax(160px, auto);
+  align-items: center;
+}
+
+.telemetry-inline-time,
+.telemetry-inline-value {
+  display: grid;
+  gap: 6px;
+}
+
+.telemetry-inline-actions {
+  justify-content: flex-end;
+}
+
 .correction-form .form-grid {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr);
   align-items: start;

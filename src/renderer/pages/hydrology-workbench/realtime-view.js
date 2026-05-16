@@ -9,6 +9,48 @@ export function renderRealtimeDetailModalView(detail, deps = {}) {
   } = deps
 
   if (!detail) return ''
+  const slotTelemetryRows = buildTelemetrySlotRows(detail.slot.slotTime, detail.telemetryObservations)
+  const renderInlineObservationEditor = (observation, emptyText, sourceLabel) => {
+    if (!observation?.id) {
+      const sourceType = sourceLabel.includes('视频') ? 'video_ocr' : 'manual'
+      return `
+        <div class="inline-observation-editor">
+          <div class="inline-observation-meta">${escapeHtml(emptyText)}</div>
+          <div class="inline-observation-fields">
+            <input
+              type="number"
+              step="0.01"
+              class="source-edit-input"
+              data-source-create-value="${escapeHtml(sourceType)}"
+              placeholder="输入补录值"
+            >
+          </div>
+          <div class="source-row-actions">
+            <button type="button" class="secondary-action compact-action" data-source-create="${escapeHtml(sourceType)}">补录</button>
+          </div>
+        </div>
+      `
+    }
+
+    return `
+      <div class="inline-observation-editor">
+        <div class="inline-observation-meta">${escapeHtml(sourceLabel)}</div>
+        <div class="inline-observation-fields">
+          <input
+            type="number"
+            step="0.01"
+            class="source-edit-input"
+            data-source-edit-value="${escapeHtml(observation.id)}"
+            value="${escapeHtml(String(observation.value ?? ''))}"
+          >
+        </div>
+        <div class="source-row-actions">
+          <button type="button" class="secondary-action compact-action" data-source-save="${escapeHtml(observation.id)}">保存</button>
+          <button type="button" class="danger-action compact-action" data-source-delete="${escapeHtml(observation.id)}">删除</button>
+        </div>
+      </div>
+    `
+  }
   return `
     <div id="realtimeDetailOverlay" class="realtime-detail-overlay">
       <div class="realtime-detail-card" role="dialog" aria-modal="true" aria-labelledby="realtimeDetailTitle">
@@ -24,23 +66,28 @@ export function renderRealtimeDetailModalView(detail, deps = {}) {
             <label>采用值</label>
             <strong>${detail.slot.chosenValue ?? '--'}</strong>
             <span>${escapeHtml(describeObservationType(detail.slot.observationType))}</span>
+            <span>${escapeHtml(describeChosenSourceType(detail.slot.chosenSourceType))}</span>
           </div>
           <div class="detail-card">
             <label>人工值</label>
             <strong>${detail.manualObservation?.value ?? '--'}</strong>
-            <span>${escapeHtml(detail.manualObservation?.observedAt ? formatDateTimeLabel(detail.manualObservation.observedAt) : '无人工记录')}</span>
-          </div>
-          <div class="detail-card">
-            <label>人工修正值</label>
-            <strong>${detail.correctedObservation?.value ?? detail.slot.correctedValue ?? '--'}</strong>
-            <span>${escapeHtml(detail.correctedObservation?.observedAt ? formatDateTimeLabel(detail.correctedObservation.observedAt) : '无修正记录')}</span>
+            ${renderInlineObservationEditor(
+              detail.manualObservation,
+              '无人工记录',
+              detail.manualObservation?.observedAt ? formatDateTimeLabel(detail.manualObservation.observedAt) : '人工来源'
+            )}
           </div>
           <div class="detail-card">
             <label>视频识别</label>
             <strong>${detail.videoOcrObservation?.value ?? '--'}</strong>
-            <span>${escapeHtml(detail.videoOcrObservation?.observedAt ? formatDateTimeLabel(detail.videoOcrObservation.observedAt) : '无识别记录')}</span>
+            ${renderInlineObservationEditor(
+              detail.videoOcrObservation,
+              '无识别记录',
+              detail.videoOcrObservation?.observedAt ? formatDateTimeLabel(detail.videoOcrObservation.observedAt) : '视频识别来源'
+            )}
           </div>
         </div>
+        ${realtimeState.observationMutationError ? `<div class="inline-error">${escapeHtml(realtimeState.observationMutationError)}</div>` : ''}
         <div class="section-title">异常命中</div>
         ${(detail.anomalies || []).length > 0 ? `
           <div class="data-surface compact-surface">
@@ -56,30 +103,76 @@ export function renderRealtimeDetailModalView(detail, deps = {}) {
         ` : '<div class="empty-state compact">当前时槽未发现需要提示的异常。</div>'}
         <div class="section-title">5 分钟遥测明细</div>
         <div class="data-surface compact-surface">
-          ${(detail.telemetryObservations || []).length > 0 ? detail.telemetryObservations.map((item) => `
+          ${slotTelemetryRows.length > 0 ? slotTelemetryRows.map((item) => `
             <div class="data-row telemetry-row">
-              <strong>${escapeHtml(formatDateTimeLabel(item.observedAt))}</strong>
+              <div class="telemetry-inline-time">
+                <strong>${escapeHtml(formatDateTimeLabel(item.observedAt))}</strong>
+              </div>
               <span>遥测</span>
-              <span>${item.value ?? '--'}</span>
-              <em>原始明细</em>
+              <div class="telemetry-inline-value">
+                ${item.id ? `
+                  <input
+                    type="number"
+                    step="0.01"
+                    class="source-edit-input"
+                    data-source-edit-value="${escapeHtml(item.id)}"
+                    value="${escapeHtml(String(item.value ?? ''))}"
+                  >
+                ` : `
+                  <input
+                    type="number"
+                    step="0.01"
+                    class="source-edit-input"
+                    data-source-create-telemetry="${escapeHtml(item.observedAt)}"
+                    placeholder="输入补录值"
+                  >
+                `}
+              </div>
+              <div class="source-row-actions telemetry-inline-actions">
+                ${item.id ? `
+                  <button type="button" class="secondary-action compact-action" data-source-save="${escapeHtml(item.id)}">保存</button>
+                  <button type="button" class="danger-action compact-action" data-source-delete="${escapeHtml(item.id)}">删除</button>
+                ` : `
+                  <button
+                    type="button"
+                    class="secondary-action compact-action"
+                    data-source-create-slot="telemetry"
+                    data-source-create-observed-at="${escapeHtml(item.observedAt)}"
+                  >
+                    补录
+                  </button>
+                `}
+              </div>
             </div>
           `).join('') : '<div class="empty-state compact">当前时槽没有 5 分钟遥测明细。</div>'}
         </div>
-        <form id="realtimeCorrectionForm" class="correction-form">
-          <div class="section-title">人工修正</div>
-          <div class="form-grid compact">
-            <label>修正前值<input name="beforeValue" type="number" step="0.01" value="${detail.slot.chosenValue ?? detail.manualObservation?.value ?? ''}" readonly></label>
-            <label>修正后值<input name="afterValue" type="number" step="0.01" placeholder="输入修正值"></label>
-            <label class="span-2">修正原因<input name="reason" type="text" placeholder="例如：人工复核确认录入有误"></label>
-          </div>
-          ${realtimeState.correctionError ? `<div class="form-error">${escapeHtml(realtimeState.correctionError)}</div>` : ''}
-          <div class="form-actions">
-            <button type="submit" class="primary-action">提交修正</button>
-          </div>
-        </form>
       </div>
     </div>
   `
+}
+
+function buildTelemetrySlotRows(slotTime, observations = []) {
+  const slotDate = new Date(String(slotTime || '').replace(' ', 'T'))
+  if (Number.isNaN(slotDate.getTime())) {
+    return Array.isArray(observations) ? observations : []
+  }
+
+  const observationMap = new Map(
+    (Array.isArray(observations) ? observations : []).map((item) => [item.observedAt, item])
+  )
+
+  const rows = []
+  for (let minutesBefore = 0; minutesBefore <= 55; minutesBefore += 5) {
+    const observedAt = new Date(slotDate.getTime() - minutesBefore * 60 * 1000).toISOString()
+    const existing = observationMap.get(observedAt)
+    rows.push(existing || {
+      id: null,
+      sourceType: 'telemetry',
+      observedAt,
+      value: null
+    })
+  }
+  return rows
 }
 
 function describeSeverity(value) {
@@ -107,6 +200,13 @@ function describeEvaluationStatus(value) {
 function getEvaluationSeverityLabel(item) {
   if (!item || (item.status !== 'hit' && item.status !== 'error')) return '--'
   return item.severity ? describeSeverity(item.severity) : '--'
+}
+
+function describeChosenSourceType(value) {
+  if (value === 'manual') return '采用值来源：人工值'
+  if (value === 'telemetry') return '采用值来源：遥测值'
+  if (value === 'video_ocr') return '采用值来源：视频识别值'
+  return '采用值来源：未确定'
 }
 
 export function renderSlotCheckResultModalView(result, deps = {}) {
@@ -504,17 +604,20 @@ export function renderRealtimeViewSection(station, deps = {}) {
     bindTrendChartHover,
     bindTrendViewportInteractions,
     submitRealtimeCorrection,
+    mutateRealtimeObservation,
     runSlotQualityCheck,
-    openReviewTaskBoard
+    openReviewTaskBoard,
+    closeRealtimeDetail
   } = deps
 
   const slots = sortRealtimeSlots(realtimeState.slots)
+  const tableSlots = [...slots].reverse()
   const pageSize = realtimeState.pageSize || 10
-  const totalPages = Math.max(1, Math.ceil(slots.length / pageSize))
+  const totalPages = Math.max(1, Math.ceil(tableSlots.length / pageSize))
   const currentPage = Math.min(Math.max(realtimeState.page || 1, 1), totalPages)
   realtimeState.page = currentPage
   const pageStart = (currentPage - 1) * pageSize
-  const pagedSlots = slots.slice(pageStart, pageStart + pageSize)
+  const pagedSlots = tableSlots.slice(pageStart, pageStart + pageSize)
   const detail = realtimeState.slotDetail
   const slotCheckResult = realtimeState.slotCheckResult
   const canViewAirTemperature = station.observationTypes?.includes(observationTypes.airTemperature)
@@ -554,11 +657,11 @@ export function renderRealtimeViewSection(station, deps = {}) {
       ${realtimeState.error ? `<div class="inline-error">${escapeHtml(realtimeState.error)}</div>` : ''}
       ${renderTrendPanel(slots)}
       <section class="realtime-table-panel">
-        <div class="realtime-table-head">
+          <div class="realtime-table-head">
           <div class="section-title">时槽二维表</div>
-          <div class="table-page-meta">第 ${currentPage} / ${totalPages} 页 · 共 ${slots.length} 条</div>
+          <div class="table-page-meta">第 ${currentPage} / ${totalPages} 页 · 共 ${tableSlots.length} 条</div>
         </div>
-        ${slots.length === 0 ? '<div class="empty-state compact">暂无实时数据，请先生成演示数据。</div>' : `
+        ${tableSlots.length === 0 ? '<div class="empty-state compact">暂无实时数据，请先生成演示数据。</div>' : `
           <div class="realtime-table-shell">
             <table class="realtime-table">
               <thead>
@@ -660,6 +763,7 @@ export function renderRealtimeViewSection(station, deps = {}) {
 
   tabContentEl.querySelectorAll('[data-slot-id]').forEach((button) => {
     button.addEventListener('click', async () => {
+      realtimeState.slotDetailSource = 'realtime'
       await loadRealtimeSlotDetail(button.dataset.slotId)
       renderWorkbench()
     })
@@ -719,24 +823,66 @@ export function renderRealtimeViewSection(station, deps = {}) {
   bindTrendViewportInteractions(slots)
 
   document.getElementById('closeRealtimeDetailBtn')?.addEventListener('click', () => {
-    realtimeState.selectedSlotId = null
-    realtimeState.slotDetail = null
-    realtimeState.correctionError = ''
-    renderWorkbench()
+    closeRealtimeDetail()
   })
 
   document.getElementById('realtimeDetailOverlay')?.addEventListener('click', (event) => {
     if (event.target.id === 'realtimeDetailOverlay') {
-      realtimeState.selectedSlotId = null
-      realtimeState.slotDetail = null
-      realtimeState.correctionError = ''
-      renderWorkbench()
+      closeRealtimeDetail()
     }
   })
 
   document.getElementById('realtimeCorrectionForm')?.addEventListener('submit', async (event) => {
     event.preventDefault()
     await submitRealtimeCorrection(event.currentTarget)
+  })
+
+  tabContentEl.querySelectorAll('[data-source-save]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      const observationId = button.dataset.sourceSave
+      const valueInput = tabContentEl.querySelector(`[data-source-edit-value="${escapeAttribute(observationId)}"]`)
+      await mutateRealtimeObservation({
+        id: observationId,
+        value: valueInput?.value
+      }, 'update')
+    })
+  })
+
+  tabContentEl.querySelectorAll('[data-source-delete]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      await mutateRealtimeObservation({
+        id: button.dataset.sourceDelete
+      }, 'delete')
+    })
+  })
+
+  tabContentEl.querySelectorAll('[data-source-create]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      const sourceType = button.dataset.sourceCreate
+      const valueInput = tabContentEl.querySelector(`[data-source-create-value="${escapeAttribute(sourceType)}"]`)
+      await mutateRealtimeObservation({
+        sourceType,
+        value: valueInput?.value
+      }, 'create')
+    })
+  })
+
+  tabContentEl.querySelectorAll('[data-source-create-slot]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      const sourceType = button.dataset.sourceCreateSlot
+      const observedAt = button.dataset.sourceCreateObservedAt
+      const valueInput = tabContentEl.querySelector(`[data-source-create-telemetry="${escapeAttribute(observedAt)}"]`)
+      await mutateRealtimeObservation({
+        sourceType,
+        observedAt,
+        slotTime: realtimeState.slotDetail?.slot?.slotTime,
+        value: valueInput?.value
+      }, 'create')
+    })
   })
 
   document.getElementById('closeSlotCheckResultBtn')?.addEventListener('click', () => {

@@ -99,7 +99,7 @@ const TREND_SERIES_COLORS = {
   manual: '#2563eb',
   telemetry: '#0f766e',
   video_ocr: '#d97706',
-  corrected: '#dc2626'
+  chosen: '#dc2626'
 }
 
 let stations = []
@@ -120,18 +120,20 @@ let realtimeState = {
     manual: true,
     telemetry: true,
     video_ocr: true,
-    corrected: true
+    chosen: true
   },
   slots: [],
   page: 1,
   pageSize: 10,
   selectedSlotId: null,
   slotDetail: null,
+  slotDetailSource: null,
   trend: null,
   trendHoverModel: null,
   error: '',
   trendError: '',
   correctionError: '',
+  observationMutationError: '',
   slotCheckResult: null
 }
 let reviewState = {
@@ -139,6 +141,8 @@ let reviewState = {
   statusFilter: 'all',
   tasks: [],
   selectedTaskId: null,
+  page: 1,
+  pageSize: 10,
   error: '',
   runSummary: null,
   lastSlotCheck: null
@@ -292,14 +296,15 @@ function renderRuleConfigView(station) {
 }
 
 function renderReviewTaskView(station) {
-  tabContentEl.innerHTML = renderReviewView(station, reviewState, {
+  tabContentEl.innerHTML = `${renderReviewView(station, reviewState, {
     describeObservationType
-  })
+  })}${renderRealtimeDetailModal(realtimeState.slotDetail)}`
 
   tabContentEl.querySelectorAll('[data-review-observation-type]').forEach((button) => {
     button.addEventListener('click', async () => {
       reviewState.selectedObservationType = button.dataset.reviewObservationType
       reviewState.selectedTaskId = null
+      reviewState.page = 1
       reviewState.lastSlotCheck = null
       await loadReviewTasks()
       renderWorkbench()
@@ -312,6 +317,7 @@ function renderReviewTaskView(station) {
     const formData = new FormData(event.currentTarget)
     reviewState.statusFilter = String(formData.get('status') || 'all').trim() || 'all'
     reviewState.selectedTaskId = null
+    reviewState.page = 1
     reviewState.lastSlotCheck = null
     await loadReviewTasks()
     renderWorkbench()
@@ -328,6 +334,7 @@ function renderReviewTaskView(station) {
   document.getElementById('reviewClearSlotFocusBtn')?.addEventListener('click', async () => {
     reviewState.lastSlotCheck = null
     reviewState.selectedTaskId = null
+    reviewState.page = 1
     await loadReviewTasks()
     renderWorkbench()
     notifyAgentContextChanged()
@@ -339,6 +346,26 @@ function renderReviewTaskView(station) {
       renderWorkbench()
       notifyAgentContextChanged()
     })
+  })
+
+  tabContentEl.querySelectorAll('[data-review-page-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (button.dataset.reviewPageAction === 'prev' && reviewState.page > 1) {
+        reviewState.page -= 1
+      }
+      if (button.dataset.reviewPageAction === 'next') {
+        reviewState.page += 1
+      }
+      renderWorkbench()
+      notifyAgentContextChanged()
+    })
+  })
+
+  document.getElementById('reviewPageSizeSelect')?.addEventListener('change', (event) => {
+    reviewState.pageSize = Number(event.target.value) || 10
+    reviewState.page = 1
+    renderWorkbench()
+    notifyAgentContextChanged()
   })
 
   tabContentEl.querySelectorAll('[data-review-open-slot]').forEach((button) => {
@@ -361,6 +388,64 @@ function renderReviewTaskView(station) {
     await loadReviewTasks()
     renderWorkbench()
     notifyAgentContextChanged()
+  })
+
+  document.getElementById('closeRealtimeDetailBtn')?.addEventListener('click', () => {
+    closeRealtimeDetail()
+  })
+
+  document.getElementById('realtimeDetailOverlay')?.addEventListener('click', (event) => {
+    if (event.target.id === 'realtimeDetailOverlay') {
+      closeRealtimeDetail()
+    }
+  })
+
+  tabContentEl.querySelectorAll('[data-source-save]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      const observationId = button.dataset.sourceSave
+      const valueInput = tabContentEl.querySelector(`[data-source-edit-value="${escapeAttribute(observationId)}"]`)
+      await mutateRealtimeObservation({
+        id: observationId,
+        value: valueInput?.value
+      }, 'update')
+    })
+  })
+
+  tabContentEl.querySelectorAll('[data-source-delete]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      await mutateRealtimeObservation({
+        id: button.dataset.sourceDelete
+      }, 'delete')
+    })
+  })
+
+  tabContentEl.querySelectorAll('[data-source-create]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      const sourceType = button.dataset.sourceCreate
+      const valueInput = tabContentEl.querySelector(`[data-source-create-value="${escapeAttribute(sourceType)}"]`)
+      await mutateRealtimeObservation({
+        sourceType,
+        value: valueInput?.value
+      }, 'create')
+    })
+  })
+
+  tabContentEl.querySelectorAll('[data-source-create-slot]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation()
+      const sourceType = button.dataset.sourceCreateSlot
+      const observedAt = button.dataset.sourceCreateObservedAt
+      const valueInput = tabContentEl.querySelector(`[data-source-create-telemetry="${escapeAttribute(observedAt)}"]`)
+      await mutateRealtimeObservation({
+        sourceType,
+        observedAt,
+        slotTime: realtimeState.slotDetail?.slot?.slotTime,
+        value: valueInput?.value
+      }, 'create')
+    })
   })
 }
 
@@ -514,7 +599,7 @@ function getTrendVisibleSeries() {
     { key: 'manualValue', sourceType: 'manual', name: '人工值' },
     { key: 'telemetryValue', sourceType: 'telemetry', name: '遥测参考值' },
     { key: 'videoOcrValue', sourceType: 'video_ocr', name: '视频识别值' },
-    { key: 'chosenValue', sourceType: 'corrected', name: '采用值' }
+    { key: 'chosenValue', sourceType: 'chosen', name: '采用值' }
   ].filter((item) => realtimeState.trendSeriesVisibility[item.sourceType] !== false)
 }
 
@@ -667,9 +752,23 @@ function renderRealtimeView(station) {
     bindTrendChartHover,
     bindTrendViewportInteractions,
     submitRealtimeCorrection,
+    mutateRealtimeObservation,
     runSlotQualityCheck,
-    openReviewTaskBoard
+    openReviewTaskBoard,
+    closeRealtimeDetail
   })
+}
+
+function closeRealtimeDetail() {
+  const source = realtimeState.slotDetailSource
+  realtimeState.selectedSlotId = null
+  realtimeState.slotDetail = null
+  realtimeState.slotDetailSource = null
+  realtimeState.correctionError = ''
+  if (source === 'review') {
+    activeFunctionKey = 'review'
+  }
+  renderWorkbench()
 }
 
 function renderTabContent(station) {
@@ -797,7 +896,7 @@ async function openReviewTaskSlot(taskId, slotTime) {
 
   reviewState.selectedTaskId = taskId
   realtimeState.selectedObservationType = reviewState.selectedObservationType
-  activeFunctionKey = 'realtime'
+  realtimeState.slotDetailSource = 'review'
 
   try {
     await loadRealtimeSlots()
@@ -810,7 +909,7 @@ async function openReviewTaskSlot(taskId, slotTime) {
     notifyAgentContextChanged()
   } catch (err) {
     reviewState.error = err?.message || String(err)
-    activeFunctionKey = 'review'
+    realtimeState.slotDetailSource = null
     renderWorkbench()
   }
 }
@@ -869,6 +968,8 @@ async function loadReviewTasks() {
       status: reviewState.statusFilter
     })
     reviewState.tasks = Array.isArray(tasks) ? tasks : []
+    const totalPages = Math.max(1, Math.ceil(reviewState.tasks.length / (reviewState.pageSize || 10)))
+    reviewState.page = Math.min(Math.max(reviewState.page || 1, 1), totalPages)
     if (!reviewState.tasks.some((item) => item.id === reviewState.selectedTaskId)) {
       reviewState.selectedTaskId = reviewState.tasks[0]?.id || null
     }
@@ -1012,6 +1113,48 @@ async function submitRealtimeCorrection(form) {
     notifyAgentContextChanged()
   } catch (err) {
     realtimeState.correctionError = err?.message || String(err)
+    renderWorkbench()
+  }
+}
+
+async function mutateRealtimeObservation(payload = {}, mode = 'update') {
+  const station = getSelectedStation()
+  const detail = realtimeState.slotDetail
+  if (!station || !detail) return
+
+  realtimeState.observationMutationError = ''
+  realtimeState.slotCheckResult = null
+  try {
+    if (mode === 'delete') {
+      if (!window.electronAPI?.deleteHydrologyRealtimeObservation) return
+      await window.electronAPI.deleteHydrologyRealtimeObservation(payload.id)
+    } else if (mode === 'create') {
+      if (!window.electronAPI?.createHydrologyRealtimeObservation) return
+      await window.electronAPI.createHydrologyRealtimeObservation({
+        stationId: station.id,
+        observationType: detail.slot.observationType,
+        slotTime: payload.slotTime || detail.slot.slotTime,
+        observedAt: payload.observedAt || detail.slot.slotTime,
+        sourceType: payload.sourceType,
+        value: payload.value
+      })
+    } else {
+      if (!window.electronAPI?.updateHydrologyRealtimeObservation) return
+      await window.electronAPI.updateHydrologyRealtimeObservation(payload)
+    }
+    await loadRealtimeSlots()
+    const matchedSlot = realtimeState.slots.find((item) => item.id === detail.slot.id) || null
+    if (matchedSlot) {
+      realtimeState.selectedSlotId = matchedSlot.id
+      await loadRealtimeSlotDetail(matchedSlot.id)
+    } else {
+      realtimeState.selectedSlotId = null
+      realtimeState.slotDetail = null
+    }
+    renderWorkbench()
+    notifyAgentContextChanged()
+  } catch (err) {
+    realtimeState.observationMutationError = err?.message || String(err)
     renderWorkbench()
   }
 }

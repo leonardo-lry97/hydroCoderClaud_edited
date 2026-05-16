@@ -201,6 +201,36 @@ class HydrologyDatabase {
     `).get(id)
   }
 
+  updateObservation(observation) {
+    const now = Date.now()
+    this.db.prepare(`
+      UPDATE hydrology_observations
+      SET observed_at = ?, slot_time = ?, value = ?, unit = ?, source_ref_id = ?,
+          governance_status = ?, review_status = ?, quality_flag = ?, metadata = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      observation.observedAt,
+      observation.slotTime,
+      observation.value,
+      observation.unit || null,
+      observation.sourceRefId || null,
+      observation.governanceStatus,
+      observation.reviewStatus,
+      observation.qualityFlag,
+      JSON.stringify(observation.metadata || {}),
+      now,
+      observation.id
+    )
+    return this.getObservationById(observation.id)
+  }
+
+  deleteObservation(id) {
+    return this.db.prepare(`
+      DELETE FROM hydrology_observations
+      WHERE id = ?
+    `).run(id)
+  }
+
   listObservationsBySlot(stationId, observationType, slotTime) {
     return this.db.prepare(`
       SELECT * FROM hydrology_observations
@@ -275,6 +305,13 @@ class HydrologyDatabase {
       SELECT * FROM hydrology_observation_slots
       WHERE id = ?
     `).get(id)
+  }
+
+  deleteObservationSlotById(id) {
+    return this.db.prepare(`
+      DELETE FROM hydrology_observation_slots
+      WHERE id = ?
+    `).run(id)
   }
 
   listObservationSlots(stationId, observationType = null) {
