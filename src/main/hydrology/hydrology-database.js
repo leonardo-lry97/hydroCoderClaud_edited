@@ -588,6 +588,25 @@ class HydrologyDatabase {
     return this.getReviewTaskById(taskId)
   }
 
+  deleteReviewTask(taskId) {
+    return this.db.prepare(`
+      DELETE FROM hydrology_review_tasks
+      WHERE id = ?
+    `).run(taskId)
+  }
+
+  deleteReviewTasks(taskIds = []) {
+    const ids = Array.isArray(taskIds) ? taskIds.map((item) => String(item || '').trim()).filter(Boolean) : []
+    let deletedCount = 0
+    ids.forEach((taskId) => {
+      deletedCount += this.deleteReviewTask(taskId)?.changes || 0
+    })
+    return {
+      deletedCount,
+      taskIds: ids
+    }
+  }
+
   listStations() {
     return this.db.prepare(`
       SELECT * FROM hydrology_stations

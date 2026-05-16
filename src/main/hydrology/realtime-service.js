@@ -299,6 +299,16 @@ function getChosenSourceType({ manual, telemetry, videoOcr }) {
   return null
 }
 
+function toSlotDeleteSourceTypes(sourceTypes = []) {
+  const allowed = new Set([SOURCE_TYPES.manual, SOURCE_TYPES.videoOcr, SOURCE_TYPES.corrected])
+  const normalized = Array.isArray(sourceTypes)
+    ? sourceTypes.map((item) => String(item || '').trim()).filter((item) => allowed.has(item))
+    : []
+  return normalized.length > 0
+    ? Array.from(new Set(normalized))
+    : [SOURCE_TYPES.manual, SOURCE_TYPES.videoOcr, SOURCE_TYPES.corrected]
+}
+
 class RealtimeService {
   constructor(hydrologyDatabase, options = {}) {
     this.db = hydrologyDatabase
@@ -315,6 +325,25 @@ class RealtimeService {
       if (existingSlot?.id) {
         this.db.deleteObservationSlotById(existingSlot.id)
       }
+      this.reviewTaskService?.syncSlotReviewTasks({
+        station: parseStationRow(this.db.getStationById?.(stationId)),
+        slot: {
+          stationId,
+          observationType,
+          slotTime,
+          chosenValue: null,
+          manualValue: null,
+          correctedValue: null,
+          telemetryValue: null,
+          videoOcrValue: null,
+          compareStatus: COMPARE_STATUS.notCompared,
+          missingFlags: []
+        },
+        previousSlot: null,
+        observations: [],
+        expectedSources: {},
+        stationRules: {}
+      })
       return null
     }
 
@@ -371,6 +400,33 @@ class RealtimeService {
       observationType: parsed.observationType,
       slotTime: parsed.slotTime,
       sourceType: parsed.sourceType
+    }
+  }
+
+  deleteSlotObservations(input = {}) {
+    const stationId = String(input.stationId || '').trim()
+    const observationType = String(input.observationType || '').trim()
+    const slotTime = normalizeSlotTimeValue(input.slotTime)
+    if (!stationId) throw new Error('站点 ID 不能为空')
+    if (!observationType) throw new Error('观测类型不能为空')
+    if (!slotTime) throw new Error('时槽时间不能为空')
+
+    const sourceTypes = toSlotDeleteSourceTypes(input.sourceTypes)
+    const observations = this.db.listObservationsBySlot(stationId, observationType, slotTime).map(parseRow)
+    const deletable = observations.filter((item) => sourceTypes.includes(item.sourceType))
+
+    deletable.forEach((item) => {
+      this.db.deleteObservation(item.id)
+    })
+
+    this.refreshSlotState(stationId, observationType, slotTime)
+    return {
+      stationId,
+      observationType,
+      slotTime,
+      deletedCount: deletable.length,
+      deletedObservationIds: deletable.map((item) => item.id),
+      deletedSourceTypes: sourceTypes
     }
   }
 

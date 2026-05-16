@@ -98,6 +98,26 @@ class ReviewTaskService {
     }
     return parsed
   }
+
+  deleteReviewTask(taskId) {
+    const id = String(taskId || '').trim()
+    if (!id) throw new Error('审核任务 ID 不能为空')
+    return {
+      taskId: id,
+      deleted: (this.db.deleteReviewTask(id)?.changes || 0) > 0
+    }
+  }
+
+  deleteReviewTasks(taskIds = []) {
+    const ids = Array.isArray(taskIds) ? taskIds.map((item) => String(item || '').trim()).filter(Boolean) : []
+    if (ids.length === 0) {
+      return {
+        deletedCount: 0,
+        taskIds: []
+      }
+    }
+    return this.db.deleteReviewTasks(ids)
+  }
 }
 
 module.exports = {

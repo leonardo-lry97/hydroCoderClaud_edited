@@ -477,4 +477,90 @@ describe('Hydrology realtime backend', () => {
     expect(detailAfter.telemetryObservations).toHaveLength(11)
     expect(detailAfter.telemetryObservations.some((item) => item.observedAt === '2026-05-15T14:00:00.000Z')).toBe(false)
   })
+
+  it('deletes slot-level non-telemetry sources without removing telemetry detail rows', async () => {
+    const { HydrologyDatabase } = await import('../../src/main/hydrology/hydrology-database.js')
+    const { StationService } = await import('../../src/main/hydrology/station-service.js')
+    const { RealtimeService, SOURCE_TYPES } = await import('../../src/main/hydrology/realtime-service.js')
+
+    const db = new HydrologyDatabase({
+      userDataPath: 'C:/tmp/cc-desktop-test',
+      Database
+    })
+    db.init()
+
+    const stationService = new StationService(db)
+    const realtimeService = new RealtimeService(db)
+    const station = stationService.saveStation({
+      code: 'HD107',
+      name: '时槽删除站',
+      observationTypes: ['waterLevel'],
+      dataSources: {
+        manual: true,
+        telemetry: true,
+        videoOcr: true
+      }
+    })
+
+    realtimeService.saveObservation({
+      stationId: station.id,
+      observationType: 'waterLevel',
+      sourceType: SOURCE_TYPES.manual,
+      observedAt: '2026-05-15T00:00:00.000Z',
+      slotTime: '2026-05-15 08:00',
+      value: 6.2,
+      unit: 'm'
+    })
+    realtimeService.saveObservation({
+      stationId: station.id,
+      observationType: 'waterLevel',
+      sourceType: SOURCE_TYPES.videoOcr,
+      observedAt: '2026-05-15T00:02:00.000Z',
+      slotTime: '2026-05-15 08:00',
+      value: 6.21,
+      unit: 'm'
+    })
+    for (let minutesBefore = 55; minutesBefore >= 0; minutesBefore -= 5) {
+      const observedAt = new Date(new Date('2026-05-15T08:00:00+08:00').getTime() - minutesBefore * 60 * 1000)
+      realtimeService.saveObservation({
+        stationId: station.id,
+        observationType: 'waterLevel',
+        sourceType: SOURCE_TYPES.telemetry,
+        observedAt: observedAt.toISOString(),
+        slotTime: '2026-05-15 08:00',
+        value: Number((6 + (55 - minutesBefore) * 0.01).toFixed(2)),
+        unit: 'm'
+      })
+    }
+
+    const beforeSlot = realtimeService.listRealtimeSlots({
+      stationId: station.id,
+      observationType: 'waterLevel'
+    })[0]
+    expect(beforeSlot.manualValue).toBe(6.2)
+    expect(beforeSlot.videoOcrValue).toBe(6.21)
+    expect(beforeSlot.telemetryValue).not.toBeNull()
+
+    const deletion = realtimeService.deleteSlotObservations({
+      stationId: station.id,
+      observationType: 'waterLevel',
+      slotTime: '2026-05-15 08:00'
+    })
+
+    expect(deletion.deletedCount).toBe(2)
+
+    const afterSlot = realtimeService.listRealtimeSlots({
+      stationId: station.id,
+      observationType: 'waterLevel'
+    })[0]
+    expect(afterSlot.manualValue).toBeNull()
+    expect(afterSlot.videoOcrValue).toBeNull()
+    expect(afterSlot.telemetryValue).not.toBeNull()
+    expect(afterSlot.chosenValue).toBe(afterSlot.telemetryValue)
+
+    const detail = realtimeService.getRealtimeSlotDetail(afterSlot.id)
+    expect(detail.manualObservation).toBeNull()
+    expect(detail.videoOcrObservation).toBeNull()
+    expect(detail.telemetryObservations).toHaveLength(12)
+  })
 })

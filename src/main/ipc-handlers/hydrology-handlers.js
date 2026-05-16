@@ -83,11 +83,32 @@ function setupHydrologyHandlers(ipcMain, services = {}) {
     return realtimeService.deleteObservation(observationId)
   })
 
+  createIPCHandler(ipcMain, 'hydrology:realtime:deleteSlotObservations', async (payload = {}) => {
+    if (!realtimeService) {
+      throw new Error('RealtimeService not available')
+    }
+    return realtimeService.deleteSlotObservations(payload || {})
+  })
+
   createIPCHandler(ipcMain, 'hydrology:review:listTasks', async (filters = {}) => {
     if (!reviewTaskService) {
       throw new Error('ReviewTaskService not available')
     }
     return reviewTaskService.listReviewTasks(filters || {})
+  })
+
+  createIPCHandler(ipcMain, 'hydrology:review:deleteTask', async (taskId) => {
+    if (!reviewTaskService) {
+      throw new Error('ReviewTaskService not available')
+    }
+    return reviewTaskService.deleteReviewTask(taskId)
+  })
+
+  createIPCHandler(ipcMain, 'hydrology:review:deleteTasks', async (taskIds = []) => {
+    if (!reviewTaskService) {
+      throw new Error('ReviewTaskService not available')
+    }
+    return reviewTaskService.deleteReviewTasks(taskIds)
   })
 
   createIPCHandler(ipcMain, 'hydrology:review:resolveTask', async ({ taskId, payload } = {}) => {

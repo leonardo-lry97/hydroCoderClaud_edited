@@ -48,6 +48,8 @@ export function renderReviewView(station, reviewState, deps = {}) {
     || tasks.find((item) => item.id === reviewState.selectedTaskId)
     || pagedTasks[0]
     || null
+  const selectedTaskIds = Array.isArray(reviewState.selectedTaskIds) ? reviewState.selectedTaskIds : []
+  const pageSelectedCount = pagedTasks.filter((item) => selectedTaskIds.includes(item.id)).length
   const statusOptions = [
     ['all', '全部状态'],
     ['needs_review', '待复核'],
@@ -87,8 +89,8 @@ export function renderReviewView(station, reviewState, deps = {}) {
             </select>
           </label>
           <div class="realtime-filter-actions">
-            <button type="button" class="primary-action" id="reviewRunCheckBtn">检查当前范围</button>
             <button type="submit" class="secondary-action">刷新任务</button>
+            <button type="button" class="primary-action" id="reviewRunCheckBtn">检查当前范围</button>
           </div>
         </form>
       `}
@@ -111,6 +113,12 @@ export function renderReviewView(station, reviewState, deps = {}) {
           <div class="section-title">${isSlotMode ? '本次规则命中结果' : '审核任务列表'}</div>
           <div class="table-page-meta">${isSlotMode ? `${tasks.length} 条` : `第 ${currentPage} / ${totalPages} 页 · 共 ${tasks.length} 条`}</div>
         </div>
+        ${isSlotMode ? '' : `
+          <div class="realtime-filter-actions table-toolbar-actions">
+            <button type="button" class="secondary-action" id="reviewDeleteSelectedBtn" ${selectedTaskIds.length === 0 ? 'disabled' : ''}>批量删除</button>
+            <button type="button" class="danger-action" id="reviewDeleteAllBtn" ${tasks.length === 0 ? 'disabled' : ''}>全部删除</button>
+          </div>
+        `}
         ${tasks.length === 0 ? `<div class="empty-state compact">${
           isSlotMode
             ? '当前时槽本次审核未发现问题。'
@@ -120,21 +128,25 @@ export function renderReviewView(station, reviewState, deps = {}) {
             <table class="realtime-table">
               <thead>
                 <tr>
+                  ${isSlotMode ? '' : `<th><input type="checkbox" id="reviewSelectPageCheckbox" ${pagedTasks.length > 0 && pageSelectedCount === pagedTasks.length ? 'checked' : ''}></th>`}
                   ${isSlotMode ? '' : '<th>时槽</th>'}
                   <th>规则</th>
                   <th>类别</th>
                   <th>级别</th>
                   <th>状态</th>
+                  ${isSlotMode ? '' : '<th>操作</th>'}
                 </tr>
               </thead>
               <tbody>
                 ${pagedTasks.map((task) => `
                   <tr class="${task.id === reviewState.selectedTaskId ? 'active' : ''}" data-review-task-id="${escapeHtml(task.id)}">
+                    ${isSlotMode ? '' : `<td><input type="checkbox" data-review-select-task="${escapeHtml(task.id)}" ${selectedTaskIds.includes(task.id) ? 'checked' : ''}></td>`}
                     ${isSlotMode ? '' : `<td>${escapeHtml(task.slotTime)}</td>`}
                     <td>${escapeHtml(task.ruleCode)} · ${escapeHtml(task.title)}</td>
                     <td>${escapeHtml(describeRuleCategory(task.ruleCategory))}</td>
                     <td>${escapeHtml(describeSeverity(task.severity))}</td>
                     <td>${escapeHtml(describeReviewStatus(task.status))}</td>
+                    ${isSlotMode ? '' : `<td><button type="button" class="danger-action compact-action" data-review-delete-task="${escapeHtml(task.id)}">删除</button></td>`}
                   </tr>
                 `).join('')}
               </tbody>

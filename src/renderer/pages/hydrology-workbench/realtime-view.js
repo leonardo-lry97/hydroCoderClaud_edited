@@ -628,7 +628,13 @@ export function renderRealtimeViewSection(station, deps = {}) {
     mutateRealtimeObservation,
     runSlotQualityCheck,
     openReviewTaskBoard,
-    closeRealtimeDetail
+    closeRealtimeDetail,
+    openRealtimeSlotCreateForm,
+    closeRealtimeSlotCreateForm,
+    createRealtimeSlotObservation,
+    toggleRealtimeSlotSelection,
+    openConfirmAction,
+    notifyAgentContextChanged
   } = deps
 
   const slots = sortRealtimeSlots(realtimeState.slots)
@@ -642,6 +648,8 @@ export function renderRealtimeViewSection(station, deps = {}) {
   const detail = realtimeState.slotDetail
   const slotCheckResult = realtimeState.slotCheckResult
   const canViewAirTemperature = station.observationTypes?.includes(observationTypes.airTemperature)
+  const selectedSlotIds = Array.isArray(realtimeState.selectedSlotIds) ? realtimeState.selectedSlotIds : []
+  const pageSelectedCount = pagedSlots.filter((slot) => selectedSlotIds.includes(slot.id)).length
 
   tabContentEl.innerHTML = `
     <section class="realtime-layout">
@@ -650,8 +658,27 @@ export function renderRealtimeViewSection(station, deps = {}) {
           <button type="button" class="mini-tab ${realtimeState.selectedObservationType === observationTypes.waterLevel ? 'active' : ''}" data-observation-type="${observationTypes.waterLevel}">水位</button>
           <button type="button" class="mini-tab ${realtimeState.selectedObservationType === observationTypes.airTemperature ? 'active' : ''}" data-observation-type="${observationTypes.airTemperature}" ${canViewAirTemperature ? '' : 'disabled'}>气温</button>
         </div>
-        <button type="button" id="seedRealtimeBtn" class="secondary-action">生成演示数据</button>
+        <div class="realtime-filter-actions">
+          <button type="button" id="createRealtimeSlotBtn" class="secondary-action">新增时槽</button>
+          <button type="button" id="deleteRealtimeSlotsBtn" class="danger-action" ${selectedSlotIds.length === 0 ? 'disabled' : ''}>批量删除</button>
+          <button type="button" id="deleteAllRealtimeSlotsBtn" class="danger-action" ${tableSlots.length === 0 ? 'disabled' : ''}>全部删除</button>
+          <button type="button" id="seedRealtimeBtn" class="secondary-action">生成演示数据</button>
+        </div>
       </div>
+      ${realtimeState.createSlotDraft?.visible ? `
+        <form id="createRealtimeSlotForm" class="inline-slot-create-form">
+          <label>时槽时间
+            <input name="slotTime" type="datetime-local" value="${escapeAttribute(realtimeState.createSlotDraft.slotTime || '')}" required>
+          </label>
+          <label>人工值
+            <input name="value" type="number" step="0.01" value="${escapeAttribute(realtimeState.createSlotDraft.value || '')}" placeholder="输入该时槽人工值" required>
+          </label>
+          <div class="inline-slot-create-actions">
+            <button type="submit" class="primary-action">保存时槽</button>
+            <button type="button" id="cancelCreateRealtimeSlotBtn" class="secondary-action">取消</button>
+          </div>
+        </form>
+      ` : ''}
       <form id="realtimeFilterForm" class="realtime-filter-bar">
         <label>开始时间
           <input name="fromTime" type="datetime-local" value="${escapeAttribute(formatDateTimeInputValue(realtimeState.fromTime))}">
@@ -687,6 +714,7 @@ export function renderRealtimeViewSection(station, deps = {}) {
             <table class="realtime-table">
               <thead>
                 <tr>
+                  <th><input type="checkbox" id="realtimeSelectPageCheckbox" ${pagedSlots.length > 0 && pageSelectedCount === pagedSlots.length ? 'checked' : ''}></th>
                   <th>时间</th>
                   <th>人工值</th>
                   <th>遥测参考</th>
@@ -700,6 +728,7 @@ export function renderRealtimeViewSection(station, deps = {}) {
               <tbody>
                 ${pagedSlots.map((slot) => `
                   <tr class="${slot.id === realtimeState.selectedSlotId ? 'active' : ''}" data-slot-id="${escapeAttribute(slot.id)}">
+                    <td><input type="checkbox" data-slot-select="${escapeAttribute(slot.id)}" ${selectedSlotIds.includes(slot.id) ? 'checked' : ''}></td>
                     <td>${escapeHtml(formatDateTimeLabel(slot.slotTime))}</td>
                     <td>${formatNumericValue(slot.manualValue)}</td>
                     <td>${formatNumericValue(slot.telemetryValue)}</td>
@@ -715,6 +744,13 @@ export function renderRealtimeViewSection(station, deps = {}) {
                         data-slot-time="${escapeAttribute(slot.slotTime)}"
                       >
                         审核
+                      </button>
+                      <button
+                        type="button"
+                        class="danger-action compact-action"
+                        data-slot-delete="${escapeAttribute(slot.id)}"
+                      >
+                        删除
                       </button>
                     </td>
                   </tr>
@@ -762,6 +798,23 @@ export function renderRealtimeViewSection(station, deps = {}) {
     await seedRealtimeData()
   })
 
+  document.getElementById('createRealtimeSlotBtn')?.addEventListener('click', () => {
+    openRealtimeSlotCreateForm()
+  })
+
+  document.getElementById('cancelCreateRealtimeSlotBtn')?.addEventListener('click', () => {
+    closeRealtimeSlotCreateForm()
+  })
+
+  document.getElementById('createRealtimeSlotForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    await createRealtimeSlotObservation({
+      slotTime: String(formData.get('slotTime') || '').trim(),
+      value: String(formData.get('value') || '').trim()
+    })
+  })
+
   document.getElementById('realtimeFilterForm')?.addEventListener('submit', async (event) => {
     event.preventDefault()
     await applyRealtimeFilters(new FormData(event.currentTarget))
@@ -797,6 +850,51 @@ export function renderRealtimeViewSection(station, deps = {}) {
         slotId: button.dataset.slotReview,
         slotTime: button.dataset.slotTime
       })
+    })
+  })
+
+  document.getElementById('realtimeSelectPageCheckbox')?.addEventListener('change', (event) => {
+    const checked = !!event.target?.checked
+    pagedSlots.forEach((slot) => toggleRealtimeSlotSelection(slot.id, checked))
+    renderWorkbench()
+    notifyAgentContextChanged()
+  })
+
+  tabContentEl.querySelectorAll('[data-slot-select]').forEach((input) => {
+    input.addEventListener('click', (event) => {
+      event.stopPropagation()
+    })
+    input.addEventListener('change', (event) => {
+      toggleRealtimeSlotSelection(input.dataset.slotSelect, !!event.target?.checked)
+      renderWorkbench()
+      notifyAgentContextChanged()
+    })
+  })
+
+  tabContentEl.querySelectorAll('[data-slot-delete]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation()
+      const slotId = button.dataset.slotDelete
+      openConfirmAction('确认删除该时槽的人工值、视频识别和修正记录吗？5 分钟遥测明细不会被删除。', {
+        type: 'delete-realtime-slots',
+        slotIds: [slotId]
+      })
+    })
+  })
+
+  document.getElementById('deleteRealtimeSlotsBtn')?.addEventListener('click', () => {
+    if ((realtimeState.selectedSlotIds || []).length === 0) return
+    openConfirmAction(`确认批量删除 ${realtimeState.selectedSlotIds.length} 个时槽的人工值、视频识别和修正记录吗？5 分钟遥测明细不会被删除。`, {
+      type: 'delete-realtime-slots',
+      slotIds: [...realtimeState.selectedSlotIds]
+    })
+  })
+
+  document.getElementById('deleteAllRealtimeSlotsBtn')?.addEventListener('click', () => {
+    if (tableSlots.length === 0) return
+    openConfirmAction(`确认删除当前筛选结果中的全部 ${tableSlots.length} 个时槽的人工值、视频识别和修正记录吗？5 分钟遥测明细不会被删除。`, {
+      type: 'delete-realtime-slots',
+      slotIds: tableSlots.map((slot) => slot.id)
     })
   })
 

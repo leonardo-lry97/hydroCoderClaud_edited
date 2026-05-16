@@ -125,6 +125,7 @@ let realtimeState = {
   slots: [],
   page: 1,
   pageSize: 10,
+  selectedSlotIds: [],
   selectedSlotId: null,
   slotDetail: null,
   slotDetailSource: null,
@@ -134,12 +135,18 @@ let realtimeState = {
   trendError: '',
   correctionError: '',
   observationMutationError: '',
-  slotCheckResult: null
+  slotCheckResult: null,
+  createSlotDraft: {
+    visible: false,
+    slotTime: '',
+    value: ''
+  }
 }
 let reviewState = {
   selectedObservationType: OBSERVATION_TYPES.waterLevel,
   statusFilter: 'all',
   tasks: [],
+  selectedTaskIds: [],
   selectedTaskId: null,
   page: 1,
   pageSize: 10,
@@ -169,6 +176,7 @@ const deleteConfirmOkBtn = document.getElementById('deleteConfirmOkBtn')
 const hydrologyAgentPanelEl = document.getElementById('hydrologyAgentPanel')
 let agentPanel = null
 let pendingDeleteStationId = null
+let pendingConfirmAction = null
 let trendViewportBindingsController = null
 let trendViewportRenderFrame = null
 
@@ -297,12 +305,25 @@ function renderRuleConfigForm(station) {
 
 function closeDeleteConfirm() {
   pendingDeleteStationId = null
+  pendingConfirmAction = null
   deleteConfirmOverlayEl.hidden = true
+  deleteConfirmOkBtn.textContent = '删除'
 }
 
 function openDeleteConfirm(station) {
   pendingDeleteStationId = station?.id || null
+  pendingConfirmAction = {
+    type: 'delete-station'
+  }
   deleteConfirmMessageEl.textContent = `确认删除站点“${station?.name || station?.id || ''}”吗？`
+  deleteConfirmOverlayEl.hidden = false
+}
+
+function openConfirmAction(message, action, confirmLabel = '删除') {
+  pendingDeleteStationId = null
+  pendingConfirmAction = action
+  deleteConfirmMessageEl.textContent = message
+  deleteConfirmOkBtn.textContent = confirmLabel
   deleteConfirmOverlayEl.hidden = false
 }
 
@@ -340,6 +361,16 @@ function renderReviewTaskView(station) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
     reviewState.statusFilter = String(formData.get('status') || 'all').trim() || 'all'
+    reviewState.selectedTaskId = null
+    reviewState.page = 1
+    reviewState.lastSlotCheck = null
+    await loadReviewTasks()
+    renderWorkbench()
+    notifyAgentContextChanged()
+  })
+
+  document.querySelector('#reviewFilterForm select[name="status"]')?.addEventListener('change', async (event) => {
+    reviewState.statusFilter = String(event.target?.value || 'all').trim() || 'all'
     reviewState.selectedTaskId = null
     reviewState.page = 1
     reviewState.lastSlotCheck = null
@@ -390,6 +421,57 @@ function renderReviewTaskView(station) {
     reviewState.page = 1
     renderWorkbench()
     notifyAgentContextChanged()
+  })
+
+  document.getElementById('reviewSelectPageCheckbox')?.addEventListener('change', (event) => {
+    const checked = !!event.target?.checked
+    const pageTaskIds = Array.isArray(reviewState.tasks)
+      ? reviewState.tasks
+        .slice((reviewState.page - 1) * (reviewState.pageSize || 10), reviewState.page * (reviewState.pageSize || 10))
+        .map((item) => item.id)
+      : []
+    pageTaskIds.forEach((taskId) => toggleReviewTaskSelection(taskId, checked))
+    renderWorkbench()
+    notifyAgentContextChanged()
+  })
+
+  tabContentEl.querySelectorAll('[data-review-select-task]').forEach((input) => {
+    input.addEventListener('click', (event) => {
+      event.stopPropagation()
+    })
+    input.addEventListener('change', (event) => {
+      toggleReviewTaskSelection(input.dataset.reviewSelectTask, !!event.target?.checked)
+      renderWorkbench()
+      notifyAgentContextChanged()
+    })
+  })
+
+  tabContentEl.querySelectorAll('[data-review-delete-task]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation()
+      const taskId = button.dataset.reviewDeleteTask
+      openConfirmAction('确认删除这条审核任务吗？该操作不会删除原始观测数据。', {
+        type: 'delete-review-tasks',
+        taskIds: [taskId]
+      })
+    })
+  })
+
+  document.getElementById('reviewDeleteSelectedBtn')?.addEventListener('click', () => {
+    if ((reviewState.selectedTaskIds || []).length === 0) return
+    openConfirmAction(`确认批量删除 ${reviewState.selectedTaskIds.length} 条审核任务吗？该操作不会删除原始观测数据。`, {
+      type: 'delete-review-tasks',
+      taskIds: [...reviewState.selectedTaskIds]
+    })
+  })
+
+  document.getElementById('reviewDeleteAllBtn')?.addEventListener('click', () => {
+    const allTaskIds = Array.isArray(reviewState.tasks) ? reviewState.tasks.map((item) => item.id).filter(Boolean) : []
+    if (allTaskIds.length === 0) return
+    openConfirmAction(`确认删除当前筛选结果中的全部 ${allTaskIds.length} 条审核任务吗？该操作不会删除原始观测数据。`, {
+      type: 'delete-review-tasks',
+      taskIds: allTaskIds
+    })
   })
 
   tabContentEl.querySelectorAll('[data-review-open-slot]').forEach((button) => {
@@ -779,7 +861,14 @@ function renderRealtimeView(station) {
     mutateRealtimeObservation,
     runSlotQualityCheck,
     openReviewTaskBoard,
-    closeRealtimeDetail
+    closeRealtimeDetail,
+    openRealtimeSlotCreateForm,
+    closeRealtimeSlotCreateForm,
+    createRealtimeSlotObservation,
+    toggleRealtimeSlotSelection,
+    openConfirmAction,
+    deleteRealtimeSlots,
+    notifyAgentContextChanged
   })
 }
 
@@ -962,6 +1051,7 @@ async function loadRealtimeSlots() {
     loadRealtimeTrend,
     loadRealtimeSlotDetail
   })
+  realtimeState.selectedSlotIds = realtimeState.selectedSlotIds.filter((slotId) => realtimeState.slots.some((slot) => slot.id === slotId))
 }
 
 async function loadRealtimeSlotDetail(slotId) {
@@ -996,6 +1086,7 @@ async function loadReviewTasks() {
       status: reviewState.statusFilter
     })
     reviewState.tasks = Array.isArray(tasks) ? tasks : []
+    reviewState.selectedTaskIds = reviewState.selectedTaskIds.filter((taskId) => reviewState.tasks.some((item) => item.id === taskId))
     const totalPages = Math.max(1, Math.ceil(reviewState.tasks.length / (reviewState.pageSize || 10)))
     reviewState.page = Math.min(Math.max(reviewState.page || 1, 1), totalPages)
     if (!reviewState.tasks.some((item) => item.id === reviewState.selectedTaskId)) {
@@ -1006,6 +1097,124 @@ async function loadReviewTasks() {
     reviewState.tasks = []
     reviewState.selectedTaskId = null
   }
+}
+
+function toggleReviewTaskSelection(taskId, checked) {
+  const id = String(taskId || '').trim()
+  if (!id) return
+  const next = new Set(reviewState.selectedTaskIds)
+  if (checked) next.add(id)
+  else next.delete(id)
+  reviewState.selectedTaskIds = Array.from(next)
+}
+
+function toggleRealtimeSlotSelection(slotId, checked) {
+  const id = String(slotId || '').trim()
+  if (!id) return
+  const next = new Set(realtimeState.selectedSlotIds)
+  if (checked) next.add(id)
+  else next.delete(id)
+  realtimeState.selectedSlotIds = Array.from(next)
+}
+
+async function deleteReviewTasks(taskIds = []) {
+  const ids = Array.isArray(taskIds) ? taskIds.map((item) => String(item || '').trim()).filter(Boolean) : []
+  if (ids.length === 0 || !window.electronAPI?.deleteHydrologyReviewTasks) return
+  reviewState.error = ''
+  try {
+    await window.electronAPI.deleteHydrologyReviewTasks(ids)
+    reviewState.selectedTaskIds = reviewState.selectedTaskIds.filter((taskId) => !ids.includes(taskId))
+    if (ids.includes(reviewState.selectedTaskId)) {
+      reviewState.selectedTaskId = null
+    }
+    await loadReviewTasks()
+    renderWorkbench()
+    notifyAgentContextChanged()
+  } catch (err) {
+    reviewState.error = err?.message || String(err)
+    renderWorkbench()
+  }
+}
+
+async function createRealtimeSlotObservation(payload = {}) {
+  const station = getSelectedStation()
+  if (!station || !window.electronAPI?.createHydrologyRealtimeObservation) return
+  realtimeState.error = ''
+  try {
+    await window.electronAPI.createHydrologyRealtimeObservation({
+      stationId: station.id,
+      observationType: realtimeState.selectedObservationType,
+      sourceType: 'manual',
+      slotTime: payload.slotTime,
+      observedAt: payload.observedAt || payload.slotTime,
+      value: payload.value
+    })
+    realtimeState.createSlotDraft.visible = false
+    realtimeState.createSlotDraft.slotTime = ''
+    realtimeState.createSlotDraft.value = ''
+    await loadRealtimeSlots()
+    renderWorkbench()
+    notifyAgentContextChanged()
+  } catch (err) {
+    realtimeState.error = err?.message || String(err)
+    renderWorkbench()
+  }
+}
+
+async function deleteRealtimeSlots(slotIds = []) {
+  const station = getSelectedStation()
+  const slots = realtimeState.slots.filter((slot) => slotIds.includes(slot.id))
+  if (!station || slots.length === 0 || !window.electronAPI?.deleteHydrologyRealtimeSlotObservations) return
+  realtimeState.error = ''
+  try {
+    for (const slot of slots) {
+      await window.electronAPI.deleteHydrologyRealtimeSlotObservations({
+        stationId: station.id,
+        observationType: slot.observationType,
+        slotTime: slot.slotTime
+      })
+    }
+    realtimeState.selectedSlotIds = realtimeState.selectedSlotIds.filter((slotId) => !slotIds.includes(slotId))
+    if (slotIds.includes(realtimeState.selectedSlotId)) {
+      realtimeState.selectedSlotId = null
+      realtimeState.slotDetail = null
+      realtimeState.slotDetailSource = null
+    }
+    await loadRealtimeSlots()
+    renderWorkbench()
+    notifyAgentContextChanged()
+  } catch (err) {
+    realtimeState.error = err?.message || String(err)
+    renderWorkbench()
+  }
+}
+
+function buildDefaultRealtimeSlotDraft() {
+  const latestSlotTime = realtimeState.slots
+    .map((slot) => slot?.slotTime)
+    .filter(Boolean)
+    .sort()
+    .at(-1)
+  return {
+    visible: true,
+    slotTime: latestSlotTime ? formatDateTimeInputValue(latestSlotTime) : '',
+    value: ''
+  }
+}
+
+function openRealtimeSlotCreateForm() {
+  realtimeState.error = ''
+  realtimeState.createSlotDraft = buildDefaultRealtimeSlotDraft()
+  renderWorkbench()
+}
+
+function closeRealtimeSlotCreateForm() {
+  realtimeState.createSlotDraft = {
+    visible: false,
+    slotTime: '',
+    value: ''
+  }
+  renderWorkbench()
 }
 
 async function resolveReviewTask(taskId, payload) {
@@ -1350,29 +1559,50 @@ deleteConfirmOverlayEl.addEventListener('click', (event) => {
 })
 
 deleteConfirmOkBtn.addEventListener('click', async () => {
-  const stationId = pendingDeleteStationId
-  if (!stationId) {
-    closeDeleteConfirm()
-    return
-  }
-
   stationFormError.textContent = ''
   deleteConfirmOkBtn.disabled = true
   deleteConfirmCancelBtn.disabled = true
 
   try {
-    if (window.electronAPI?.deleteHydrologyStation) {
-      await window.electronAPI.deleteHydrologyStation(stationId)
+    const action = pendingConfirmAction
+    if (!action?.type) {
+      closeDeleteConfirm()
+      return
     }
 
-    closeDeleteConfirm()
-    await loadStations()
-    activeFunctionKey = 'basic'
-    renderWorkbench()
-    notifyAgentContextChanged()
+    if (action.type === 'delete-station') {
+      const stationId = pendingDeleteStationId
+      if (!stationId) {
+        closeDeleteConfirm()
+        return
+      }
 
-    if (stations.length === 0) {
-      showCreateStationForm()
+      if (window.electronAPI?.deleteHydrologyStation) {
+        await window.electronAPI.deleteHydrologyStation(stationId)
+      }
+
+      closeDeleteConfirm()
+      await loadStations()
+      activeFunctionKey = 'basic'
+      renderWorkbench()
+      notifyAgentContextChanged()
+
+      if (stations.length === 0) {
+        showCreateStationForm()
+      }
+      return
+    }
+
+    if (action.type === 'delete-review-tasks') {
+      closeDeleteConfirm()
+      await deleteReviewTasks(action.taskIds || [])
+      return
+    }
+
+    if (action.type === 'delete-realtime-slots') {
+      closeDeleteConfirm()
+      await deleteRealtimeSlots(action.slotIds || [])
+      return
     }
   } catch (err) {
     stationFormError.textContent = err?.message || String(err)

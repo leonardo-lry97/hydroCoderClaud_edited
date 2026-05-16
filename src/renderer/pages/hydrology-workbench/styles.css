@@ -990,6 +990,40 @@ p {
   margin-top: 12px;
 }
 
+.inline-slot-create-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(160px, 0.6fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--panel-bg-subtle, var(--panel-bg));
+}
+
+.inline-slot-create-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-color-muted);
+  font-size: 12px;
+}
+
+.inline-slot-create-form input {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: var(--text-color);
+}
+
+.inline-slot-create-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .realtime-pagination-group {
   display: flex;
   gap: 8px;
