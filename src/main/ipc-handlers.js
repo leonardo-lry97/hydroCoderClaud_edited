@@ -31,6 +31,7 @@ const pluginHandlersMod = safeRequire('./ipc-handlers/plugin-handlers', 'plugin-
 const agentHandlersMod = safeRequire('./ipc-handlers/agent-handlers', 'agent-handlers');
 const agentSessionBrokerMod = safeRequire('./agent-platform/agent-session-broker', 'agent-session-broker');
 const agentEventRouterMod = safeRequire('./agent-platform/agent-event-router', 'agent-event-router');
+const embeddedAppRuntimeManagerMod = safeRequire('./agent-platform/embedded-app-runtime-manager', 'embedded-app-runtime-manager');
 const capabilityHandlersMod = safeRequire('./ipc-handlers/capability-handlers', 'capability-handlers');
 const updateHandlersMod = safeRequire('./ipc-handlers/update-handlers', 'update-handlers');
 const dingtalkHandlersMod = safeRequire('./ipc-handlers/dingtalk-handlers', 'dingtalk-handlers');
@@ -59,6 +60,7 @@ const setupPluginHandlers = pluginHandlersMod?.setupPluginHandlers;
 const setupAgentHandlers = agentHandlersMod?.setupAgentHandlers;
 const AgentSessionBroker = agentSessionBrokerMod?.AgentSessionBroker;
 const AgentEventRouter = agentEventRouterMod?.AgentEventRouter;
+const EmbeddedAppRuntimeManager = embeddedAppRuntimeManagerMod?.EmbeddedAppRuntimeManager;
 const setupCapabilityHandlers = capabilityHandlersMod?.setupCapabilityHandlers;
 const setupUpdateHandlers = updateHandlersMod?.setupUpdateHandlers;
 const setupDingTalkHandlers = dingtalkHandlersMod?.setupDingTalkHandlers;
@@ -170,6 +172,9 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
   const agentSessionBroker = agentSessionManager && AgentSessionBroker
     ? new AgentSessionBroker(agentSessionManager)
     : null
+  const embeddedAppRuntimeManager = EmbeddedAppRuntimeManager
+    ? new EmbeddedAppRuntimeManager()
+    : null
   const agentEventRouter = agentSessionManager && AgentEventRouter
     ? new AgentEventRouter({
         resolveOwnerClientId: (sessionId) => agentSessionBroker?.getSessionOwnerClientId(sessionId)
@@ -180,6 +185,9 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     : null
   if (agentSessionManager?.setEventRouter) {
     agentSessionManager.setEventRouter(agentEventRouter)
+  }
+  if (agentSessionManager) {
+    agentSessionManager.embeddedAppRuntimeManager = embeddedAppRuntimeManager
   }
   if (sessionFileWatcher) {
     sessionFileWatcher.setDependencies({
@@ -838,6 +846,7 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
 
   if (agentSessionBroker && agentEventRouter) {
     const embeddedSubscriptions = new Map()
+    const embeddedCommandRequests = new Map()
 
     const normalizeEmbeddedClient = (client = {}) => {
       const rawAppId = typeof client.appId === 'string' ? client.appId.trim() : ''
@@ -848,9 +857,12 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
         defaultCwd,
         clientId: `embed:${appId}`,
         clientType: 'embedded',
-        clientMeta: client.clientMeta && typeof client.clientMeta === 'object' && !Array.isArray(client.clientMeta)
-          ? client.clientMeta
-          : {}
+        clientMeta: {
+          appId,
+          ...(client.clientMeta && typeof client.clientMeta === 'object' && !Array.isArray(client.clientMeta)
+            ? client.clientMeta
+            : {})
+        }
       }
     }
 
@@ -872,12 +884,55 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
         }
       })
 
+      if (embeddedAppRuntimeManager) {
+        embeddedAppRuntimeManager.registerCommandClient(
+          normalizedClient.appId,
+          normalizedClient.clientId,
+          ({ command, payload }) => new Promise((resolve, reject) => {
+            if (sender.isDestroyed()) {
+              reject(new Error('Embedded renderer is unavailable'))
+              return
+            }
+
+            const requestId = `embedded-cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+            const timeout = setTimeout(() => {
+              embeddedCommandRequests.delete(requestId)
+              reject(new Error(`Embedded app command timed out: ${command}`))
+            }, 10000)
+
+            embeddedCommandRequests.set(requestId, {
+              senderId: sender.id,
+              timeout,
+              resolve,
+              reject
+            })
+
+            sender.send('hydro-agent:command-request', {
+              requestId,
+              appId: normalizedClient.appId,
+              clientId: normalizedClient.clientId,
+              command,
+              payload: payload && typeof payload === 'object' ? payload : {}
+            })
+          })
+        )
+      }
+
       embeddedSubscriptions.set(sender.id, subscriptionId)
       sender.once('destroyed', () => {
         const currentId = embeddedSubscriptions.get(sender.id)
         if (currentId) {
           agentEventRouter.unregisterClient(currentId)
           embeddedSubscriptions.delete(sender.id)
+        }
+        if (embeddedAppRuntimeManager) {
+          embeddedAppRuntimeManager.unregisterCommandClient(normalizedClient.appId, normalizedClient.clientId)
+        }
+        for (const [requestId, pending] of embeddedCommandRequests.entries()) {
+          if (pending.senderId !== sender.id) continue
+          clearTimeout(pending.timeout)
+          pending.reject(new Error('Embedded renderer is unavailable'))
+          embeddedCommandRequests.delete(requestId)
         }
       })
 
@@ -905,6 +960,39 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
         agentEventRouter.unregisterClient(subscriptionId)
         embeddedSubscriptions.delete(event.sender.id)
       }
+      return { success: true }
+    })
+
+    ipcMain.handle('hydro-agent:updateContext', async (_event, { client, context } = {}) => {
+      if (!embeddedAppRuntimeManager) {
+        return { success: false, error: 'Embedded runtime unavailable' }
+      }
+      const normalizedClient = normalizeEmbeddedClient(client)
+      embeddedAppRuntimeManager.updateContext(normalizedClient.appId, context && typeof context === 'object' ? context : null)
+      return { success: true }
+    })
+
+    ipcMain.handle('hydro-agent:getContext', async (_event, { client } = {}) => {
+      if (!embeddedAppRuntimeManager) return null
+      const normalizedClient = normalizeEmbeddedClient(client)
+      return embeddedAppRuntimeManager.getContext(normalizedClient.appId)
+    })
+
+    ipcMain.handle('hydro-agent:commandResult', async (_event, { requestId, result, error } = {}) => {
+      const pending = embeddedCommandRequests.get(requestId)
+      if (!pending) {
+        return { success: false, error: 'Command request not found' }
+      }
+
+      clearTimeout(pending.timeout)
+      embeddedCommandRequests.delete(requestId)
+
+      if (error) {
+        pending.reject(new Error(String(error)))
+      } else {
+        pending.resolve(result)
+      }
+
       return { success: true }
     })
 
@@ -955,6 +1043,15 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     })
     ipcMain.handle('hydro-agent:clearAndRecreate', async (event, { client, sessionId, overrides } = {}) => {
       return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.clearAndRecreate(sessionId, overrides || {}, normalizedClient))
+    })
+    ipcMain.handle('hydro-agent:getInitResult', async (event, { client, sessionId } = {}) => {
+      return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.getInitResult(sessionId, normalizedClient))
+    })
+    ipcMain.handle('hydro-agent:getMcpServerStatus', async (event, { client, sessionId } = {}) => {
+      return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.getMcpServerStatus(sessionId, normalizedClient))
+    })
+    ipcMain.handle('hydro-agent:getSupportedCommands', async (event, { client, sessionId } = {}) => {
+      return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.getSupportedCommands(sessionId, normalizedClient))
     })
     ipcMain.handle('hydro-agent:setModel', async (event, { client, sessionId, model } = {}) => {
       return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.setModel(sessionId, model, normalizedClient))
@@ -1111,7 +1208,8 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
 
   return {
     agentSessionBroker,
-    agentEventRouter
+    agentEventRouter,
+    embeddedAppRuntimeManager
   }
 }
 

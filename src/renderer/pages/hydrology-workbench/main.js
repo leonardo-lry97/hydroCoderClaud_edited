@@ -278,20 +278,30 @@ function renderFunctionTabs() {
     stationFunctions,
     activeFunctionKey,
     escapeHtml,
-    onSwitchFunction: async (functionKey) => {
-      activeFunctionKey = functionKey
-      realtimeState.slotCheckResult = null
-      if (activeFunctionKey === 'realtime') {
-        realtimeState.selectedSlotId = null
-        realtimeState.slotDetail = null
-        await loadRealtimeSlots()
-      } else if (activeFunctionKey === 'review') {
-        reviewState.selectedTaskId = null
-        await loadReviewTasks()
-      }
-      renderWorkbench()
-    }
+    onSwitchFunction: openFunctionTab
   })
+}
+
+async function openFunctionTab(functionKey) {
+  activeFunctionKey = stationFunctions.some((item) => item.key === functionKey)
+    ? functionKey
+    : 'basic'
+  realtimeState.slotCheckResult = null
+  if (activeFunctionKey === 'realtime') {
+    realtimeState.selectedSlotId = null
+    realtimeState.slotDetail = null
+    await loadRealtimeSlots()
+  } else if (activeFunctionKey === 'review') {
+    reviewState.selectedTaskId = null
+    await loadReviewTasks()
+    await loadLatestReviewRunSummary()
+  }
+  renderWorkbench()
+  notifyAgentContextChanged()
+  return {
+    success: true,
+    activeFunctionKey
+  }
 }
 
 function setCheckedValues(name, values) {
@@ -1518,6 +1528,58 @@ function getAgentContext() {
   }
 }
 
+async function handleAgentAppCommand({ command, payload = {} } = {}) {
+  const normalizedCommand = typeof command === 'string' ? command.trim() : ''
+
+  if (!normalizedCommand) {
+    return { success: false, error: 'Missing embedded app command' }
+  }
+
+  if (normalizedCommand === 'selectStation') {
+    const stationId = typeof payload.stationId === 'string' ? payload.stationId.trim() : ''
+    if (!stationId) {
+      return { success: false, error: 'stationId is required' }
+    }
+    await selectStation(stationId)
+    return {
+      success: true,
+      selectedStationId
+    }
+  }
+
+  if (normalizedCommand === 'openTab') {
+    return await openFunctionTab(payload.functionKey)
+  }
+
+  if (normalizedCommand === 'openReviewTask') {
+    const taskId = typeof payload.taskId === 'string' ? payload.taskId.trim() : ''
+    const slotTime = typeof payload.slotTime === 'string' ? payload.slotTime.trim() : ''
+    if (!taskId || !slotTime) {
+      return { success: false, error: 'taskId and slotTime are required' }
+    }
+    activeFunctionKey = 'review'
+    await openReviewTaskSlot(taskId, slotTime)
+    return {
+      success: true,
+      selectedTaskId: reviewState.selectedTaskId,
+      selectedSlotId: realtimeState.selectedSlotId
+    }
+  }
+
+  if (normalizedCommand === 'openReviewBoard') {
+    await openReviewTaskBoard()
+    return {
+      success: true,
+      activeFunctionKey
+    }
+  }
+
+  return {
+    success: false,
+    error: `Unsupported embedded app command: ${normalizedCommand}`
+  }
+}
+
 stationForm.addEventListener('submit', async (event) => {
   event.preventDefault()
   const nextStation = collectStationFromForm()
@@ -1647,7 +1709,8 @@ deleteConfirmOkBtn.addEventListener('click', async () => {
 
 agentPanel = mountHydrologyAgentPanel({
   target: hydrologyAgentPanelEl,
-  getContext: getAgentContext
+  getContext: getAgentContext,
+  commandHandler: handleAgentAppCommand
 })
 
 async function bootstrapWorkbench() {

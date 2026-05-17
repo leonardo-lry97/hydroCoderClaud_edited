@@ -29,6 +29,55 @@ class AgentSessionBroker {
     this.agentSessionManager = agentSessionManager
   }
 
+  _mergeEmbeddedClientMeta(sessionLike, client) {
+    const normalizedClient = this._normalizeClient(client)
+    const nextClientMeta = normalizedClient.clientMeta && typeof normalizedClient.clientMeta === 'object'
+      ? normalizedClient.clientMeta
+      : null
+
+    if (sessionLike?.clientType !== 'embedded' || !nextClientMeta) {
+      return sessionLike
+    }
+
+    const currentMeta = sessionLike.clientMeta && typeof sessionLike.clientMeta === 'object'
+      ? sessionLike.clientMeta
+      : null
+    const currentAppId = currentMeta?.appId || currentMeta?.embeddedAppId || null
+    const nextAppId = nextClientMeta?.appId || nextClientMeta?.embeddedAppId || null
+
+    if (currentAppId && currentAppId === nextAppId) {
+      return sessionLike
+    }
+
+    const mergedMeta = {
+      ...(currentMeta || {}),
+      ...nextClientMeta
+    }
+
+    if (sessionLike.id && this.agentSessionManager.sessionDatabase?.updateAgentConversation) {
+      try {
+        this.agentSessionManager.sessionDatabase.updateAgentConversation(sessionLike.id, {
+          clientMeta: mergedMeta
+        })
+      } catch (err) {
+        console.warn('[AgentSessionBroker] Failed to backfill embedded clientMeta:', {
+          sessionId: sessionLike.id,
+          error: err.message
+        })
+      }
+    }
+
+    if (this.agentSessionManager.sessions.has(sessionLike.id)) {
+      const activeSession = this.agentSessionManager.sessions.get(sessionLike.id)
+      activeSession.clientMeta = mergedMeta
+    }
+
+    return {
+      ...sessionLike,
+      clientMeta: mergedMeta
+    }
+  }
+
   _safeSend(...args) {
     return this.agentSessionManager._safeSend(...args)
   }
@@ -56,7 +105,10 @@ class AgentSessionBroker {
 
   _assertOwnsSession(sessionId, client) {
     const activeSession = this.agentSessionManager.get(sessionId)
-    const sessionLike = activeSession || this._loadPersistedSession(sessionId)
+    const sessionLike = this._mergeEmbeddedClientMeta(
+      activeSession || this._loadPersistedSession(sessionId),
+      client
+    )
 
     if (!sessionLike || !this._ownsSession(sessionLike, client)) {
       throw new Error('Session not found')
@@ -117,12 +169,17 @@ class AgentSessionBroker {
   }
 
   get(sessionId, client) {
-    const session = this.agentSessionManager.get(sessionId)
+    const session = this._mergeEmbeddedClientMeta(
+      this.agentSessionManager.get(sessionId),
+      client
+    )
     return session && this._ownsSession(session, client) ? session : null
   }
 
   list(client) {
-    return this.agentSessionManager.list().filter(session => this._ownsSession(session, client))
+    return this.agentSessionManager.list()
+      .map(session => this._mergeEmbeddedClientMeta(session, client))
+      .filter(session => this._ownsSession(session, client))
   }
 
   rename(sessionId, title, client) {

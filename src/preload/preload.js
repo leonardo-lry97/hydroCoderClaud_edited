@@ -13,7 +13,8 @@ const hydroAgentState = {
   clientMeta: null,
   defaultCwd: null,
   unsubscribeIpc: null,
-  callbacks: new Set()
+  callbacks: new Set(),
+  commandCallbacks: new Set()
 };
 
 function ensureSettingsChangedBridge() {
@@ -64,8 +65,27 @@ function ensureHydroAgentEventBridge() {
     }
   };
   ipcRenderer.on('hydro-agent:event', listener);
+  const commandListener = async (_event, request = {}) => {
+    for (const callback of hydroAgentState.commandCallbacks) {
+      try {
+        const handled = await callback(request)
+        if (handled) return
+      } catch (err) {
+        console.warn('[Preload] hydroAgent command listener failed:', err.message);
+      }
+    }
+
+    if (request?.requestId) {
+      await ipcRenderer.invoke('hydro-agent:commandResult', {
+        requestId: request.requestId,
+        error: `No embedded app command handler registered for ${request.command || 'unknown'}`
+      })
+    }
+  }
+  ipcRenderer.on('hydro-agent:command-request', commandListener);
   hydroAgentState.unsubscribeIpc = () => {
     ipcRenderer.removeListener('hydro-agent:event', listener);
+    ipcRenderer.removeListener('hydro-agent:command-request', commandListener);
     hydroAgentState.unsubscribeIpc = null;
   };
 }
@@ -154,6 +174,13 @@ const hydroAgent = {
     client: buildHydroAgentClientPayload(),
     sessionId
   }),
+  getContext: () => ipcRenderer.invoke('hydro-agent:getContext', {
+    client: buildHydroAgentClientPayload()
+  }),
+  updateContext: (context) => ipcRenderer.invoke('hydro-agent:updateContext', {
+    client: buildHydroAgentClientPayload(),
+    context
+  }),
   getMessages: (sessionId) => ipcRenderer.invoke('hydro-agent:getMessages', {
     client: buildHydroAgentClientPayload(),
     sessionId
@@ -189,6 +216,18 @@ const hydroAgent = {
     client: buildHydroAgentClientPayload(),
     sessionId,
     overrides
+  }),
+  getInitResult: (sessionId) => ipcRenderer.invoke('hydro-agent:getInitResult', {
+    client: buildHydroAgentClientPayload(),
+    sessionId
+  }),
+  getMcpServerStatus: (sessionId) => ipcRenderer.invoke('hydro-agent:getMcpServerStatus', {
+    client: buildHydroAgentClientPayload(),
+    sessionId
+  }),
+  getSupportedCommands: (sessionId) => ipcRenderer.invoke('hydro-agent:getSupportedCommands', {
+    client: buildHydroAgentClientPayload(),
+    sessionId
   }),
   setModel: (sessionId, model) => ipcRenderer.invoke('hydro-agent:setModel', {
     client: buildHydroAgentClientPayload(),
@@ -243,6 +282,26 @@ const hydroAgent = {
     hydroAgentState.callbacks.add(wrapped);
     return () => {
       hydroAgentState.callbacks.delete(wrapped);
+    };
+  },
+  onCommandRequest: (callback) => {
+    if (typeof callback !== 'function') {
+      throw new Error('hydroAgent.onCommandRequest requires a callback');
+    }
+    ensureHydroAgentEventBridge();
+    const wrapped = async (request) => {
+      const result = await callback(request);
+      if (result === false) return false;
+      if (!request?.requestId) return true;
+      await ipcRenderer.invoke('hydro-agent:commandResult', {
+        requestId: request.requestId,
+        result
+      });
+      return true;
+    };
+    hydroAgentState.commandCallbacks.add(wrapped);
+    return () => {
+      hydroAgentState.commandCallbacks.delete(wrapped);
     };
   }
 };

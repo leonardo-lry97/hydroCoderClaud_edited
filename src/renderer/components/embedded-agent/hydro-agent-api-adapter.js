@@ -70,6 +70,9 @@ export function createHydroAgentApiAdapter(hydroAgent) {
     clearAndRecreateAgentSession: ({ sessionId, overrides }) =>
       hydroAgent.clearAndRecreate(sessionId, overrides || {}),
     setAgentModel: (sessionId, model) => hydroAgent.setModel(sessionId, model),
+    getAgentSupportedCommands: (sessionId) => hydroAgent.getSupportedCommands(sessionId),
+    getAgentInitResult: (sessionId) => hydroAgent.getInitResult(sessionId),
+    getAgentMcpServerStatus: (sessionId) => hydroAgent.getMcpServerStatus(sessionId),
     respondAgentInteraction: ({ sessionId, interactionId, answers, questions, annotations, updatedInput, updatedPermissions, decisionClassification, behavior }) =>
       hydroAgent.respondInteraction(sessionId, interactionId, {
         answers,
@@ -84,8 +87,6 @@ export function createHydroAgentApiAdapter(hydroAgent) {
       hydroAgent.cancelInteraction(sessionId, interactionId, reason),
     compactAgentConversation: async () => ({ error: 'Embedded Agent does not support compact yet' }),
     renameAgentSession: async () => ({ success: true }),
-    getAgentSupportedCommands: async () => [],
-    getAgentInitResult: async () => null,
     getAgentQueue: async () => ({ success: true, queue: [] }),
     saveAgentQueue: async () => ({ success: true }),
     dispose: () => {

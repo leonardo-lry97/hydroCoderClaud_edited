@@ -42,13 +42,47 @@
                   </div>
                 </Teleport>
               </div>
-              <button type="button" class="context-send-btn" :disabled="!sessionId || sendingContext" @click="sendContext">
-                发送当前上下文
+              <button type="button" class="context-send-btn" :disabled="!sessionId" @click="toggleCapabilityPanel">
+                当前会话能力
+              </button>
+              <button type="button" class="context-send-btn" :disabled="!sessionId" @click="handleClearSession">
+                新建会话
               </button>
             </div>
           </header>
 
           <p class="embedded-agent-context">{{ contextText }}</p>
+
+          <section v-if="showCapabilityPanel" class="embedded-capability-panel">
+            <div class="embedded-capability-summary">
+              <span><strong>App</strong> {{ props.appId }}</span>
+              <span><strong>Session</strong> {{ sessionId || '-' }}</span>
+            </div>
+            <div v-if="capabilityError" class="embedded-capability-error">{{ capabilityError }}</div>
+            <div v-else class="embedded-capability-body">
+              <p class="embedded-capability-text">
+                <strong>会话状态</strong> {{ capabilitySnapshot.sessionStatusLabel }}
+              </p>
+              <p class="embedded-capability-text">
+                <strong>上下文</strong> {{ capabilitySnapshot.contextSummary || '暂无上下文摘要' }}
+              </p>
+              <p class="embedded-capability-text">
+                <strong>工具</strong> {{ capabilitySnapshot.toolNames.length > 0 ? capabilitySnapshot.toolNames.join('，') : '当前没有读取到会话级工具列表' }}
+              </p>
+              <p class="embedded-capability-text">
+                <strong>MCP</strong> {{ capabilitySnapshot.mcpNames.length > 0 ? capabilitySnapshot.mcpNames.join('，') : '当前没有读取到 MCP 状态' }}
+              </p>
+              <p class="embedded-capability-text">
+                <strong>运行态注入 MCP</strong> {{ capabilitySnapshot.injectedMcpNames.length > 0 ? capabilitySnapshot.injectedMcpNames.join('，') : '当前没有读取到 query 注入快照' }}
+              </p>
+              <p class="embedded-capability-text">
+                <strong>运行态允许工具</strong> {{ capabilitySnapshot.injectedToolNames.length > 0 ? capabilitySnapshot.injectedToolNames.join('，') : '当前没有读取到 query 允许工具快照' }}
+              </p>
+              <p v-if="capabilitySnapshot.hint" class="embedded-capability-hint">
+                {{ capabilitySnapshot.hint }}
+              </p>
+            </div>
+          </section>
 
           <div v-if="error" class="embedded-agent-error">{{ error }}</div>
           <div v-else-if="!sessionId" class="embedded-agent-loading">正在创建 Agent 会话...</div>
@@ -116,7 +150,6 @@ const chatRef = ref(null)
 const sessionId = ref('')
 const resolvedCwd = ref(props.cwd || '')
 const error = ref('')
-const sendingContext = ref(false)
 const contextSnapshot = ref(null)
 const agentApi = ref(null)
 const apiProfiles = ref([])
@@ -125,8 +158,19 @@ const currentApiProfileId = ref(props.apiProfileId || null)
 const currentModelId = ref(props.modelId || null)
 const switchingProfile = ref(false)
 const showProfileDropdown = ref(false)
+const showCapabilityPanel = ref(false)
 const profileSwitcherRef = ref(null)
 const profileDropdownPos = ref({ top: 0, right: 0 })
+const capabilityError = ref('')
+const capabilitySnapshot = ref({
+  toolNames: [],
+  mcpNames: [],
+  injectedMcpNames: [],
+  injectedToolNames: [],
+  contextSummary: '',
+  sessionStatusLabel: '',
+  hint: ''
+})
 
 const contextText = computed(() => {
   const context = contextSnapshot.value
@@ -202,19 +246,11 @@ const readContext = () => {
     ? normalizeContext(props.contextProvider())
     : null
   contextSnapshot.value = next
+  capabilitySnapshot.value = {
+    ...capabilitySnapshot.value,
+    contextSummary: next?.summary || next?.title || ''
+  }
   return next
-}
-
-const buildContextPrompt = (context) => {
-  const payload = context?.payload && Object.keys(context.payload).length > 0
-    ? `\n\n结构化上下文：\n${JSON.stringify(context.payload, null, 2)}`
-    : ''
-  return [
-    '请基于当前内嵌应用上下文继续协助用户。',
-    context?.title ? `业务位置：${context.title}` : '',
-    context?.summary ? `业务摘要：${context.summary}` : '',
-    payload
-  ].filter(Boolean).join('\n')
 }
 
 const findLatestSession = (sessions) => {
@@ -316,6 +352,84 @@ const syncSessionProfileSnapshot = async () => {
   }
 }
 
+const extractInitToolNames = (initResult) => {
+  if (!Array.isArray(initResult?.tools)) return []
+  return initResult.tools
+    .map((tool) => typeof tool?.name === 'string' ? tool.name.trim() : '')
+    .filter(Boolean)
+}
+
+const extractMcpNames = (mcpStatus) => {
+  if (Array.isArray(mcpStatus)) {
+    return mcpStatus
+      .map((item) => typeof item?.name === 'string' ? item.name.trim() : '')
+      .filter(Boolean)
+  }
+  if (Array.isArray(mcpStatus?.servers)) {
+    return mcpStatus.servers
+      .map((item) => typeof item?.name === 'string' ? item.name.trim() : '')
+      .filter(Boolean)
+  }
+  if (mcpStatus && typeof mcpStatus === 'object') {
+    return Object.keys(mcpStatus)
+  }
+  return []
+}
+
+const refreshCapabilitySnapshot = async () => {
+  if (!sessionId.value || !agentApi.value) return
+
+  capabilityError.value = ''
+
+  try {
+    const session = await agentApi.value.getAgentSession?.(sessionId.value)
+    let initResult = null
+    let mcpStatus = null
+    let hint = ''
+
+    try {
+      initResult = await agentApi.value.getAgentInitResult?.(sessionId.value)
+      mcpStatus = await agentApi.value.getAgentMcpServerStatus?.(sessionId.value).catch(() => null)
+    } catch (err) {
+      const message = err?.message || String(err)
+      if (message.includes('No active streaming session')) {
+        hint = '当前会话尚未发送首条消息，底层 Agent query 还未启动。先发送一条消息后，这里会显示真实工具和 MCP 列表。'
+      } else {
+        throw err
+      }
+    }
+
+    const sessionStatus = typeof session?.status === 'string' && session.status.trim()
+      ? session.status.trim()
+      : 'unknown'
+    const sessionClientType = typeof session?.clientType === 'string' && session.clientType.trim()
+      ? session.clientType.trim()
+      : 'unknown'
+    const querySnapshot = session?.lastQueryOptionsSnapshot && typeof session.lastQueryOptionsSnapshot === 'object'
+      ? session.lastQueryOptionsSnapshot
+      : null
+
+    capabilitySnapshot.value = {
+      toolNames: extractInitToolNames(initResult),
+      mcpNames: extractMcpNames(mcpStatus),
+      injectedMcpNames: Array.isArray(querySnapshot?.mcpServerNames) ? querySnapshot.mcpServerNames : [],
+      injectedToolNames: Array.isArray(querySnapshot?.allowedTools) ? querySnapshot.allowedTools : [],
+      contextSummary: contextSnapshot.value?.summary || contextSnapshot.value?.title || '',
+      sessionStatusLabel: `${sessionClientType} / ${sessionStatus}`,
+      hint
+    }
+  } catch (err) {
+    capabilityError.value = err?.message || String(err)
+  }
+}
+
+const toggleCapabilityPanel = async () => {
+  showCapabilityPanel.value = !showCapabilityPanel.value
+  if (showCapabilityPanel.value) {
+    await refreshCapabilitySnapshot()
+  }
+}
+
 const updateProfileDropdownPos = () => {
   if (!profileSwitcherRef.value) return
   const rect = profileSwitcherRef.value.getBoundingClientRect()
@@ -407,6 +521,8 @@ const initializeSession = async () => {
       resolvedCwd.value = client?.defaultCwd || ''
     }
 
+    await window.hydroAgent.updateContext?.(readContext())
+
     agentApi.value = createHydroAgentApiAdapter(window.hydroAgent)
     if (!agentApi.value) {
       error.value = '当前环境无法访问 embedded Agent 接口。'
@@ -425,26 +541,18 @@ const initializeSession = async () => {
       const activeSession = await reopenSessionIfNeeded(restorableSession)
       if (activeSession) {
         applySession(activeSession)
+        await refreshCapabilitySnapshot()
         return
       }
     }
 
     const session = await createNewSession()
-    if (session) applySession(session)
+    if (session) {
+      applySession(session)
+      await refreshCapabilitySnapshot()
+    }
   } catch (err) {
     error.value = err.message || String(err)
-  }
-}
-
-const sendContext = async () => {
-  const context = readContext()
-  if (!context || !chatRef.value?.sendMessage) return
-
-  sendingContext.value = true
-  try {
-    await chatRef.value.sendMessage(buildContextPrompt(context))
-  } finally {
-    sendingContext.value = false
   }
 }
 
@@ -454,6 +562,7 @@ const handleContextChanged = () => {
 
 const handleReady = () => {
   readContext()
+  void refreshCapabilitySnapshot()
 }
 
 const handleClearSession = async () => {
@@ -472,6 +581,7 @@ const handleClearSession = async () => {
       return
     }
     applySession(session)
+    await refreshCapabilitySnapshot()
     await persistAppPreferences({
       apiProfileId: currentApiProfileId.value,
       modelId: currentModelId.value
@@ -664,6 +774,48 @@ onBeforeUnmount(() => {
   color: var(--text-color-muted);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.embedded-capability-panel {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-color-secondary);
+}
+
+.embedded-capability-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-color-secondary);
+}
+
+.embedded-capability-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.embedded-capability-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-color);
+}
+
+.embedded-capability-error {
+  font-size: 12px;
+  color: var(--danger-color);
+}
+
+.embedded-capability-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-color-muted);
 }
 
 .embedded-agent-error,

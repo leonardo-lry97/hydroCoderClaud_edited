@@ -552,6 +552,121 @@ describe('AgentSessionManager interactions', () => {
     expect(createQueryOptions.env.ANTHROPIC_MODEL).toBe('shared-model')
   })
 
+  it('rebuilds embedded session runtime when active query was bootstrapped without embedded capability signature', async () => {
+    const { manager } = createManager()
+    manager.configManager.getDefaultProfile = vi.fn(() => ({
+      id: 'p1',
+      name: 'Default',
+      baseUrl: 'https://example.com',
+      selectedModelId: 'sonnet-4'
+    }))
+    manager.embeddedAppRuntimeManager = {
+      getContext: vi.fn(() => ({
+        title: '三家店水文站 / 实时数据列表',
+        summary: '当前站点：三家店水文站（SJD001）'
+      })),
+      executeCommand: vi.fn()
+    }
+
+    const oldQueue = {
+      isDone: false,
+      push: vi.fn(),
+      end: vi.fn()
+    }
+    const oldGenerator = {
+      close: vi.fn(),
+      setModel: vi.fn()
+    }
+
+    manager.runner = {
+      buildEnv: vi.fn(() => ({
+        ANTHROPIC_BASE_URL: 'https://example.com',
+        ANTHROPIC_MODEL: 'sonnet-4'
+      })),
+      createQuery: vi.fn(async (_queue, options) => {
+        async function * emptyGenerator() {}
+        const generator = emptyGenerator()
+        generator.setModel = vi.fn()
+        generator.close = vi.fn()
+        generator.options = options
+        return generator
+      })
+    }
+
+    const session = new AgentSession({
+      id: 's-embedded-refresh',
+      cwd: '/tmp',
+      apiProfileId: 'p1',
+      apiBaseUrl: 'https://example.com',
+      modelId: 'sonnet-4',
+      ownerClientId: 'embed:hydrology-workbench',
+      clientType: 'embedded',
+      clientMeta: {
+        appId: 'hydrology-workbench'
+      }
+    })
+    session.dbConversationId = 1
+    session.sdkSessionId = 'sdk-embedded-old'
+    session.queryGenerator = oldGenerator
+    session.messageQueue = oldQueue
+    session.outputLoopPromise = Promise.resolve()
+    session.lastBootstrappedRuntime = {
+      apiProfileId: 'p1',
+      apiBaseUrl: 'https://example.com',
+      modelId: 'sonnet-4',
+      executablePath: FIXED_CLAUDE_EXE
+    }
+    session.pendingRuntimeChange = 'none'
+    session.initResult = { tools: [{ name: 'stale_tool' }] }
+    manager.sessions.set(session.id, session)
+
+    await manager.sendMessage(session.id, '当前站点是什么')
+
+    expect(oldQueue.end).toHaveBeenCalledOnce()
+    expect(oldGenerator.close).toHaveBeenCalledOnce()
+    expect(manager.runner.createQuery).toHaveBeenCalledOnce()
+    const createQueryOptions = manager.runner.createQuery.mock.calls[0][1]
+    expect(createQueryOptions.resume).toBe('sdk-embedded-old')
+    expect(Object.keys(createQueryOptions.mcpServers || {})).toEqual(['embeddedapp'])
+    expect(createQueryOptions.allowedTools).toEqual(expect.arrayContaining([
+      'mcp__embeddedapp__context_get',
+      'mcp__embeddedapp__command_execute',
+      'mcp__embeddedapp__hydrology_context_get',
+      'mcp__embeddedapp__hydrology_current_station_get',
+      'mcp__embeddedapp__hydrology_tab_open',
+      'mcp__embeddedapp__hydrology_review_board_open'
+    ]))
+    expect(createQueryOptions.disallowedTools).toEqual(expect.arrayContaining([
+      'Bash',
+      'Glob',
+      'Grep',
+      'LS',
+      'Read'
+    ]))
+    expect(session.initResult).toBeNull()
+    expect(session.lastQueryOptionsSnapshot).toMatchObject({
+      clientType: 'embedded',
+      appId: 'hydrology-workbench',
+      mcpServerNames: ['embeddedapp']
+    })
+    expect(session.lastQueryOptionsSnapshot.allowedTools).toEqual(expect.arrayContaining([
+      'mcp__embeddedapp__context_get',
+      'mcp__embeddedapp__command_execute',
+      'mcp__embeddedapp__hydrology_context_get',
+      'mcp__embeddedapp__hydrology_current_station_get',
+      'mcp__embeddedapp__hydrology_tab_open',
+      'mcp__embeddedapp__hydrology_review_board_open'
+    ]))
+    expect(session.lastBootstrappedRuntime).toMatchObject({
+      apiProfileId: 'p1',
+      apiBaseUrl: 'https://example.com',
+      modelId: 'sonnet-4',
+      executablePath: FIXED_CLAUDE_EXE,
+      embeddedAppEnabled: true,
+      embeddedAppId: 'hydrology-workbench'
+    })
+  })
+
   it('attaches standard tool_use_result to the matching tool message', async () => {
     const { manager, sent } = createManager()
     const session = new AgentSession({ id: 's-tool', cwd: '/tmp' })

@@ -25,6 +25,7 @@ const { AgentSession } = require('./agent-session')
 const AgentFileManager = require('./managers/agent-file-manager')
 const AgentQueryManager = require('./managers/agent-query-manager')
 const { buildDesktopCapabilityQueryOptions } = require('./managers/desktop-capability-query-options')
+const { buildEmbeddedAppCapabilityQueryOptions } = require('./managers/embedded-app-capability-query-options')
 const ClaudeCodeRunner = require('./runners/claude-code-runner')
 const { tMain } = require('./utils/app-i18n')
 const {
@@ -88,6 +89,13 @@ function runtimeSignaturesEqual(left, right) {
     (left.executablePath || null) === (right.executablePath || null)
 }
 
+function isEmbeddedRuntimeSignatureSatisfied(signature, session) {
+  if (!signature || session?.clientType !== 'embedded') return true
+  const expectedAppId = session?.clientMeta?.appId || session?.clientMeta?.embeddedAppId || null
+  return Boolean(signature.embeddedAppEnabled) &&
+    (signature.embeddedAppId || null) === (expectedAppId || null)
+}
+
 function runtimeChangeKind(current, target) {
   if (!current || !target) return 'hard'
   if (runtimeSignaturesEqual(current, target)) return 'none'
@@ -95,6 +103,14 @@ function runtimeChangeKind(current, target) {
   if ((current.apiBaseUrl || null) !== (target.apiBaseUrl || null)) return 'hard'
   if ((current.executablePath || null) !== (target.executablePath || null)) return 'hard'
   return 'soft'
+}
+
+function uniqueStrings(values = []) {
+  return [...new Set(
+    (Array.isArray(values) ? values : [])
+      .map(value => typeof value === 'string' ? value.trim() : '')
+      .filter(Boolean)
+  )]
 }
 
 function resolveRequestedModel(_profile, _configManager, requestedModel) {
@@ -268,12 +284,46 @@ class AgentSessionManager extends EventEmitter {
   }
 
   _buildSessionRuntimeSignature(session, overrides = {}) {
-    return buildRuntimeSignature({
+    const signature = buildRuntimeSignature({
       apiProfileId: overrides.apiProfileId !== undefined ? overrides.apiProfileId : session?.apiProfileId,
       apiBaseUrl: overrides.apiBaseUrl !== undefined ? overrides.apiBaseUrl : session?.apiBaseUrl,
       modelId: overrides.modelId !== undefined ? overrides.modelId : this._resolveSessionModelId(session),
       executablePath: overrides.executablePath !== undefined ? overrides.executablePath : session?.lastBootstrappedRuntime?.executablePath || null
     })
+
+    if (session?.clientType === 'embedded') {
+      signature.embeddedAppEnabled = true
+      signature.embeddedAppId = session?.clientMeta?.appId || session?.clientMeta?.embeddedAppId || null
+    }
+
+    return signature
+  }
+
+  async _restartSessionQuery(session) {
+    if (!session) return
+
+    if (session.messageQueue) {
+      session.messageQueue.end()
+      session.messageQueue = null
+    }
+    if (session.queryGenerator) {
+      session.preserveSessionOnQueryExit = true
+      try { killProcessTree(session.cliPid) } catch {}
+      try { session.queryGenerator.close() } catch {}
+      session.queryGenerator = null
+      session.cliPid = null
+    }
+    if (session.outputLoopPromise) {
+      try {
+        await Promise.race([
+          session.outputLoopPromise,
+          new Promise(resolve => setTimeout(resolve, 3000))
+        ])
+      } catch {}
+      session.outputLoopPromise = null
+    }
+
+    session.initResult = null
   }
 
   _serializeSession(session) {
@@ -281,6 +331,29 @@ class AgentSessionManager extends EventEmitter {
     return {
       ...session.toJSON(),
       modelId
+    }
+  }
+
+  _buildQueryOptionsSnapshot(session, queryOptions, extra = {}) {
+    const appId = session?.clientMeta?.appId || session?.clientMeta?.embeddedAppId || null
+    const embeddedContext = appId && this.embeddedAppRuntimeManager?.getContext
+      ? this.embeddedAppRuntimeManager.getContext(appId)
+      : null
+
+    return {
+      sessionId: session?.id || null,
+      ownerClientId: session?.ownerClientId || null,
+      clientType: session?.clientType || null,
+      appId,
+      mcpServerNames: Object.keys(queryOptions?.mcpServers || {}),
+      allowedTools: uniqueStrings(queryOptions?.allowedTools),
+      disallowedTools: uniqueStrings(queryOptions?.disallowedTools),
+      hasSystemPrompt: Boolean(queryOptions?.systemPrompt),
+      cwd: queryOptions?.cwd || session?.cwd || null,
+      embeddedRuntimeAttached: Boolean(this.embeddedAppRuntimeManager && appId),
+      embeddedContextAvailable: Boolean(embeddedContext),
+      embeddedContextSummary: embeddedContext?.summary || embeddedContext?.title || '',
+      ...extra
     }
   }
 
@@ -1076,6 +1149,24 @@ class AgentSessionManager extends EventEmitter {
     }
 
     // 已有持久 query → 直接 push 消息
+    const targetRuntimeSignature = this._buildSessionRuntimeSignature(session, {
+      executablePath: this._getDeveloperClaudeExecutablePath()
+    })
+    const embeddedRuntimeSatisfied = isEmbeddedRuntimeSignatureSatisfied(session.lastBootstrappedRuntime, session)
+    const shouldRefreshEmbeddedRuntime = session.clientType === 'embedded' &&
+      (!embeddedRuntimeSatisfied || !runtimeSignaturesEqual(session.lastBootstrappedRuntime, targetRuntimeSignature))
+
+    if (shouldRefreshEmbeddedRuntime) {
+      console.log('[AgentSession] refreshing embedded runtime before send:', {
+        sessionId,
+        appId: session?.clientMeta?.appId || session?.clientMeta?.embeddedAppId || null,
+        lastBootstrappedRuntime: session.lastBootstrappedRuntime || null,
+        targetRuntimeSignature
+      })
+      await this._restartSessionQuery(session)
+      session.pendingRuntimeChange = 'hard'
+    }
+
     if (session.queryGenerator && session.messageQueue && !session.messageQueue.isDone) {
       console.log('[AgentSession] sendMessage path: existing queue', {
         sessionId,
@@ -1140,7 +1231,7 @@ class AgentSessionManager extends EventEmitter {
       const targetModelId = requestedModel
         ? normalizeModelIdOrNull(requestedModel)
         : this._resolveSessionModelId(session) || normalizeModelIdOrNull(sessionProfile?.selectedModelId)
-      const targetSignature = buildRuntimeSignature({
+      const targetSignature = this._buildSessionRuntimeSignature(session, {
         apiProfileId: sessionProfile?.id || null,
         apiBaseUrl: sessionProfile?.baseUrl || null,
         modelId: targetModelId,
@@ -1203,30 +1294,69 @@ class AgentSessionManager extends EventEmitter {
       let appendSystemPrompt = session.source === 'scheduled'
         ? undefined
         : HYDRO_IDENTITY_SYSTEM_PROMPT
+      const embeddedAppId = session?.clientMeta?.appId || session?.clientMeta?.embeddedAppId || null
+      const shouldSkipDesktopCapabilities = session?.clientType === 'embedded' &&
+        embeddedAppId === 'hydrology-workbench'
+
+      if (!shouldSkipDesktopCapabilities) {
+        try {
+          const desktopCapabilityOptions = await buildDesktopCapabilityQueryOptions({
+            scheduledTaskService: this.scheduledTaskService,
+            weixinNotifyService: this.weixinNotifyService,
+            session
+          })
+          if (desktopCapabilityOptions?.mcpServers) {
+            queryOptions.mcpServers = desktopCapabilityOptions.mcpServers
+          }
+          if (desktopCapabilityOptions?.appendSystemPrompt) {
+            appendSystemPrompt = mergeSystemPrompts(
+              appendSystemPrompt,
+              desktopCapabilityOptions.appendSystemPrompt
+            )
+          }
+          if (desktopCapabilityOptions?.allowedTools?.length) {
+            queryOptions.allowedTools = desktopCapabilityOptions.allowedTools
+          }
+          if (desktopCapabilityOptions?.disallowedTools?.length) {
+            queryOptions.disallowedTools = desktopCapabilityOptions.disallowedTools
+          }
+        } catch (err) {
+          console.warn('[AgentSession] Failed to build desktop capability query options:', err)
+        }
+      }
 
       try {
-        const desktopCapabilityOptions = await buildDesktopCapabilityQueryOptions({
-          scheduledTaskService: this.scheduledTaskService,
-          weixinNotifyService: this.weixinNotifyService,
+        const embeddedAppCapabilityOptions = await buildEmbeddedAppCapabilityQueryOptions({
+          embeddedAppRuntimeManager: this.embeddedAppRuntimeManager,
           session
         })
-        if (desktopCapabilityOptions?.mcpServers) {
-          queryOptions.mcpServers = desktopCapabilityOptions.mcpServers
+
+        if (embeddedAppCapabilityOptions?.mcpServers) {
+          queryOptions.mcpServers = {
+            ...(queryOptions.mcpServers || {}),
+            ...embeddedAppCapabilityOptions.mcpServers
+          }
         }
-        if (desktopCapabilityOptions?.appendSystemPrompt) {
+        if (embeddedAppCapabilityOptions?.appendSystemPrompt) {
           appendSystemPrompt = mergeSystemPrompts(
             appendSystemPrompt,
-            desktopCapabilityOptions.appendSystemPrompt
+            embeddedAppCapabilityOptions.appendSystemPrompt
           )
         }
-        if (desktopCapabilityOptions?.allowedTools?.length) {
-          queryOptions.allowedTools = desktopCapabilityOptions.allowedTools
+        if (embeddedAppCapabilityOptions?.allowedTools?.length) {
+          queryOptions.allowedTools = [
+            ...(queryOptions.allowedTools || []),
+            ...embeddedAppCapabilityOptions.allowedTools
+          ]
         }
-        if (desktopCapabilityOptions?.disallowedTools?.length) {
-          queryOptions.disallowedTools = desktopCapabilityOptions.disallowedTools
+        if (embeddedAppCapabilityOptions?.disallowedTools?.length) {
+          queryOptions.disallowedTools = [
+            ...(queryOptions.disallowedTools || []),
+            ...embeddedAppCapabilityOptions.disallowedTools
+          ]
         }
       } catch (err) {
-        console.warn('[AgentSession] Failed to build desktop capability query options:', err)
+        console.warn('[AgentSession] Failed to build embedded app capability query options:', err)
       }
 
       if (appendSystemPrompt) {
@@ -1273,6 +1403,17 @@ class AgentSessionManager extends EventEmitter {
         resume: queryOptions.resume || null,
         envBaseUrl: env.ANTHROPIC_BASE_URL || env.ANTHROPIC_API_URL || null,
         envModel: env.ANTHROPIC_MODEL || null,
+        runtimeDiff,
+        pendingRuntimeChange: session.pendingRuntimeChange || 'unknown'
+      })
+
+      session.initResult = null
+      session.lastQueryOptionsSnapshot = this._buildQueryOptionsSnapshot(session, queryOptions, {
+        apiProfileId: sessionProfile?.id || null,
+        profileBaseUrl: sessionProfile?.baseUrl || null,
+        requestedModel: requestedModel || null,
+        queryModel: queryOptions.model || null,
+        resume: queryOptions.resume || null,
         runtimeDiff,
         pendingRuntimeChange: session.pendingRuntimeChange || 'unknown'
       })

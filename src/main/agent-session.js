@@ -45,6 +45,7 @@ class AgentSession {
     this.pendingInteractions = new Map()  // 待处理的宿主交互请求
     this.lastBootstrappedRuntime = null
     this.pendingRuntimeChange = 'unknown'
+    this.lastQueryOptionsSnapshot = null
   }
 
   toJSON() {
@@ -68,7 +69,8 @@ class AgentSession {
       apiBaseUrl: this.apiBaseUrl,
       modelId: this.modelId,
       source: this.source,
-      taskId: this.taskId
+      taskId: this.taskId,
+      lastQueryOptionsSnapshot: this.lastQueryOptionsSnapshot
     }
   }
 }
