@@ -185,7 +185,11 @@ const props = defineProps({
   isExpanded: { type: Boolean, default: false },
   sessionId: { type: String, default: null },
   sessionType: { type: String, default: 'chat' },
-  draftText: { type: String, default: '' }
+  draftText: { type: String, default: '' },
+  weixinNotifyApi: {
+    type: Object,
+    default: null
+  }
 })
 
 const emit = defineEmits([
@@ -219,15 +223,17 @@ const showWeixinBtn = computed(() => ['chat', 'weixin'].includes(props.sessionTy
 const weixinBtnTitle = computed(() => t('agent.weixinQuickSendTitle'))
 const selectedWeixinTarget = computed(() => weixinTargets.value.find(target => target.id === selectedWeixinTargetId.value) || null)
 const canSendWeixin = computed(() => Boolean(selectedWeixinTarget.value && weixinText.value.trim()))
+const resolvedWeixinNotifyApi = computed(() => props.weixinNotifyApi || window.electronAPI || null)
 
 const loadWeixinTargets = async () => {
-  if (!window.electronAPI?.listWeixinNotifyTargets) return
+  const weixinApi = resolvedWeixinNotifyApi.value
+  if (!weixinApi?.listWeixinNotifyTargets) return
   weixinLoading.value = true
   try {
     const [targets, binding] = await Promise.all([
-      window.electronAPI.listWeixinNotifyTargets(),
-      props.sessionId && window.electronAPI?.getSessionWeixinBinding
-        ? window.electronAPI.getSessionWeixinBinding(props.sessionId).catch(() => null)
+      weixinApi.listWeixinNotifyTargets(),
+      props.sessionId && weixinApi?.getSessionWeixinBinding
+        ? weixinApi.getSessionWeixinBinding(props.sessionId).catch(() => null)
         : null
     ])
     if (targets?.error) {
@@ -271,13 +277,14 @@ const closeWeixinDropdown = () => {
 }
 
 const sendWeixinQuickMessage = async () => {
-  if (!canSendWeixin.value || !props.sessionId || !window.electronAPI?.sendWeixinNotifyText) return
+  const weixinApi = resolvedWeixinNotifyApi.value
+  if (!canSendWeixin.value || !props.sessionId || !weixinApi?.sendWeixinNotifyText) return
   weixinSending.value = true
   weixinError.value = ''
   try {
     const target = selectedWeixinTarget.value
-    if (window.electronAPI?.bindSessionToWeixinTarget) {
-      const bindResult = await window.electronAPI.bindSessionToWeixinTarget({
+    if (weixinApi?.bindSessionToWeixinTarget) {
+      const bindResult = await weixinApi.bindSessionToWeixinTarget({
         sessionId: props.sessionId,
         accountId: target.accountId,
         targetId: target.id,
@@ -287,7 +294,7 @@ const sendWeixinQuickMessage = async () => {
         throw new Error(bindResult.error)
       }
     }
-    const result = await window.electronAPI.sendWeixinNotifyText({
+    const result = await weixinApi.sendWeixinNotifyText({
       sessionId: props.sessionId,
       accountId: target.accountId,
       targetId: target.id,

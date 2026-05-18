@@ -57,6 +57,10 @@ describe('embedded agent panel wiring', () => {
     expect(source).not.toContain('class="context-send-btn"')
     expect(source).not.toContain('class="embedded-agent-context"')
     expect(source).toContain(':agent-api="agentApi"')
+    expect(source).toContain(':weixin-notify-api="weixinNotifyApi"')
+    expect(source).toContain('const weixinNotifyApi = computed(() => {')
+    expect(source).toContain('listWeixinNotifyTargets: api.listWeixinNotifyTargets?.bind(api)')
+    expect(source).toContain('sendWeixinNotifyText: api.sendWeixinNotifyText?.bind(api)')
     expect(source).toContain('@model-selected="handleModelSelected"')
     expect(source).toContain('@request-clear-session="handleClearSession"')
     expect(source).toContain('contextProvider')
@@ -119,6 +123,8 @@ describe('embedded agent panel wiring', () => {
 
     expect(source).toContain('agentApi:')
     expect(source).toContain('agentApi: props.agentApi')
+    expect(source).toContain('weixinNotifyApi:')
+    expect(source).toContain(':weixin-notify-api="weixinNotifyApi"')
     expect(source).toContain("'api-profile-selected'")
     expect(source).toContain(':show-api-profile-switcher="Boolean(props.sessionId)"')
     expect(source).toContain('@api-profile-selected="handleApiProfileSelected"')
@@ -139,6 +145,19 @@ describe('embedded agent panel wiring', () => {
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:deleteFile'")
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:openFile'")
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:openOutputDir'")
+  })
+
+  it('passes injected weixin notification API into the shared chat toolbar', () => {
+    const agentChatTabSource = fs.readFileSync(agentChatTabPath, 'utf-8')
+    const chatInputSource = fs.readFileSync(path.resolve(__dirname, '../../src/renderer/pages/main/components/agent/ChatInput.vue'), 'utf-8')
+    const toolbarSource = fs.readFileSync(path.resolve(__dirname, '../../src/renderer/pages/main/components/agent/ChatInputToolbar.vue'), 'utf-8')
+
+    expect(agentChatTabSource).toContain(':weixin-notify-api="weixinNotifyApi"')
+    expect(chatInputSource).toContain(':weixin-notify-api="weixinNotifyApi"')
+    expect(toolbarSource).toContain('weixinNotifyApi:')
+    expect(toolbarSource).toContain('const resolvedWeixinNotifyApi = computed(() => props.weixinNotifyApi || window.electronAPI || null)')
+    expect(toolbarSource).toContain('weixinApi.listWeixinNotifyTargets()')
+    expect(toolbarSource).toContain('weixinApi.sendWeixinNotifyText({')
   })
 
   it('mounts the reusable panel inside hydrology workbench', () => {

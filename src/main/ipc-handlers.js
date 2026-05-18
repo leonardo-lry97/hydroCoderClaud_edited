@@ -877,6 +877,7 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
       if (!sender) {
         throw new Error('Embedded event sender not available')
       }
+      trustedWeixinWebContents.add(sender)
 
       const existingId = embeddedSubscriptions.get(sender.id)
       if (existingId) {
@@ -933,6 +934,7 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
         if (embeddedAppRuntimeManager) {
           embeddedAppRuntimeManager.unregisterCommandClient(normalizedClient.appId, normalizedClient.clientId)
         }
+        trustedWeixinWebContents.delete(sender)
         for (const [requestId, pending] of embeddedCommandRequests.entries()) {
           if (pending.senderId !== sender.id) continue
           clearTimeout(pending.timeout)
@@ -965,6 +967,7 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
         agentEventRouter.unregisterClient(subscriptionId)
         embeddedSubscriptions.delete(event.sender.id)
       }
+      trustedWeixinWebContents.delete(event.sender)
       return { success: true }
     })
 

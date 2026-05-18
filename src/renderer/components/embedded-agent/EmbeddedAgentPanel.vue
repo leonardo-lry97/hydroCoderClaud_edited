@@ -111,6 +111,7 @@
                 :api-profile-id="currentApiProfileId"
                 :model-id="currentModelId"
                 :agent-api="agentApi"
+                :weixin-notify-api="weixinNotifyApi"
                 @ready="handleReady"
                 @api-profile-selected="handleApiProfileSelected"
                 @model-selected="handleModelSelected"
@@ -188,6 +189,16 @@ const resolvedCwd = ref(props.cwd || '')
 const error = ref('')
 const contextSnapshot = ref(null)
 const agentApi = ref(null)
+const weixinNotifyApi = computed(() => {
+  const api = window.electronAPI || null
+  if (!api) return null
+  return {
+    listWeixinNotifyTargets: api.listWeixinNotifyTargets?.bind(api),
+    getSessionWeixinBinding: api.getSessionWeixinBinding?.bind(api),
+    bindSessionToWeixinTarget: api.bindSessionToWeixinTarget?.bind(api),
+    sendWeixinNotifyText: api.sendWeixinNotifyText?.bind(api)
+  }
+})
 const apiProfiles = ref([])
 const loadingProfiles = ref(false)
 const currentApiProfileId = ref(props.apiProfileId || null)

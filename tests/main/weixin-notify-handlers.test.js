@@ -49,4 +49,25 @@ describe('setupWeixinNotifyHandlers', () => {
     expect(result).toEqual({ error: '未授权的微信通知 IPC 调用' })
     expect(service.listTargets).not.toHaveBeenCalled()
   })
+
+  it('allows calls from sender accepted by the extension trust hook', async () => {
+    const ipcMain = createIpcMain()
+    const embeddedSender = {}
+    const service = {
+      listTargets: vi.fn(() => [{ id: 'target-embedded' }])
+    }
+
+    setupWeixinNotifyHandlers(ipcMain, service, null, {
+      webContents: {}
+    }, {
+      isTrustedSender: (sender) => sender === embeddedSender
+    })
+
+    const result = await ipcMain.handlers.get('weixin-notify:listTargets')({
+      sender: embeddedSender
+    })
+
+    expect(result).toEqual([{ id: 'target-embedded' }])
+    expect(service.listTargets).toHaveBeenCalledTimes(1)
+  })
 })

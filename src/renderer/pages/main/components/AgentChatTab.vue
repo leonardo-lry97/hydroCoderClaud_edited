@@ -99,6 +99,7 @@
       :show-api-profile-switcher="Boolean(props.sessionId)"
       :session-id="props.sessionId"
       :session-type="props.sessionType"
+      :weixin-notify-api="weixinNotifyApi"
       v-model:model-value="selectedModel"
       @update:model-value="applyUserSelectedModel"
       @api-profile-selected="handleApiProfileSelected"
@@ -156,6 +157,10 @@ const props = defineProps({
     default: null
   },
   agentApi: {
+    type: Object,
+    default: null
+  },
+  weixinNotifyApi: {
     type: Object,
     default: null
   }
