@@ -1,6 +1,6 @@
 # 渲染进程与 UI 设计
 
-> Hydro Desktop v1.7.64+ | [← 架构总览](../ARCHITECTURE.md) | [代码索引 →](../code-index/renderer.md)
+> Hydro Desktop v1.7.69+ | [← 架构总览](../ARCHITECTURE.md) | [代码索引 →](../code-index/renderer.md)
 
 技术栈：Vue 3 (Composition API) + Naive UI + xterm.js
 
@@ -8,7 +8,7 @@
 
 ## 页面架构
 
-应用包含 **10 个独立 BrowserWindow 页面**，每个页面有独立的 `index.html` → `main.js` → `App.vue` 入口链。所有页面共享 composables、主题系统和国际化资源（通过 Vite alias 引用）。
+当前渲染进程共有 **12 个 BrowserWindow 页面入口**，均采用独立的 `index.html` → `main.js` 入口链；其中传统桌面页面与内嵌 app 页面分层管理。所有页面共享 composables、主题系统和国际化资源（通过 Vite alias 引用）。
 
 ### 主窗口
 
@@ -16,7 +16,14 @@
 |------|------|
 | **main** | 主窗口，承载 Developer、Agent、Notebook 三种模式的核心交互 |
 
-### 9 个独立窗口
+### 10 个传统桌面页面
+
+| 页面类型 | 数量 | 说明 |
+|------|------|------|
+| 主窗口 | 1 | `main`，承载 Developer、Agent、Notebook 三种模式 |
+| 独立管理窗口 | 9 | notebook、各类 settings/manager 页面，主进程单例管理 |
+
+### 9 个独立管理窗口
 
 | 页面 | 用途 | 打开方式 |
 |------|------|---------|
@@ -31,6 +38,15 @@
 | update-manager | 更新管理（下载进度/安装控制） | 发现新版本时自动打开 |
 
 窗口通过 `window.electronAPI.openXxxManager()` → IPC `window:openXxxManager` 打开，主进程保证单例（同一窗口不重复创建）。独立窗口间通过 **设置广播机制** 同步状态（详见 [跨窗口广播](#跨窗口广播机制)）。
+
+### 2 个内嵌 App 页面
+
+| 页面 | 用途 | 打开方式 |
+|------|------|---------|
+| embedded-app-demo | 内嵌 app / embedded agent 宿主能力演示 | `embedded-app:list` / `embedded-app:open` / `window:openEmbeddedAppDemo` |
+| hydrology-workbench | 水文站工作台，内嵌右侧 Agent 与工作目录 | `embedded-app:list` / `embedded-app:open` |
+
+内嵌 app 也运行在独立 `BrowserWindow` 中，但与 notebook、settings 这一类管理窗口不同，它们遵循统一的内嵌 app 注册表、运行态桥接和 Agent 能力注入约定。详细标准见 [内嵌 App 设计与实现标准](./embedded-app-development-standard.md)。
 
 > 完整组件列表与行数统计见 → [code-index/renderer.md](../code-index/renderer.md)
 
@@ -216,6 +232,38 @@ Notebook 的 `ChatPanel` 已复用 Agent 聊天核心能力：
 - 已接入微信监听，能在 Notebook 内显示微信回流消息
 - 继续复用 `ChatInput`，因此同样具备微信快捷发送入口
 - Notebook 当前只补齐微信显示与发送，不改变其资料整理、成果生成主流程
+
+### 内嵌 App 右侧 Agent 宿主
+
+`EmbeddedAgentPanel.vue` 是内嵌 app 复用主聊天能力的标准宿主组件，当前已在 `hydrology-workbench` 中落地。它不是主窗口 `AgentRightPanel` 的复制品，而是针对 embedded client 单独封装的一层宿主。
+
+当前固定结构：
+
+- 顶部平行 tab：`工作台助手` / `工作目录`
+- 助手页复用 `AgentChatTab`
+- 工作目录页复用 `WorkspaceFilePanel`
+- 通过 `useEmbeddedAgentFiles()` 把 embedded 文件 API 适配成共享文件面板数据模型
+- 通过图标按钮承载上下文 tip、会话能力面板、新建会话
+
+当前约束：
+
+- `工作台助手` 与 `工作目录` 是同级 tab，不再把工作目录开关嵌在助手内部
+- `AgentChatTab` 继续复用聊天输入、工具栏、微信通知、模型切换、交互请求处理
+- `WorkspaceFilePanel` 继续复用文件树、预览、保存、插入路径等能力
+- 内嵌 app 只负责提供 `contextProvider` 与 `commandHandler`，不重写共享聊天 UI
+
+### 水文工作台内嵌实现
+
+当前水文工作台右侧面板接入方式：
+
+1. `hydrology-workbench/index.html` 预留 `hydrologyAgentPanel` 挂载点
+2. `agent-panel.js` 调用 `mountHydrologyAgentPanel()`
+3. `main.js` 内的 `notifyAgentContextChanged(force)` 在站点、功能页、审核任务等状态变化后同步上下文
+4. `createEmbeddedAppRuntimeBridge(window.hydroAgent, { appId, getContext, commandHandler })` 负责：
+   - 把当前业务上下文同步到主进程
+   - 接收 Agent 发起的受控命令并回调页面逻辑
+
+这套结构是后续内嵌 app 的推荐基线，不再建议为单个 app 单独复制聊天组件或文件树组件。
 
 #### StreamingIndicator (131 行)
 

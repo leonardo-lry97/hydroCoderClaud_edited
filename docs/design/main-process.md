@@ -1,6 +1,6 @@
 # 主进程设计
 
-> Hydro Desktop v1.7.64 | [<< 架构总览](../ARCHITECTURE.md) | [代码索引](../code-index/main.md) | [IPC 通道](../code-index/ipc-channels.md) | [集成模块](integrations.md)
+> Hydro Desktop v1.7.69+ | [<< 架构总览](../ARCHITECTURE.md) | [代码索引](../code-index/main.md) | [IPC 通道](../code-index/ipc-channels.md) | [集成模块](integrations.md)
 
 ---
 
@@ -33,13 +33,14 @@
 9. UpdateManager            ← 自动更新
 10. DingTalkBridge          ← 钉钉桥接
 11. NotebookManager         ← Notebook 工作台后端能力
-12. ScheduledTaskService    ← 桌面端定时任务调度
-13. WeixinNotifyService     ← 微信 iLink 授权 / 轮询 / 发送
-14. WeixinBridge            ← 微信会话桥接
-15. setupIPCHandlers()      ← IPC 注册 + SessionDatabase 初始化 + scheduledTaskService.start()
-16. powerSaveBlocker.start  ← 防止系统挂起
-17. scheduleUpdateCheck(5s) ← 延迟检查更新
-18. DingTalk.start (3s)     ← 延迟启动钉钉
+12. EmbeddedAppPreferencesManager ← 内嵌 app API Profile / 模型偏好
+13. ScheduledTaskService    ← 桌面端定时任务调度
+14. WeixinNotifyService     ← 微信 iLink 授权 / 轮询 / 发送
+15. WeixinBridge            ← 微信会话桥接
+16. setupIPCHandlers()      ← IPC 注册 + SessionDatabase 初始化 + scheduledTaskService.start()
+17. powerSaveBlocker.start  ← 防止系统挂起
+18. scheduleUpdateCheck(5s) ← 延迟检查更新
+19. DingTalk.start (3s)     ← 延迟启动钉钉
 ```
 
 **关键文件**: `src/main/index.js`
@@ -51,6 +52,7 @@
 - `ScheduledTaskService` 在创建后先挂到 `agentSessionManager.scheduledTaskService`，再在 `setupIPCHandlers()` 内注入 `SessionDatabase` 并启动轮询
 - `WeixinNotifyService` 在 IPC 注册前就已启动，并先注入到 `agentSessionManager.weixinNotifyService`，供 Agent 会话构建内置微信 MCP
 - `WeixinBridge` 依赖 `AgentSessionManager` 和 `WeixinNotifyService`，负责会话绑定、入站微信路由和回复回推
+- `EmbeddedAppPreferencesManager` 在 `NotebookManager` 之后初始化，并通过 `setupIPCHandlers()` 暴露给内嵌 app 读写偏好
 - `CapabilityManager` 依赖 `PluginService`、`SkillsManager`、`AgentsManager`、`McpManager`，需在它们之后创建
 - `McpManager.configManager` 和 `McpManager.settingsManager` 通过属性注入（非构造函数参数）
 
@@ -265,6 +267,47 @@ Agent 会话的工作目录分配策略：
 2. 重建 `AgentSession` 对象，恢复 `sdkSessionId`、`messageCount`、`totalCostUsd` 等
 3. 放回 `sessions` Map
 4. 下次 `sendMessage()` 时通过 `options.resume = session.sdkSessionId` 恢复 CLI 对话上下文
+
+### 内嵌 App Agent 复用
+
+当前主进程已支持 `clientType = embedded` 的 Agent 会话复用，核心分层如下：
+
+```text
+embedded BrowserWindow
+  → preload 暴露 window.hydroAgent
+  → hydro-agent:* IPC
+  → AgentSessionBroker 负责 client / session 归属
+  → AgentSessionManager 继续执行底层会话
+  → EmbeddedAppRuntimeManager 维护 app context / command bridge
+```
+
+当前实现要点：
+
+- embedded client 通过 `window.hydroAgent.connect()` 建立 client 身份
+- 主进程为每个 app 分配独立工作目录：`{userData}/embedded-apps/{appId}/workspace`
+- `EmbeddedAppRuntimeManager` 按 `appId` 保存当前上下文快照与命令执行桥
+- `buildEmbeddedAppCapabilityQueryOptions()` 会在 embedded 会话发送消息前注入：
+  - 通用 `embeddedapp` MCP 工具：`context_get`、`command_execute`
+  - 针对 `hydrology-workbench` 的专属工具与 prompt 约束
+- 会话 owner 优先路由回当前 embedded client，避免多个同 app 窗口串命令
+
+### 水文工作台专属能力注入
+
+`hydrology-workbench` 在通用 embeddedapp 之上，还会额外注入水文场景专属约束：
+
+- 允许工具：
+  - `hydrology_context_get`
+  - `hydrology_current_station_get`
+  - `hydrology_tab_open`
+  - `hydrology_review_board_open`
+- 禁用工具：
+  - `Bash`
+  - `Glob`
+  - `Grep`
+  - `LS`
+  - `Read`
+
+这样做的目的不是削弱 Agent，而是强制当前会话优先读取水文工作台的运行态上下文与受控页面动作，避免把“当前站点”“审核任务状态”误判成桌面定时任务或工作区文件问题。
 
 ### spawnClaudeCodeProcess
 
@@ -501,6 +544,11 @@ downloadUpdate()
 4. 调用 12 个 `setupXxxHandlers()` 注册模块化处理器
 5. 直接注册顶层通道（dialog、shell、window、terminal、session watcher 等）
 
+当前还承担两组内嵌 app 相关职责：
+
+1. 创建 `EmbeddedAppRuntimeManager`
+2. 注册 `embedded-app:*` 与 `hydro-agent:*` IPC 通道
+
 ### Handler 模块化
 
 每个 Handler 模块导出一个 `setupXxxHandlers(ipcMain, ...dependencies)` 函数：
@@ -529,6 +577,59 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
 ### 安全发送
 
 `safeSend(mainWindow, channel, data)` 在发送前检查窗口和 webContents 是否存活，防止 macOS `activate` 重建窗口期间的 `Cannot call send on a destroyed webContents` 错误。
+
+### 内嵌 App 窗口与 IPC
+
+当前内嵌 app 入口由 `embedded-app-registry.js` 维护，主进程通过 `openEmbeddedAppWindow(menuKey)` 统一打开对应页面。
+
+窗口创建约束：
+
+- 统一使用 `createSubWindow()`
+- `preload` 仍为共享的 `preload.js`
+- `contextIsolation: true`
+- `nodeIntegration: false`
+- `webviewTag: true`
+- 默认 `startMaximized: true`
+
+当前相关 IPC：
+
+- `embedded-app:list`
+- `embedded-app:open`
+- `embedded-app:getPreferences`
+- `embedded-app:updatePreferences`
+- `window:openEmbeddedAppDemo`
+
+当前 embedded agent 相关 IPC：
+
+- 连接与上下文：`hydro-agent:connect`、`disconnect`、`updateContext`、`getContext`
+- 会话：`createSession`、`listSessions`、`getSession`、`getMessages`、`sendMessage`、`close`、`reopen`
+- 模型与能力：`switchApiProfile`、`setModel`、`getInitResult`、`getMcpServerStatus`、`getSupportedCommands`
+- 交互：`respondInteraction`、`cancelInteraction`
+- 工作目录：`listDir`、`readFile`、`saveFile`、`searchFiles`、`createFile`、`renameFile`、`deleteFile`、`openFile`、`openOutputDir`
+
+### 内嵌 App 偏好存储
+
+内嵌 app 偏好由 `EmbeddedAppPreferencesManager` 管理，当前只保存：
+
+- `apiProfileId`
+- `modelId`
+
+存储位置仍在 `config.json` 内：
+
+```json
+{
+  "settings": {
+    "embeddedApps": {
+      "preferences": {
+        "hydrology-workbench": {
+          "apiProfileId": "...",
+          "modelId": "..."
+        }
+      }
+    }
+  }
+}
+```
 
 ---
 
