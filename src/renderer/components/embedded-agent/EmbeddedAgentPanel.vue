@@ -3,79 +3,106 @@
     <n-message-provider>
       <n-dialog-provider>
         <div class="embedded-agent-panel" :style="cssVars">
-          <header class="embedded-agent-header">
-            <div v-if="appLabel || title">
-              <p v-if="appLabel" class="embedded-agent-eyebrow">{{ appLabel }}</p>
-              <h3 v-if="title">{{ title }}</h3>
-            </div>
-            <div class="embedded-agent-actions">
-              <button type="button" class="context-send-btn" :disabled="!sessionId" @click="toggleCapabilityPanel">
-                当前会话能力
-              </button>
-              <button type="button" class="context-send-btn" :disabled="!sessionId" @click="handleClearSession">
-                新建会话
-              </button>
-            </div>
-          </header>
+          <div class="embedded-agent-tabs" role="tablist" aria-label="Embedded agent tabs">
+            <button
+              type="button"
+              class="embedded-agent-tab"
+              :class="{ active: activeTab === 'chat' }"
+              @click="activeTab = 'chat'"
+            >
+              工作台助手
+            </button>
+            <button
+              type="button"
+              class="embedded-agent-tab"
+              :class="{ active: activeTab === 'files' }"
+              @click="activeTab = 'files'"
+            >
+              工作目录
+            </button>
+          </div>
 
-          <p class="embedded-agent-context">{{ contextText }}</p>
+          <div v-show="activeTab === 'chat'" class="embedded-agent-assistant-view">
+            <header class="embedded-agent-header">
+              <div v-if="appLabel || title" class="embedded-agent-title">
+                <p v-if="appLabel" class="embedded-agent-eyebrow">{{ appLabel }}</p>
+                <h3 v-if="title">{{ title }}</h3>
+              </div>
+              <div class="embedded-agent-actions">
+                <div class="embedded-agent-tip-anchor">
+                  <button
+                    type="button"
+                    class="embedded-agent-icon-btn"
+                    :class="{ active: showContextTip }"
+                    title="当前上下文"
+                    aria-label="当前上下文"
+                    @click="toggleContextTip"
+                  >
+                    <Icon name="info" :size="17" :stroke-width="1.8" />
+                  </button>
+                  <div v-if="showContextTip" class="embedded-context-tip" role="tooltip">
+                    {{ contextText }}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="embedded-agent-icon-btn"
+                  :class="{ active: showCapabilityPanel }"
+                  :disabled="!sessionId"
+                  title="当前会话能力"
+                  aria-label="当前会话能力"
+                  @click="toggleCapabilityPanel"
+                >
+                  <Icon name="sliders" :size="17" :stroke-width="1.8" />
+                </button>
+                <button
+                  type="button"
+                  class="embedded-agent-icon-btn primary"
+                  :disabled="!sessionId"
+                  title="新建会话"
+                  aria-label="新建会话"
+                  @click="handleClearSession"
+                >
+                  <Icon name="plus" :size="18" :stroke-width="2" />
+                </button>
+              </div>
+            </header>
 
-          <section v-if="showCapabilityPanel" class="embedded-capability-panel">
-            <div class="embedded-capability-summary">
-              <span><strong>App</strong> {{ props.appId }}</span>
-              <span><strong>Session</strong> {{ sessionId || '-' }}</span>
-            </div>
-            <div v-if="capabilityError" class="embedded-capability-error">{{ capabilityError }}</div>
-            <div v-else class="embedded-capability-body">
-              <p class="embedded-capability-text">
-                <strong>会话状态</strong> {{ capabilitySnapshot.sessionStatusLabel }}
-              </p>
-              <p class="embedded-capability-text">
-                <strong>上下文</strong> {{ capabilitySnapshot.contextSummary || '暂无上下文摘要' }}
-              </p>
-              <p class="embedded-capability-text">
-                <strong>工具</strong> {{ capabilitySnapshot.toolNames.length > 0 ? capabilitySnapshot.toolNames.join('，') : '当前没有读取到会话级工具列表' }}
-              </p>
-              <p class="embedded-capability-text">
-                <strong>MCP</strong> {{ capabilitySnapshot.mcpNames.length > 0 ? capabilitySnapshot.mcpNames.join('，') : '当前没有读取到 MCP 状态' }}
-              </p>
-              <p class="embedded-capability-text">
-                <strong>运行态注入 MCP</strong> {{ capabilitySnapshot.injectedMcpNames.length > 0 ? capabilitySnapshot.injectedMcpNames.join('，') : '当前没有读取到 query 注入快照' }}
-              </p>
-              <p class="embedded-capability-text">
-                <strong>运行态允许工具</strong> {{ capabilitySnapshot.injectedToolNames.length > 0 ? capabilitySnapshot.injectedToolNames.join('，') : '当前没有读取到 query 允许工具快照' }}
-              </p>
-              <p v-if="capabilitySnapshot.hint" class="embedded-capability-hint">
-                {{ capabilitySnapshot.hint }}
-              </p>
-            </div>
-          </section>
+            <section v-if="showCapabilityPanel" class="embedded-capability-panel">
+              <div class="embedded-capability-summary">
+                <span><strong>App</strong> {{ props.appId }}</span>
+                <span><strong>Session</strong> {{ sessionId || '-' }}</span>
+              </div>
+              <div v-if="capabilityError" class="embedded-capability-error">{{ capabilityError }}</div>
+              <div v-else class="embedded-capability-body">
+                <p class="embedded-capability-text">
+                  <strong>会话状态</strong> {{ capabilitySnapshot.sessionStatusLabel }}
+                </p>
+                <p class="embedded-capability-text">
+                  <strong>上下文</strong> {{ capabilitySnapshot.contextSummary || '暂无上下文摘要' }}
+                </p>
+                <p class="embedded-capability-text">
+                  <strong>工具</strong> {{ capabilitySnapshot.toolNames.length > 0 ? capabilitySnapshot.toolNames.join('，') : '当前没有读取到会话级工具列表' }}
+                </p>
+                <p class="embedded-capability-text">
+                  <strong>MCP</strong> {{ capabilitySnapshot.mcpNames.length > 0 ? capabilitySnapshot.mcpNames.join('，') : '当前没有读取到 MCP 状态' }}
+                </p>
+                <p class="embedded-capability-text">
+                  <strong>运行态注入 MCP</strong> {{ capabilitySnapshot.injectedMcpNames.length > 0 ? capabilitySnapshot.injectedMcpNames.join('，') : '当前没有读取到 query 注入快照' }}
+                </p>
+                <p class="embedded-capability-text">
+                  <strong>运行态允许工具</strong> {{ capabilitySnapshot.injectedToolNames.length > 0 ? capabilitySnapshot.injectedToolNames.join('，') : '当前没有读取到 query 允许工具快照' }}
+                </p>
+                <p v-if="capabilitySnapshot.hint" class="embedded-capability-hint">
+                  {{ capabilitySnapshot.hint }}
+                </p>
+              </div>
+            </section>
 
-          <div v-if="error" class="embedded-agent-error">{{ error }}</div>
-          <div v-else-if="!sessionId" class="embedded-agent-loading">正在创建 Agent 会话...</div>
-          <template v-else>
-            <div class="embedded-agent-tabs" role="tablist" aria-label="Embedded agent tabs">
-              <button
-                type="button"
-                class="embedded-agent-tab"
-                :class="{ active: activeTab === 'chat' }"
-                @click="activeTab = 'chat'"
-              >
-                助手
-              </button>
-              <button
-                type="button"
-                class="embedded-agent-tab"
-                :class="{ active: activeTab === 'files' }"
-                @click="activeTab = 'files'"
-              >
-                工作目录
-              </button>
-            </div>
-
-            <div class="embedded-agent-content">
+            <div v-if="error" class="embedded-agent-error">{{ error }}</div>
+            <div v-else-if="!sessionId" class="embedded-agent-loading">正在创建 Agent 会话...</div>
+            <div v-else class="embedded-agent-content">
               <AgentChatTab
-                v-show="activeTab === 'chat'"
                 :key="sessionId"
                 ref="chatRef"
                 class="embedded-agent-chat"
@@ -89,21 +116,23 @@
                 @model-selected="handleModelSelected"
                 @request-clear-session="handleClearSession"
               />
-              <WorkspaceFilePanel
-                v-show="activeTab === 'files'"
-                class="embedded-agent-files"
-                :files="embeddedFiles"
-                :source-ready="Boolean(sessionId)"
-                :empty-title="'工作目录'"
-                :empty-message="'当前会话尚未创建工作目录。'"
-                :show-collapse="false"
-                :framed="true"
-                :save-text-handler="handleEmbeddedFileSave"
-                :allow-mutations="true"
-                @insert-path="handleInsertPath"
-              />
             </div>
-          </template>
+          </div>
+
+          <div v-show="activeTab === 'files'" class="embedded-agent-files-view">
+            <WorkspaceFilePanel
+              class="embedded-agent-files"
+              :files="embeddedFiles"
+              :source-ready="Boolean(sessionId)"
+              :empty-title="'工作目录'"
+              :empty-message="'当前会话尚未创建工作目录。'"
+              :show-collapse="false"
+              :framed="false"
+              :save-text-handler="handleEmbeddedFileSave"
+              :allow-mutations="true"
+              @insert-path="handleInsertPath"
+            />
+          </div>
         </div>
       </n-dialog-provider>
     </n-message-provider>
@@ -116,6 +145,7 @@ import { useTheme } from '@composables/useTheme'
 import { useNaiveLocale } from '@composables/useNaiveLocale'
 import AgentChatTab from '@/pages/main/components/AgentChatTab.vue'
 import WorkspaceFilePanel from '@components/workspace-files/WorkspaceFilePanel.vue'
+import Icon from '@components/icons/Icon.vue'
 import { useEmbeddedAgentFiles } from '@composables/useEmbeddedAgentFiles'
 import { createHydroAgentApiAdapter } from './hydro-agent-api-adapter'
 
@@ -164,6 +194,7 @@ const currentApiProfileId = ref(props.apiProfileId || null)
 const currentModelId = ref(props.modelId || null)
 const switchingProfile = ref(false)
 const showCapabilityPanel = ref(false)
+const showContextTip = ref(false)
 const activeTab = ref('chat')
 const capabilityError = ref('')
 const capabilitySnapshot = ref({
@@ -418,9 +449,15 @@ const refreshCapabilitySnapshot = async () => {
 
 const toggleCapabilityPanel = async () => {
   showCapabilityPanel.value = !showCapabilityPanel.value
+  showContextTip.value = false
   if (showCapabilityPanel.value) {
     await refreshCapabilitySnapshot()
   }
+}
+
+const toggleContextTip = () => {
+  readContext()
+  showContextTip.value = !showContextTip.value
 }
 
 const handleInsertPath = (path) => {
@@ -538,6 +575,8 @@ const handleReady = () => {
 const handleClearSession = async () => {
   if (!sessionId.value || !agentApi.value?.clearAndRecreateAgentSession) return
 
+  showContextTip.value = false
+
   try {
     const session = await agentApi.value.clearAndRecreateAgentSession({
       sessionId: sessionId.value,
@@ -599,10 +638,14 @@ onBeforeUnmount(() => {
 .embedded-agent-header {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+}
+
+.embedded-agent-title {
+  min-width: 0;
+  margin-right: auto;
 }
 
 .embedded-agent-eyebrow {
@@ -620,66 +663,119 @@ onBeforeUnmount(() => {
 }
 
 .embedded-agent-actions {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.context-send-btn {
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
+.embedded-agent-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
   height: 34px;
-  padding: 0 12px;
-  background: var(--panel-bg, var(--bg-color-secondary));
-  color: var(--primary-color);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
-}
-
-.context-send-btn:hover:not(:disabled) {
-  border-color: var(--selected-border, var(--border-color));
-  background: var(--primary-ghost);
-}
-
-.context-send-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.embedded-agent-context {
-  margin: 12px 0;
-  color: var(--text-color-muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.embedded-agent-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.embedded-agent-tab {
   border: 1px solid var(--border-color);
-  border-radius: 999px;
-  height: 32px;
-  padding: 0 14px;
+  border-radius: 8px;
+  padding: 0;
   background: var(--panel-bg, var(--bg-color-secondary));
   color: var(--text-color-secondary);
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
 
-.embedded-agent-tab:hover {
+.embedded-agent-icon-btn:hover:not(:disabled) {
   border-color: var(--selected-border, var(--border-color));
+  background: var(--primary-ghost);
+  color: var(--primary-color);
+}
+
+.embedded-agent-icon-btn.active {
+  border-color: var(--primary-color);
+  background: var(--primary-ghost);
+  color: var(--primary-color);
+}
+
+.embedded-agent-icon-btn.primary {
+  border-color: transparent;
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.embedded-agent-icon-btn.primary:hover:not(:disabled) {
+  background: var(--primary-color-hover);
+  color: #fff;
+}
+
+.embedded-agent-icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.embedded-agent-tip-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.embedded-context-tip {
+  position: fixed;
+  top: 126px;
+  right: 24px;
+  z-index: 1000;
+  width: min(280px, calc(100vw - 48px));
+  max-height: min(280px, calc(100vh - 160px));
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  box-shadow: var(--panel-shadow-soft);
+  color: var(--text-color-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.embedded-agent-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  margin: -2px -2px 12px;
+  padding: 4px;
+}
+
+.embedded-agent-tab {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  height: 34px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--text-color-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.embedded-agent-tab:hover {
+  background: var(--hover-bg);
   color: var(--text-color);
 }
 
 .embedded-agent-tab.active {
-  border-color: var(--primary-color);
-  background: var(--primary-ghost);
+  background: var(--primary-color);
   color: var(--primary-color);
+  color: #fff;
+}
+
+.embedded-agent-assistant-view,
+.embedded-agent-files-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .embedded-agent-content {
@@ -689,6 +785,9 @@ onBeforeUnmount(() => {
 }
 
 .embedded-capability-panel {
+  flex: 0 1 auto;
+  max-height: min(320px, 42vh);
+  overflow: auto;
   margin-bottom: 12px;
   padding: 10px 12px;
   border: 1px solid var(--border-color);
