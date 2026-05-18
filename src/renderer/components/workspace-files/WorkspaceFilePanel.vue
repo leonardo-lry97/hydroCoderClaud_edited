@@ -466,7 +466,7 @@ defineExpose({
 }
 
 .workspace-file-panel.framed {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   border: 1px solid var(--panel-border);
   border-radius: var(--panel-radius);
 }

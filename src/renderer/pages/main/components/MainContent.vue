@@ -1125,7 +1125,8 @@ const openApiProfileManager = async () => {
   background: var(--panel-bg);
   border-radius: var(--panel-radius);
   padding: 0;
-  margin: 0 8px;
+  margin-left: 8px;
+  margin-right: 0;
 }
 
 .main-content.right-panel-collapsed {
@@ -1276,22 +1277,17 @@ const openApiProfileManager = async () => {
   border-radius: 4px;
 }
 
-/* Resize Handle */
+/* Resize Handle — 与左侧面板间距一致的拖拽分隔条 */
 .resize-handle {
-  width: 1px;
-  background: transparent;
+  width: 4px;
+  height: 100%;
   cursor: col-resize;
   flex-shrink: 0;
-  position: relative;
+  border-radius: 2px;
+  background: transparent;
+  margin: 0 2px;
+  transition: background 0.15s;
 }
 
-.resize-handle::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -2px;
-  right: -2px;
-  bottom: 0;
-  /* 扩大点击区域，方便拖动 */
-}
+.resize-handle:hover { background: transparent; }
 </style>
