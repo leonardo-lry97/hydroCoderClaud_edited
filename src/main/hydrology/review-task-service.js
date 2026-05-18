@@ -108,6 +108,26 @@ class ReviewTaskService {
       .map(parseReviewTaskRow)
   }
 
+  listReviewTaskSummaries(filters = {}) {
+    const stationId = String(filters.stationId || '').trim()
+    if (!stationId) throw new Error('站点 ID 不能为空')
+    const observationType = String(filters.observationType || '').trim() || null
+    const status = String(filters.status || '').trim() || null
+    const limit = Math.min(Math.max(Number(filters.limit) || 50, 1), 200)
+    const offset = Math.max(Number(filters.offset) || 0, 0)
+    return this.db
+      .listReviewTaskSummaries(stationId, observationType, status, limit, offset)
+      .map(parseReviewTaskRow)
+  }
+
+  countReviewTasks(filters = {}) {
+    const stationId = String(filters.stationId || '').trim()
+    if (!stationId) throw new Error('站点 ID 不能为空')
+    const observationType = String(filters.observationType || '').trim() || null
+    const status = String(filters.status || '').trim() || null
+    return this.db.countReviewTasks(stationId, observationType, status)
+  }
+
   resolveReviewTask(taskId, payload = {}) {
     if (!taskId) throw new Error('审核任务 ID 不能为空')
     const next = this.db.resolveReviewTask(taskId, payload)

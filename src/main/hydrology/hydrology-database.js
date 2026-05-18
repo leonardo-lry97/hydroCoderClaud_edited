@@ -596,6 +596,75 @@ class HydrologyDatabase {
     return this.db.prepare(sql).all(...params)
   }
 
+  countReviewTasks(stationId, observationType = null, status = null) {
+    const hasObservationType = Boolean(observationType)
+    const hasStatus = Boolean(status) && status !== 'all'
+    let sql = `
+      SELECT COUNT(*) AS total
+      FROM hydrology_review_tasks
+      WHERE station_id = ?
+    `
+    const params = [stationId]
+
+    if (hasObservationType) {
+      sql += ' AND observation_type = ?'
+      params.push(observationType)
+    }
+
+    if (hasStatus) {
+      sql += ' AND status = ?'
+      params.push(status)
+    }
+
+    const row = this.db.prepare(sql).get(...params)
+    const total = Number(row?.total)
+    if (Number.isFinite(total) && total >= 0) {
+      return total
+    }
+    return this.listReviewTasks(stationId, observationType, status).length
+  }
+
+  listReviewTaskSummaries(stationId, observationType = null, status = null, limit = 50, offset = 0) {
+    const hasObservationType = Boolean(observationType)
+    const hasStatus = Boolean(status) && status !== 'all'
+    const normalizedLimit = Math.min(Math.max(Number(limit) || 50, 1), 200)
+    const normalizedOffset = Math.max(Number(offset) || 0, 0)
+    let sql = `
+      SELECT
+        id,
+        station_id,
+        observation_type,
+        slot_time,
+        rule_code,
+        rule_name,
+        rule_category,
+        severity,
+        status,
+        title,
+        anomaly_type,
+        resolved_by,
+        created_at,
+        updated_at
+      FROM hydrology_review_tasks
+      WHERE station_id = ?
+    `
+    const params = [stationId]
+
+    if (hasObservationType) {
+      sql += ' AND observation_type = ?'
+      params.push(observationType)
+    }
+
+    if (hasStatus) {
+      sql += ' AND status = ?'
+      params.push(status)
+    }
+
+    sql += ' ORDER BY slot_time DESC, created_at DESC LIMIT ? OFFSET ?'
+    params.push(normalizedLimit, normalizedOffset)
+    return this.db.prepare(sql).all(...params)
+  }
+
   resolveReviewTask(taskId, payload = {}) {
     const now = Date.now()
     this.db.prepare(`

@@ -42,7 +42,32 @@ describe('hydrology capability query options', () => {
       seedStationObservations: vi.fn((station) => ({ stationId: station?.id || null, seededSlotCount: 72 }))
     }
     const reviewTaskService = {
-      listReviewTasks: vi.fn(() => [{ id: 'task-1', status: 'needs_review' }]),
+      countReviewTasks: vi.fn(() => 123),
+      listReviewTaskSummaries: vi.fn(() => [{
+        id: 'task-1',
+        stationId: 'st-1',
+        observationType: 'waterLevel',
+        slotTime: '2026-05-17 00:00',
+        ruleCode: 'missing_manual',
+        ruleName: '人工数据缺测',
+        ruleCategory: 'completeness',
+        severity: 'warning',
+        status: 'needs_review',
+        title: '人工数据缺测',
+        anomalyType: 'missing_manual_data',
+        decisionMessage: '详细判定说明',
+        suggestedAction: '详细处理建议',
+        evidenceSummary: '很长的证据摘要',
+        metrics: {
+          expectedSources: ['manual', 'sensor'],
+          observations: Array.from({ length: 20 }, (_, index) => ({ index, value: index + 1 }))
+        },
+        createdAt: '2026-05-17T00:00:00.000Z',
+        updatedAt: '2026-05-17T00:01:00.000Z'
+      }]),
+      listReviewTasks: vi.fn(() => {
+        throw new Error('review_tasks_list should use summary query')
+      }),
       resolveReviewTask: vi.fn((taskId, payload) => ({ id: taskId, status: 'resolved', ...payload })),
       deleteReviewTask: vi.fn((taskId) => ({ taskId, deleted: true })),
       deleteReviewTasks: vi.fn((taskIds) => ({ taskIds, deletedCount: taskIds.length }))
@@ -163,8 +188,44 @@ describe('hydrology capability query options', () => {
     const { tools, reviewTaskService, qualityCheckService } = await createOptions()
 
     const tasksPayload = parseToolPayload(await tools.review_tasks_list.handler({ stationId: 'st-1' }))
-    expect(tasksPayload.tasks).toEqual([{ id: 'task-1', status: 'needs_review' }])
-    expect(reviewTaskService.listReviewTasks).toHaveBeenCalledWith({ stationId: 'st-1' })
+    expect(tasksPayload.tasks).toEqual([{
+      id: 'task-1',
+      stationId: 'st-1',
+      observationType: 'waterLevel',
+      slotTime: '2026-05-17 00:00',
+      ruleCode: 'missing_manual',
+      ruleName: '人工数据缺测',
+      ruleCategory: 'completeness',
+      severity: 'warning',
+      status: 'needs_review',
+      title: '人工数据缺测',
+      anomalyType: 'missing_manual_data',
+      resolvedBy: null,
+      createdAt: '2026-05-17T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:01:00.000Z'
+    }])
+    expect(tasksPayload).toMatchObject({
+      action: 'review_tasks_list',
+      limit: 50,
+      offset: 0,
+      count: 123,
+      pageCount: 1
+    })
+    expect(tasksPayload.tasks[0]).not.toHaveProperty('decisionMessage')
+    expect(tasksPayload.tasks[0]).not.toHaveProperty('suggestedAction')
+    expect(tasksPayload.tasks[0]).not.toHaveProperty('evidenceSummary')
+    expect(tasksPayload.tasks[0]).not.toHaveProperty('metrics')
+    expect(reviewTaskService.listReviewTaskSummaries).toHaveBeenCalledWith({
+      stationId: 'st-1',
+      limit: 50,
+      offset: 0
+    })
+    expect(reviewTaskService.countReviewTasks).toHaveBeenCalledWith({
+      stationId: 'st-1',
+      limit: 50,
+      offset: 0
+    })
+    expect(reviewTaskService.listReviewTasks).not.toHaveBeenCalled()
 
     const summaryPayload = parseToolPayload(await tools.review_latest_run_summary_get.handler({ stationId: 'st-1' }))
     expect(summaryPayload.summary).toEqual({ stationId: 'st-1', checkedSlotCount: 3 })

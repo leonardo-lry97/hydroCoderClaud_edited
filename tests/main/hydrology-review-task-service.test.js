@@ -441,4 +441,48 @@ describe('Hydrology review task backend', () => {
     expect(detail.anomalies.some((item) => item.anomalyType === 'missing_manual')).toBe(true)
     expect(detail.anomalies.some((item) => item.anomalyType === 'water_level_manual_video_diff')).toBe(false)
   })
+
+  it('returns real total count separately from paged summaries', async () => {
+    const { HydrologyDatabase } = await import('../../src/main/hydrology/hydrology-database.js')
+    const { ReviewTaskService } = await import('../../src/main/hydrology/review-task-service.js')
+
+    const db = new HydrologyDatabase({
+      userDataPath: 'C:/tmp/cc-desktop-test',
+      Database
+    })
+    db.init()
+
+    const reviewTaskService = new ReviewTaskService(db)
+    for (let index = 0; index < 3; index += 1) {
+      db.upsertReviewTask({
+        stationId: 'st-count-1',
+        observationType: 'waterLevel',
+        slotTime: `2026-05-1${index + 1} 08:00`,
+        ruleCode: `WL-C-10${index}`,
+        ruleName: `规则-${index}`,
+        ruleCategory: 'completeness',
+        severity: 'warning',
+        status: 'needs_review',
+        title: `任务-${index}`,
+        decisionMessage: `说明-${index}`,
+        metrics: { index }
+      })
+    }
+
+    expect(reviewTaskService.countReviewTasks({
+      stationId: 'st-count-1',
+      observationType: 'waterLevel',
+      status: 'all'
+    })).toBe(3)
+
+    const summaries = reviewTaskService.listReviewTaskSummaries({
+      stationId: 'st-count-1',
+      observationType: 'waterLevel',
+      status: 'all',
+      limit: 2,
+      offset: 0
+    })
+
+    expect(summaries).toHaveLength(2)
+  })
 })

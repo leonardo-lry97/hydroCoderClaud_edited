@@ -268,6 +268,10 @@ class Statement {
       results = this._applyJoin(results)
     }
 
+    if (this.sql.toUpperCase().includes('LIMIT')) {
+      results = this._applyLimitOffset(results, params)
+    }
+
     return results
   }
 
@@ -309,6 +313,15 @@ class Statement {
   _applyJoin(rows) {
     // 简化处理：为每行添加空 tags 数组
     return rows.map(row => ({ ...row, tags: row.tags || [] }))
+  }
+
+  _applyLimitOffset(rows, params) {
+    const limitMatch = this.sql.match(/LIMIT\s+\?\s+OFFSET\s+\?/i)
+    if (!limitMatch) return rows
+    const whereParamCount = this._getWhereColumns().length
+    const limit = Number(params[whereParamCount] || 0)
+    const offset = Number(params[whereParamCount + 1] || 0)
+    return rows.slice(offset, offset + limit)
   }
 }
 

@@ -7,6 +7,36 @@ function buildToolResult(payload) {
   }
 }
 
+function summarizeReviewTask(task) {
+  if (!task || typeof task !== 'object') return task
+  return {
+    id: task.id,
+    stationId: task.stationId,
+    observationType: task.observationType,
+    slotTime: task.slotTime,
+    ruleCode: task.ruleCode,
+    ruleName: task.ruleName,
+    ruleCategory: task.ruleCategory,
+    severity: task.severity,
+    status: task.status,
+    title: task.title,
+    anomalyType: task.anomalyType || null,
+    resolvedBy: task.resolvedBy || null,
+    createdAt: task.createdAt || null,
+    updatedAt: task.updatedAt || null
+  }
+}
+
+function normalizeReviewTaskListArgs(args = {}) {
+  const limit = Math.min(Math.max(Number(args.limit) || 50, 1), 200)
+  const offset = Math.max(Number(args.offset) || 0, 0)
+  return {
+    ...args,
+    limit,
+    offset
+  }
+}
+
 const HYDROLOGY_SERVER_NAME = 'hydrology'
 const HYDROLOGY_TOOL_NAMES = [
   'station_list',
@@ -223,16 +253,34 @@ async function buildHydrologyCapabilityQueryOptions({
           ),
           tool(
             HYDROLOGY_TOOL_NAMES[13],
-            '查询站点审核任务列表。',
+            '查询站点审核任务列表，仅返回任务列表摘要，不返回证据、指标和处理建议等详情。',
             {
               stationId: z.string().min(1).describe('站点 ID'),
               observationType: z.string().optional().describe('观测类型'),
-              status: z.string().optional().describe('任务状态过滤，例如 all、needs_review、resolved')
+              status: z.string().optional().describe('任务状态过滤，例如 all、needs_review、resolved'),
+              limit: z.number().int().min(1).max(200).optional().describe('返回条数，默认 50，最大 200'),
+              offset: z.number().int().min(0).optional().describe('分页偏移量，默认 0')
             },
-            async (args) => buildToolResult({
-              action: HYDROLOGY_TOOL_NAMES[13],
-              tasks: reviewTaskService.listReviewTasks(args || {})
-            })
+            async (args) => {
+              const listArgs = normalizeReviewTaskListArgs(args || {})
+              const listTasks = typeof reviewTaskService.listReviewTaskSummaries === 'function'
+                ? reviewTaskService.listReviewTaskSummaries(listArgs)
+                : reviewTaskService.listReviewTasks(listArgs).map(summarizeReviewTask)
+              const summarizedTasks = Array.isArray(listTasks) ? listTasks.map(summarizeReviewTask) : []
+              const totalCount = typeof reviewTaskService.countReviewTasks === 'function'
+                ? reviewTaskService.countReviewTasks(listArgs)
+                : Array.isArray(reviewTaskService.listReviewTasks?.(listArgs))
+                  ? reviewTaskService.listReviewTasks(listArgs).length
+                  : summarizedTasks.length
+              return buildToolResult({
+                action: HYDROLOGY_TOOL_NAMES[13],
+                limit: listArgs.limit,
+                offset: listArgs.offset,
+                count: totalCount,
+                pageCount: summarizedTasks.length,
+                tasks: summarizedTasks
+              })
+            }
           ),
           tool(
             HYDROLOGY_TOOL_NAMES[14],
@@ -306,5 +354,7 @@ async function buildHydrologyCapabilityQueryOptions({
 module.exports = {
   buildHydrologyCapabilityQueryOptions,
   HYDROLOGY_ALLOWED_TOOLS,
-  HYDROLOGY_SYSTEM_PROMPT
+  HYDROLOGY_SYSTEM_PROMPT,
+  summarizeReviewTask,
+  normalizeReviewTaskListArgs
 }
