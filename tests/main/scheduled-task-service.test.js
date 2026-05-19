@@ -508,6 +508,91 @@ describe('ScheduledTaskService', () => {
     vi.restoreAllMocks()
   })
 
+  it('binds chat-created tasks to the current session at creation time', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const firstRunAt = Date.UTC(2026, 3, 25, 10, 0, 0)
+    const taskState = {
+      id: 41,
+      name: '会话内定时任务',
+      prompt: '继续当前对话',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      firstRunAt,
+      lastRunAt: null,
+      sessionId: null
+    }
+
+    const sessionDatabase = {
+      createScheduledTask: vi.fn((task) => ({ ...taskState, ...task })),
+      updateScheduledTaskState: vi.fn((_taskId, updates) => {
+        Object.assign(taskState, updates)
+        return { ...taskState }
+      }),
+      updateAgentConversation: vi.fn(),
+      getAgentConversation: vi.fn((sessionId) => (
+        sessionId === 'chat-session-1'
+          ? { id: 99, session_id: sessionId, source: 'manual' }
+          : null
+      )),
+      getScheduledTask: vi.fn(() => ({ ...taskState }))
+    }
+
+    const agentSessionManager = {
+      on: vi.fn(),
+      create: vi.fn(() => ({ id: 'agent-session-new' })),
+      get: vi.fn((sessionId) => (
+        sessionId === 'chat-session-1'
+          ? agentSessionManager.sessions.get('chat-session-1')
+          : { status: 'idle' }
+      )),
+      reopen: vi.fn(),
+      sendMessage: vi.fn().mockResolvedValue(),
+      sessions: new Map([['chat-session-1', {
+        id: 'chat-session-1',
+        source: 'manual',
+        taskId: null,
+        meta: {}
+      }]])
+    }
+
+    const service = new ScheduledTaskService({}, agentSessionManager)
+    service.setSessionDatabase(sessionDatabase)
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 3, 25, 9, 0, 0))
+
+    const created = await service.createTask({
+      name: '会话内定时任务',
+      prompt: '继续当前对话',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      firstRunAt,
+      sessionBindingMode: 'current',
+      boundSessionId: 'chat-session-1'
+    })
+
+    expect(agentSessionManager.create).not.toHaveBeenCalled()
+    expect(created.sessionId).toBe('chat-session-1')
+    expect(created.nextRunAt).toBe(firstRunAt)
+    expect(sessionDatabase.updateScheduledTaskState).toHaveBeenCalledWith(taskState.id, {
+      nextRunAt: firstRunAt,
+      sessionId: 'chat-session-1'
+    })
+    expect(sessionDatabase.updateAgentConversation).toHaveBeenCalledWith('chat-session-1', {
+      source: 'scheduled',
+      taskId: 41
+    })
+    expect(agentSessionManager.sessions.get('chat-session-1')).toMatchObject({
+      source: 'scheduled',
+      taskId: 41,
+      meta: {
+        scheduledTaskId: 41
+      }
+    })
+    vi.restoreAllMocks()
+  })
+
   it('rearms one-time tasks when schedule is changed to once or first run time changes', async () => {
     const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
 
@@ -556,6 +641,80 @@ describe('ScheduledTaskService', () => {
 
     expect(rescheduled.lastRunAt).toBeNull()
     expect(rescheduled.nextRunAt).toBe(rescheduledAt)
+  })
+
+  it('reuses a bound current session when the scheduled task runs', async () => {
+    vi.useFakeTimers()
+
+    try {
+      const startedAt = Date.UTC(2026, 3, 30, 11, 0, 0)
+      vi.setSystemTime(startedAt)
+
+      const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+      const taskState = {
+        id: 77,
+        name: '复用当前会话',
+        prompt: '基于当前上下文继续',
+        enabled: true,
+        scheduleType: 'interval',
+        intervalMinutes: 15,
+        firstRunAt: Date.UTC(2026, 3, 30, 10, 45, 0),
+        sessionId: 'chat-session-2',
+        runCount: 0,
+        failureCount: 0,
+        runtimeState: null
+      }
+
+      const sessionDatabase = {
+        getScheduledTask: vi.fn(() => ({ ...taskState })),
+        updateScheduledTaskState: vi.fn((_taskId, updates) => {
+          Object.assign(taskState, updates)
+          return { ...taskState }
+        }),
+        createScheduledTaskRun: vi.fn(),
+        updateAgentConversation: vi.fn(),
+        getAgentConversation: vi.fn((sessionId) => (
+          sessionId === 'chat-session-2'
+            ? { id: 102, session_id: sessionId, source: 'manual' }
+            : null
+        ))
+      }
+
+      const liveSession = { id: 'chat-session-2', status: 'idle', source: 'manual', taskId: null, meta: {} }
+      const agentSessionManager = {
+        on: vi.fn(),
+        create: vi.fn(() => ({ id: 'agent-session-should-not-create' })),
+        get: vi.fn(() => liveSession),
+        reopen: vi.fn(() => ({ status: 'idle' })),
+        sendMessage: vi.fn().mockResolvedValue()
+      }
+
+      const service = new ScheduledTaskService({}, agentSessionManager)
+      service.setSessionDatabase(sessionDatabase)
+      vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+      vi.spyOn(service, '_hasConversationHistory').mockReturnValue(true)
+      vi.spyOn(service, '_rearmScheduler').mockImplementation(() => {})
+
+      await service._executeTask(taskState, 'manual', { allowDisabled: true })
+
+      expect(agentSessionManager.create).not.toHaveBeenCalled()
+      expect(sessionDatabase.updateAgentConversation).toHaveBeenCalledWith('chat-session-2', {
+        source: 'scheduled',
+        taskId: taskState.id
+      })
+      expect(liveSession.source).toBe('scheduled')
+      expect(liveSession.taskId).toBe(taskState.id)
+      expect(liveSession.meta.scheduledTaskId).toBe(taskState.id)
+      expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
+        'chat-session-2',
+        '基于当前上下文继续',
+        expect.objectContaining({
+          meta: { source: 'scheduled' }
+        })
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('re-enabling interval tasks recomputes the next slot without auto-running', async () => {

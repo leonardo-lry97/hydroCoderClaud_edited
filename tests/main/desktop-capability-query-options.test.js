@@ -243,11 +243,106 @@ describe('desktop capability query options', () => {
     expect(tools.schedule_create.inputSchema.monthlyDay.safeParse('12').success).toBe(true)
     expect(tools.schedule_create.inputSchema.weeklyDays.safeParse(['1', '3']).success).toBe(true)
     expect(tools.schedule_create.inputSchema.firstRunAt.safeParse('2026-05-01T09:30:00+08:00').success).toBe(true)
+    expect(tools.schedule_create.inputSchema.sessionBindingMode.safeParse('current').success).toBe(true)
+    expect(tools.schedule_create.inputSchema.sessionBindingMode.safeParse('new').success).toBe(true)
 
     expect(tools.schedule_update.inputSchema.cwd.safeParse('').success).toBe(true)
     expect(tools.schedule_update.inputSchema.apiProfileId.safeParse('').success).toBe(true)
     expect(tools.schedule_update.inputSchema.modelId.safeParse(null).success).toBe(true)
     expect(tools.schedule_update.inputSchema.firstRunAt.safeParse('2026-05-01T09:30:00+08:00').success).toBe(true)
+  })
+
+  it('defaults MCP schedule_create in chat sessions to bind the current session', async () => {
+    const scheduledTaskService = {
+      configManager: {
+        getConfig: () => ({
+          settings: {
+            locale: 'zh-CN'
+          }
+        })
+      },
+      listTasks: vi.fn(() => []),
+      createTask: vi.fn(async input => buildTask({ id: 8, ...input, sessionId: input.boundSessionId || null }))
+    }
+
+    const options = await buildDesktopCapabilityQueryOptions({
+      scheduledTaskService,
+      session: { id: 'chat-session-mcp-1', source: 'manual' }
+    })
+
+    const tools = Object.fromEntries(
+      options.mcpServers.hydrodesktop.tools.map(tool => [tool.name, tool])
+    )
+
+    await tools.schedule_create.handler({
+      name: 'MCP 会话绑定任务',
+      prompt: '继续当前会话',
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      firstRunAt: '2026-05-01T09:30:00+08:00'
+    })
+
+    expect(scheduledTaskService.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      sessionBindingMode: 'current',
+      boundSessionId: 'chat-session-mcp-1'
+    }))
+  })
+
+  it('still injects scheduled-task tools into scheduled sessions when the global switch is enabled', async () => {
+    const scheduledTaskService = {
+      configManager: {
+        getConfig: () => ({
+          settings: {
+            locale: 'zh-CN',
+            agent: {
+              allowScheduledSessionScheduleTools: true
+            }
+          }
+        })
+      },
+      listTasks: vi.fn(() => [])
+    }
+
+    const options = await buildDesktopCapabilityQueryOptions({
+      scheduledTaskService,
+      session: { id: 'scheduled-session-1', source: 'scheduled' }
+    })
+
+    const tools = Object.fromEntries(
+      options.mcpServers.hydrodesktop.tools.map(tool => [tool.name, tool])
+    )
+
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining([
+      'schedule_list',
+      'schedule_create'
+    ]))
+    expect(options.allowedTools).toEqual(expect.arrayContaining([
+      'mcp__hydrodesktop__schedule_list',
+      'mcp__hydrodesktop__schedule_create'
+    ]))
+  })
+
+  it('does not inject scheduled-task tools into scheduled sessions when the global switch is disabled', async () => {
+    const scheduledTaskService = {
+      configManager: {
+        getConfig: () => ({
+          settings: {
+            locale: 'zh-CN',
+            agent: {
+              allowScheduledSessionScheduleTools: false
+            }
+          }
+        })
+      },
+      listTasks: vi.fn(() => [])
+    }
+
+    const options = await buildDesktopCapabilityQueryOptions({
+      scheduledTaskService,
+      session: { id: 'scheduled-session-2', source: 'scheduled' }
+    })
+
+    expect(options).toEqual({})
   })
 
   it('serializes model ids for english locale', async () => {

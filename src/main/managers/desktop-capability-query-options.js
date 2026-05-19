@@ -64,6 +64,7 @@ const DEFAULT_DAILY_TIME = '09:00'
 const SCHEDULE_TYPES = ['interval', 'daily', 'weekly', 'monthly', 'workdays', 'once']
 const MONTHLY_MODES = ['day_of_month', 'last_day']
 const INTERVAL_ANCHOR_MODES = ['started_at', 'finished_at']
+const SESSION_BINDING_MODES = ['current', 'new']
 const UPDATE_FIELDS = [
   'name',
   'prompt',
@@ -122,6 +123,13 @@ const DISPLAY_I18N = {
 function getDisplayLocale(scheduledTaskService) {
   const locale = scheduledTaskService?.configManager?.getConfig?.()?.settings?.locale
   return DISPLAY_I18N[locale] ? locale : 'zh-CN'
+}
+
+function shouldAllowScheduleToolsForSession(scheduledTaskService, session) {
+  if (!scheduledTaskService) return false
+  if (session?.source !== 'scheduled') return true
+
+  return scheduledTaskService?.configManager?.getConfig?.()?.settings?.agent?.allowScheduledSessionScheduleTools !== false
 }
 
 function getDisplayDict(locale) {
@@ -477,7 +485,7 @@ function buildExecutionTimeSchema(z, description) {
 }
 
 async function buildDesktopCapabilityQueryOptions({ scheduledTaskService, weixinNotifyService, session }) {
-  const includeScheduleTools = Boolean(scheduledTaskService && session?.source !== 'scheduled')
+  const includeScheduleTools = shouldAllowScheduleToolsForSession(scheduledTaskService, session)
   const includeWeixinNotifyTools = Boolean(weixinNotifyService)
 
   if (!includeScheduleTools && !includeWeixinNotifyTools) {
@@ -580,10 +588,20 @@ async function buildDesktopCapabilityQueryOptions({ scheduledTaskService, weixin
         maxRuns: buildPositiveIntegerLikeSchema(z, '任务生命周期内的累计执行次数上限，可为 null；这不是单次会话的 maxTurns', { nullable: true }),
         resetCountOnEnable: z.boolean().optional().describe('从停用重新启用时，是否重置已执行次数和运行态'),
         intervalAnchorMode: z.enum(INTERVAL_ANCHOR_MODES).optional().describe('间隔调度推进基准：按开始时间或结束时间'),
-        enabled: z.boolean().optional().describe('是否启用')
+        enabled: z.boolean().optional().describe('是否启用'),
+        sessionBindingMode: z.enum(SESSION_BINDING_MODES).optional().describe('会话绑定方式：current=绑定当前聊天会话，new=运行时新建独立会话')
       },
       async (args) => {
-        const created = await scheduledTaskService.createTask(args)
+        const createArgs = { ...args }
+        if (session?.id && session?.source !== 'scheduled') {
+          const normalizedMode = args.sessionBindingMode === 'new' ? 'new' : 'current'
+          createArgs.sessionBindingMode = normalizedMode
+          if (normalizedMode === 'current') {
+            createArgs.boundSessionId = session.id
+          }
+        }
+
+        const created = await scheduledTaskService.createTask(createArgs)
         return buildToolResult({
           action: 'create',
           task: serializeTaskWithMetadata(created, displayLocale)

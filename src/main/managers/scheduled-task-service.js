@@ -262,10 +262,22 @@ class ScheduledTaskService {
     this._assertReady()
     const normalized = this._normalizeTaskInput(input)
     const created = this.sessionDatabase.createScheduledTask(normalized)
+    const boundSessionId = this._resolveCreateBoundSessionId(input)
     const nextRunAt = normalized.enabled && !this._hasReachedRunLimit(created)
       ? this._computeNextRunAt(created, Date.now())
       : null
-    let task = this.sessionDatabase.updateScheduledTaskState(created.id, { nextRunAt })
+    const stateUpdates = { nextRunAt }
+    if (boundSessionId) {
+      stateUpdates.sessionId = boundSessionId
+    }
+    let task = this.sessionDatabase.updateScheduledTaskState(created.id, stateUpdates)
+    if (boundSessionId) {
+      this._attachExistingSessionToTask(boundSessionId, created.id)
+      task = {
+        ...task,
+        sessionId: boundSessionId
+      }
+    }
     task = this._applyRunLimit(task)
     this._broadcastChange(task.id, 'created')
 
@@ -571,9 +583,23 @@ class ScheduledTaskService {
       })
       sessionId = session.id
       this.sessionDatabase.updateScheduledTaskState(task.id, { sessionId })
+    } else {
+      this._attachExistingSessionToTask(sessionId, task.id)
     }
 
     return sessionId
+  }
+
+  _resolveCreateBoundSessionId(input) {
+    if (!this.sessionDatabase || !input || input.sessionBindingMode !== 'current') {
+      return null
+    }
+
+    const sessionId = typeof input.boundSessionId === 'string' ? input.boundSessionId.trim() : ''
+    if (!sessionId) return null
+
+    const existing = this.sessionDatabase.getAgentConversation(sessionId)
+    return existing?.session_id ? sessionId : null
   }
 
   _hasConversationHistory(sessionId) {
@@ -620,6 +646,32 @@ class ScheduledTaskService {
       if (liveSession.meta?.scheduledTaskId === task.id) {
         delete liveSession.meta.scheduledTaskId
       }
+    }
+  }
+
+  _attachExistingSessionToTask(sessionId, taskId) {
+    if (!sessionId || !taskId) return
+
+    const liveSession = this.agentSessionManager?.get?.(sessionId)
+      || this.agentSessionManager?.sessions?.get?.(sessionId)
+    if (liveSession) {
+      liveSession.source = 'scheduled'
+      liveSession.taskId = taskId
+      liveSession.meta = {
+        ...(liveSession.meta || {}),
+        scheduledTaskId: taskId
+      }
+    }
+
+    if (!this.sessionDatabase?.updateAgentConversation) return
+
+    try {
+      this.sessionDatabase.updateAgentConversation(sessionId, {
+        source: 'scheduled',
+        taskId
+      })
+    } catch (err) {
+      console.error(`[ScheduledTask] Failed to attach existing session ${sessionId} to task ${taskId}:`, err)
     }
   }
 
