@@ -1473,7 +1473,7 @@ describe('ScheduledTaskService', () => {
     expect(service._broadcastChange).toHaveBeenCalledWith(currentTask.id, 'interrupted')
   })
 
-  it('records a skipped summary when the bound agent session is busy', async () => {
+  it('queues a scheduled run when the bound agent session is busy', async () => {
     const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
     const currentTask = {
       id: 16,
@@ -1505,24 +1505,226 @@ describe('ScheduledTaskService', () => {
     vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
     vi.spyOn(service, '_ensureTaskSession').mockReturnValue(currentTask.sessionId)
     vi.spyOn(service, '_hasConversationHistory').mockReturnValue(true)
-    vi.spyOn(service, '_computeNextRunAt').mockReturnValue(4000)
 
     await service._executeTask(currentTask, 'scheduled')
 
     expect(sessionDatabase.updateScheduledTaskState).toHaveBeenCalledWith(currentTask.id, {
-      lastScheduledAt: 2000,
-      lastError: 'Agent session is busy',
-      nextRunAt: 4000
+      lastScheduledAt: 2000
     })
-    expect(sessionDatabase.createScheduledTaskRun).toHaveBeenCalledWith(expect.objectContaining({
+    expect(sessionDatabase.createScheduledTaskRun).not.toHaveBeenCalled()
+    expect(service._broadcastChange).toHaveBeenCalledWith(currentTask.id, 'queued')
+    expect(service.queuedTaskIds.has(currentTask.id)).toBe(true)
+    expect(service.sessionTaskQueues.get(currentTask.sessionId)).toEqual([{
       taskId: currentTask.id,
-      sessionId: currentTask.sessionId,
       triggerReason: 'scheduled',
-      status: 'skipped',
-      errorMessage: 'Agent session is busy',
-      scheduledAt: 2000,
-      startedAt: null
-    }))
-    expect(service._broadcastChange).toHaveBeenCalledWith(currentTask.id, 'skipped')
+      allowDisabled: false,
+      scheduledAt: 2000
+    }])
+  })
+
+  it('drains queued tasks after an active scheduled run completes on the same session', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const sessionId = 'agent-session-17'
+    const activeTask = {
+      id: 17,
+      name: '正在执行任务',
+      prompt: '继续执行',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      sessionId,
+      runtimeState: null
+    }
+    const queuedTask = {
+      id: 18,
+      name: '排队任务',
+      prompt: '接续执行',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      nextRunAt: 3000,
+      sessionId
+    }
+
+    const sessionDatabase = {
+      getScheduledTask: vi.fn((taskId) => {
+        if (taskId === activeTask.id) return { ...activeTask }
+        if (taskId === queuedTask.id) return { ...queuedTask }
+        return null
+      }),
+      updateScheduledTaskState: vi.fn((_taskId, updates) => ({ ...activeTask, ...updates })),
+      createScheduledTaskRun: vi.fn()
+    }
+
+    const agentSessionManager = {
+      on: vi.fn(),
+      get: vi.fn(() => ({ status: 'idle' }))
+    }
+
+    const service = new ScheduledTaskService({}, agentSessionManager)
+    service.setSessionDatabase(sessionDatabase)
+    service.activeRuns.set(sessionId, {
+      taskId: activeTask.id,
+      sessionId,
+      triggerReason: 'scheduled',
+      scheduledAt: 1000,
+      startedAt: 1100
+    })
+    service.sessionTaskQueues.set(sessionId, [{
+      taskId: queuedTask.id,
+      triggerReason: 'scheduled',
+      allowDisabled: false,
+      scheduledAt: 3000
+    }])
+    service.queuedTaskIds.add(queuedTask.id)
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(service, '_computeNextRunAt').mockReturnValue(2000)
+    const executeSpy = vi.spyOn(service, '_executeTask').mockResolvedValue()
+
+    service._handleAgentResult(sessionId)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({ id: queuedTask.id }), 'scheduled', {
+      allowDisabled: false,
+      scheduledAtOverride: 3000
+    })
+    expect(service.queuedTaskIds.has(queuedTask.id)).toBe(false)
+    expect(service.sessionTaskQueues.has(sessionId)).toBe(false)
+  })
+
+  it('drains queued tasks after a non-scheduled agent result frees the bound session', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const sessionId = 'agent-session-19'
+    const queuedTask = {
+      id: 19,
+      name: '手动会话排队任务',
+      prompt: '继续执行',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      nextRunAt: 5000,
+      sessionId
+    }
+
+    const sessionDatabase = {
+      getScheduledTask: vi.fn((taskId) => taskId === queuedTask.id ? { ...queuedTask } : null)
+    }
+
+    const agentSessionManager = {
+      on: vi.fn(),
+      get: vi.fn(() => ({ status: 'idle' }))
+    }
+
+    const service = new ScheduledTaskService({}, agentSessionManager)
+    service.setSessionDatabase(sessionDatabase)
+    service.sessionTaskQueues.set(sessionId, [{
+      taskId: queuedTask.id,
+      triggerReason: 'scheduled',
+      allowDisabled: false,
+      scheduledAt: 5000
+    }])
+    service.queuedTaskIds.add(queuedTask.id)
+    const executeSpy = vi.spyOn(service, '_executeTask').mockResolvedValue()
+
+    service._handleAgentResult(sessionId)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({ id: queuedTask.id }), 'scheduled', {
+      allowDisabled: false,
+      scheduledAtOverride: 5000
+    })
+  })
+
+  it('queues manual run-now requests when the bound agent session is busy', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const currentTask = {
+      id: 20,
+      name: '手动排队任务',
+      prompt: '检查状态',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      nextRunAt: 6000,
+      sessionId: 'agent-session-20',
+      runCount: 0
+    }
+
+    const sessionDatabase = {
+      getScheduledTask: vi.fn(() => ({ ...currentTask })),
+      getAgentConversation: vi.fn(() => ({ id: 1 })),
+      updateScheduledTaskState: vi.fn()
+    }
+
+    const agentSessionManager = {
+      on: vi.fn(),
+      get: vi.fn(() => ({ status: 'streaming' })),
+      reopen: vi.fn(() => ({ status: 'streaming' }))
+    }
+
+    const service = new ScheduledTaskService({}, agentSessionManager)
+    service.setSessionDatabase(sessionDatabase)
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(service, '_ensureTaskSession').mockReturnValue(currentTask.sessionId)
+    vi.spyOn(service, '_hasConversationHistory').mockReturnValue(true)
+
+    const result = await service.runTaskNow(currentTask.id)
+
+    expect(result).toEqual(expect.objectContaining({ id: currentTask.id }))
+    expect(service.queuedTaskIds.has(currentTask.id)).toBe(true)
+    expect(service.sessionTaskQueues.get(currentTask.sessionId)).toEqual([{
+      taskId: currentTask.id,
+      triggerReason: 'manual',
+      allowDisabled: true,
+      scheduledAt: null
+    }])
+    expect(service._broadcastChange).toHaveBeenCalledWith(currentTask.id, 'queued')
+  })
+
+  it('does not enqueue the same due task twice across repeated due checks', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const currentTask = {
+      id: 21,
+      name: '去重排队任务',
+      prompt: '检查状态',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      nextRunAt: 1000,
+      sessionId: 'agent-session-21',
+      runCount: 0
+    }
+
+    const sessionDatabase = {
+      listScheduledTasks: vi.fn(() => [{ ...currentTask }]),
+      getAgentConversation: vi.fn(() => ({ id: 1 })),
+      updateScheduledTaskState: vi.fn()
+    }
+
+    const agentSessionManager = {
+      on: vi.fn(),
+      get: vi.fn(() => ({ status: 'streaming' })),
+      reopen: vi.fn(() => ({ status: 'streaming' }))
+    }
+
+    const service = new ScheduledTaskService({}, agentSessionManager)
+    service.setSessionDatabase(sessionDatabase)
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(service, '_ensureTaskSession').mockReturnValue(currentTask.sessionId)
+    vi.spyOn(service, '_hasConversationHistory').mockReturnValue(true)
+    vi.spyOn(Date, 'now').mockReturnValue(2000)
+
+    await service._checkDueTasks()
+    await service._checkDueTasks()
+
+    expect(service.sessionTaskQueues.get(currentTask.sessionId)).toEqual([{
+      taskId: currentTask.id,
+      triggerReason: 'scheduled',
+      allowDisabled: false,
+      scheduledAt: 1000
+    }])
+    expect(service._broadcastChange).toHaveBeenCalledTimes(1)
+    vi.restoreAllMocks()
   })
 })

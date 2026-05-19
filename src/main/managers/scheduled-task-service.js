@@ -199,6 +199,9 @@ class ScheduledTaskService {
     this.started = false
     this.runningTasks = new Set()
     this.activeRuns = new Map()
+    this.sessionTaskQueues = new Map()
+    this.queuedTaskIds = new Set()
+    this.drainingSessions = new Set()
 
     this._onAgentResult = this._handleAgentResult.bind(this)
     this._onAgentError = this._handleAgentError.bind(this)
@@ -235,6 +238,9 @@ class ScheduledTaskService {
     this.stop()
     this.runningTasks.clear()
     this.activeRuns.clear()
+    this.sessionTaskQueues.clear()
+    this.queuedTaskIds.clear()
+    this.drainingSessions.clear()
     if (this.agentSessionManager?.off) {
       this.agentSessionManager.off('agentResult', this._onAgentResult)
       this.agentSessionManager.off('agentError', this._onAgentError)
@@ -365,6 +371,7 @@ class ScheduledTaskService {
     const current = this.sessionDatabase.getScheduledTask(taskId)
     if (!current) return { success: true }
     this.runningTasks.delete(taskId)
+    this._removeQueuedTask(taskId)
     if (current.sessionId) {
       this.activeRuns.delete(current.sessionId)
       this._detachTaskSession(current)
@@ -372,6 +379,7 @@ class ScheduledTaskService {
     const result = this.sessionDatabase.deleteScheduledTask(taskId)
     this._broadcastChange(taskId, 'deleted')
     this._rearmScheduler()
+    this._scheduleDrainQueuedSessionTasks(current.sessionId)
     return result
   }
 
@@ -404,7 +412,7 @@ class ScheduledTaskService {
     try {
       const now = Date.now()
       const tasks = this.sessionDatabase.listScheduledTasks()
-        .filter(task => task.enabled && task.nextRunAt && task.nextRunAt <= now && !this.runningTasks.has(task.id))
+        .filter(task => task.enabled && task.nextRunAt && task.nextRunAt <= now && !this.runningTasks.has(task.id) && !this.queuedTaskIds.has(task.id))
         .sort((left, right) => {
           if (left.nextRunAt !== right.nextRunAt) {
             return left.nextRunAt - right.nextRunAt
@@ -420,7 +428,7 @@ class ScheduledTaskService {
     }
   }
 
-  async _executeTask(task, triggerReason, { allowDisabled = false } = {}) {
+  async _executeTask(task, triggerReason, { allowDisabled = false, scheduledAtOverride } = {}) {
     if (!allowDisabled && !task.enabled) return
     if (this._hasReachedRunLimit(task)) {
       this._applyRunLimit(task)
@@ -431,12 +439,11 @@ class ScheduledTaskService {
       }
       return
     }
-    if (this.runningTasks.has(task.id)) return
+    if (this.runningTasks.has(task.id) || this.queuedTaskIds.has(task.id)) return
 
-    this.runningTasks.add(task.id)
     let awaitingCompletion = false
     let activeSessionId = task.sessionId || null
-    const scheduledAt = this._resolveScheduledAt(task, triggerReason)
+    const scheduledAt = this._resolveScheduledAt(task, triggerReason, scheduledAtOverride)
     let startedAt = null
 
     try {
@@ -446,37 +453,16 @@ class ScheduledTaskService {
       const isBootstrapRun = !this._hasConversationHistory(sessionId)
 
       if (liveSession?.status === 'streaming') {
-        const skippedAt = Date.now()
-        const intervalAnchorTs = this._resolveIntervalAnchorTs(task, {
-          startedAt: null,
-          scheduledAt,
-          finishedAt: skippedAt,
-          fallbackTs: skippedAt
-        })
-        this.sessionDatabase.createScheduledTaskRun({
-          taskId: task.id,
-          sessionId,
+        this._enqueueTaskForSession(sessionId, task, {
           triggerReason,
-          status: 'skipped',
-          errorMessage: 'Agent session is busy',
-          scheduledAt,
-          startedAt: null,
-          finishedAt: skippedAt
+          allowDisabled,
+          scheduledAt
         })
-        const nextRunAt = task.enabled
-          ? this._computeNextRunAt({ ...task, lastRunAt: intervalAnchorTs }, skippedAt, { intervalAnchorTs })
-          : task.nextRunAt
-        this.sessionDatabase.updateScheduledTaskState(task.id, {
-          lastScheduledAt: scheduledAt ?? undefined,
-          lastError: 'Agent session is busy',
-          nextRunAt
-        })
-        this._broadcastChange(task.id, 'skipped')
-        this.runningTasks.delete(task.id)
         this._rearmScheduler()
         return
       }
 
+      this.runningTasks.add(task.id)
       startedAt = Date.now()
       this.activeRuns.set(sessionId, {
         taskId: task.id,
@@ -553,6 +539,7 @@ class ScheduledTaskService {
         this.activeRuns.delete(activeSessionId)
       }
       this.runningTasks.delete(task.id)
+      this._scheduleDrainQueuedSessionTasks(activeSessionId)
     } finally {
       if (!awaitingCompletion) {
         this.runningTasks.delete(task.id)
@@ -697,7 +684,10 @@ class ScheduledTaskService {
 
   _handleAgentResult(sessionId) {
     const activeRun = this.activeRuns.get(sessionId)
-    if (!activeRun || !this.sessionDatabase) return
+    if (!activeRun || !this.sessionDatabase) {
+      this._scheduleDrainQueuedSessionTasks(sessionId)
+      return
+    }
 
     this.activeRuns.delete(sessionId)
     this.runningTasks.delete(activeRun.taskId)
@@ -744,11 +734,15 @@ class ScheduledTaskService {
 
     this._broadcastChange(activeRun.taskId, 'completed')
     this._rearmScheduler()
+    this._scheduleDrainQueuedSessionTasks(sessionId)
   }
 
   _handleAgentError(sessionId, errorMessage) {
     const activeRun = this.activeRuns.get(sessionId)
-    if (!activeRun || !this.sessionDatabase) return
+    if (!activeRun || !this.sessionDatabase) {
+      this._scheduleDrainQueuedSessionTasks(sessionId)
+      return
+    }
 
     this.activeRuns.delete(sessionId)
     this.runningTasks.delete(activeRun.taskId)
@@ -796,6 +790,7 @@ class ScheduledTaskService {
 
     this._broadcastChange(activeRun.taskId, 'failed')
     this._rearmScheduler()
+    this._scheduleDrainQueuedSessionTasks(sessionId)
   }
 
   _handleAgentDeleted(sessionId) {
@@ -803,7 +798,10 @@ class ScheduledTaskService {
 
     const tasks = this.sessionDatabase.listScheduledTasks()
       .filter(task => task.sessionId === sessionId)
-    if (!tasks.length) return
+    if (!tasks.length) {
+      this._scheduleDrainQueuedSessionTasks(sessionId)
+      return
+    }
 
     const activeRun = this.activeRuns.get(sessionId)
     const finishedAt = Date.now()
@@ -851,13 +849,17 @@ class ScheduledTaskService {
       this._broadcastChange(task.id, 'session-unlinked')
     }
     this._rearmScheduler()
+    this._scheduleDrainQueuedSessionTasks(sessionId)
   }
 
   _handleAgentInterrupted(sessionId, details = {}) {
     if (!sessionId || !this.sessionDatabase) return
 
     const activeRun = this.activeRuns.get(sessionId)
-    if (!activeRun) return
+    if (!activeRun) {
+      this._scheduleDrainQueuedSessionTasks(sessionId)
+      return
+    }
 
     this.activeRuns.delete(sessionId)
     this.runningTasks.delete(activeRun.taskId)
@@ -911,6 +913,7 @@ class ScheduledTaskService {
 
     this._broadcastChange(activeRun.taskId, 'interrupted')
     this._rearmScheduler()
+    this._scheduleDrainQueuedSessionTasks(sessionId)
   }
 
   _normalizeTaskInput(input, { partial = false } = {}) {
@@ -1058,7 +1061,8 @@ class ScheduledTaskService {
     return anchorTs + steps * intervalMs
   }
 
-  _resolveScheduledAt(task, triggerReason) {
+  _resolveScheduledAt(task, triggerReason, override) {
+    if (Number.isFinite(override)) return override
     if (triggerReason !== 'scheduled') return null
     return Number.isFinite(task?.nextRunAt) ? task.nextRunAt : null
   }
@@ -1072,7 +1076,7 @@ class ScheduledTaskService {
     }
 
     const tasks = this.sessionDatabase.listScheduledTasks()
-      .filter(task => task.enabled && task.nextRunAt && !this.runningTasks.has(task.id))
+      .filter(task => task.enabled && task.nextRunAt && !this.runningTasks.has(task.id) && !this.queuedTaskIds.has(task.id))
 
     if (!tasks.length) return
 
@@ -1111,6 +1115,112 @@ class ScheduledTaskService {
       return finishedAt
     }
     return fallbackTs
+  }
+
+  _enqueueTaskForSession(sessionId, task, { triggerReason, allowDisabled = false, scheduledAt } = {}) {
+    if (!sessionId || !task?.id) return false
+    if (this.queuedTaskIds.has(task.id)) return false
+
+    const queue = this.sessionTaskQueues.get(sessionId) || []
+    queue.push({
+      taskId: task.id,
+      triggerReason,
+      allowDisabled,
+      scheduledAt: Number.isFinite(scheduledAt) ? scheduledAt : null
+    })
+    this.sessionTaskQueues.set(sessionId, queue)
+    this.queuedTaskIds.add(task.id)
+
+    if (Number.isFinite(scheduledAt)) {
+      this.sessionDatabase?.updateScheduledTaskState?.(task.id, {
+        lastScheduledAt: scheduledAt
+      })
+    }
+
+    this._broadcastChange(task.id, 'queued')
+    return true
+  }
+
+  _removeQueuedTask(taskId) {
+    if (!this.queuedTaskIds.has(taskId)) return false
+
+    let removed = false
+    for (const [sessionId, queue] of this.sessionTaskQueues.entries()) {
+      const nextQueue = queue.filter(entry => entry.taskId !== taskId)
+      if (nextQueue.length !== queue.length) {
+        removed = true
+        if (nextQueue.length) {
+          this.sessionTaskQueues.set(sessionId, nextQueue)
+        } else {
+          this.sessionTaskQueues.delete(sessionId)
+        }
+      }
+    }
+
+    this.queuedTaskIds.delete(taskId)
+    return removed
+  }
+
+  _shiftQueuedTask(sessionId) {
+    const queue = this.sessionTaskQueues.get(sessionId)
+    if (!queue?.length) return null
+
+    const next = queue.shift()
+    if (queue.length) {
+      this.sessionTaskQueues.set(sessionId, queue)
+    } else {
+      this.sessionTaskQueues.delete(sessionId)
+    }
+
+    if (next?.taskId) {
+      this.queuedTaskIds.delete(next.taskId)
+    }
+
+    return next
+  }
+
+  _scheduleDrainQueuedSessionTasks(sessionId) {
+    if (!sessionId) return
+    this._drainQueuedSessionTasks(sessionId).catch(err => {
+      console.error(`[ScheduledTask] Failed to drain queued tasks for session ${sessionId}:`, err)
+    })
+  }
+
+  async _drainQueuedSessionTasks(sessionId) {
+    if (!sessionId || !this.sessionDatabase) return
+    if (this.drainingSessions.has(sessionId)) return
+
+    this.drainingSessions.add(sessionId)
+    try {
+      while (true) {
+        const queue = this.sessionTaskQueues.get(sessionId)
+        if (!queue?.length) break
+
+        const liveSession = this.agentSessionManager.get?.(sessionId) || this._getLiveSession(sessionId)
+        if (this.activeRuns.has(sessionId) || liveSession?.status === 'streaming') {
+          break
+        }
+
+        const queued = this._shiftQueuedTask(sessionId)
+        if (!queued) break
+
+        const task = this.sessionDatabase.getScheduledTask(queued.taskId)
+        if (!task) continue
+        if (!queued.allowDisabled && !task.enabled) continue
+
+        await this._executeTask(task, queued.triggerReason, {
+          allowDisabled: queued.allowDisabled,
+          scheduledAtOverride: queued.scheduledAt
+        })
+
+        if (this.activeRuns.has(sessionId)) {
+          break
+        }
+      }
+    } finally {
+      this.drainingSessions.delete(sessionId)
+      this._rearmScheduler()
+    }
   }
 
   _getPromptLocale() {
