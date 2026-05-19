@@ -14,7 +14,10 @@ const DESKTOP_CAPABILITY_SYSTEM_PROMPT = [
   'Do not claim there are no tasks, no history, or a task is disabled without calling the relevant tool first.',
   'After any mutation or inspection, summarize the actual task state returned by the tool, especially enabled, nextRunAt, lastError, and failureCount.',
   'When presenting model configuration to the user, use the actual modelId returned by the tool.',
-  'If modelId is empty, say the task follows the selected API profile default model instead of inventing tier names.'
+  'If modelId is empty, say the task follows the selected API profile default model instead of inventing tier names.',
+  'When creating a scheduled task from the current chat session, default to binding the task to the current session.',
+  'Only set sessionBindingMode to new when the user explicitly asks for a separate, independent, or background session.',
+  'If the user does not explicitly request a separate session, omit sessionBindingMode or use current instead of new.'
 ].join(' ')
 
 const CONFLICTING_CRON_TOOLS = [
@@ -589,7 +592,7 @@ async function buildDesktopCapabilityQueryOptions({ scheduledTaskService, weixin
         resetCountOnEnable: z.boolean().optional().describe('从停用重新启用时，是否重置已执行次数和运行态'),
         intervalAnchorMode: z.enum(INTERVAL_ANCHOR_MODES).optional().describe('间隔调度推进基准：按开始时间或结束时间'),
         enabled: z.boolean().optional().describe('是否启用'),
-        sessionBindingMode: z.enum(SESSION_BINDING_MODES).optional().describe('会话绑定方式：current=绑定当前聊天会话，new=运行时新建独立会话')
+        sessionBindingMode: z.enum(SESSION_BINDING_MODES).optional().describe('会话绑定方式：current=绑定当前聊天会话，new=运行时新建独立会话。省略时默认 current；只有用户明确要求独立/后台/新会话时才使用 new')
       },
       async (args) => {
         const createArgs = { ...args }

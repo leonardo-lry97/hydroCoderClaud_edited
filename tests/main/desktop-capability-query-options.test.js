@@ -182,6 +182,8 @@ describe('desktop capability query options', () => {
     expect(options.appendSystemPrompt).toContain('You do have direct access to HydroDesktop scheduled tasks')
     expect(options.appendSystemPrompt).toContain('Do not say you cannot access HydroDesktop scheduled tasks')
     expect(options.appendSystemPrompt).toContain('modelId')
+    expect(options.appendSystemPrompt).toContain('default to binding the task to the current session')
+    expect(options.appendSystemPrompt).toContain('Only set sessionBindingMode to new when the user explicitly asks for a separate')
   })
 
   it('serializes task diagnostics in list/get responses', async () => {
@@ -245,11 +247,19 @@ describe('desktop capability query options', () => {
     expect(tools.schedule_create.inputSchema.firstRunAt.safeParse('2026-05-01T09:30:00+08:00').success).toBe(true)
     expect(tools.schedule_create.inputSchema.sessionBindingMode.safeParse('current').success).toBe(true)
     expect(tools.schedule_create.inputSchema.sessionBindingMode.safeParse('new').success).toBe(true)
+    expect(tools.schedule_create.description).toContain('创建一个新的 Hydro Desktop 定时任务')
 
     expect(tools.schedule_update.inputSchema.cwd.safeParse('').success).toBe(true)
     expect(tools.schedule_update.inputSchema.apiProfileId.safeParse('').success).toBe(true)
     expect(tools.schedule_update.inputSchema.modelId.safeParse(null).success).toBe(true)
     expect(tools.schedule_update.inputSchema.firstRunAt.safeParse('2026-05-01T09:30:00+08:00').success).toBe(true)
+  })
+
+  it('documents current-session binding as the default create behavior', async () => {
+    const { tools } = await createOptions()
+
+    expect(tools.schedule_create.inputSchema.sessionBindingMode.description).toContain('省略时默认 current')
+    expect(tools.schedule_create.inputSchema.sessionBindingMode.description).toContain('只有用户明确要求独立/后台/新会话时才使用 new')
   })
 
   it('defaults MCP schedule_create in chat sessions to bind the current session', async () => {
@@ -285,6 +295,48 @@ describe('desktop capability query options', () => {
     expect(scheduledTaskService.createTask).toHaveBeenCalledWith(expect.objectContaining({
       sessionBindingMode: 'current',
       boundSessionId: 'chat-session-mcp-1'
+    }))
+  })
+
+  it('defaults MCP schedule_create in embedded sessions to bind the current session', async () => {
+    const scheduledTaskService = {
+      configManager: {
+        getConfig: () => ({
+          settings: {
+            locale: 'zh-CN'
+          }
+        })
+      },
+      listTasks: vi.fn(() => []),
+      createTask: vi.fn(async input => buildTask({ id: 18, ...input, sessionId: input.boundSessionId || null }))
+    }
+
+    const options = await buildDesktopCapabilityQueryOptions({
+      scheduledTaskService,
+      session: {
+        id: 'embedded-session-mcp-1',
+        source: 'manual',
+        ownerClientId: 'embed:hydrology-workbench',
+        clientType: 'embedded',
+        clientMeta: { appId: 'hydrology-workbench' }
+      }
+    })
+
+    const tools = Object.fromEntries(
+      options.mcpServers.hydrodesktop.tools.map(tool => [tool.name, tool])
+    )
+
+    await tools.schedule_create.handler({
+      name: '工作台当前会话任务',
+      prompt: '继续当前水文工作台会话',
+      scheduleType: 'interval',
+      intervalMinutes: 20,
+      firstRunAt: '2026-05-01T09:30:00+08:00'
+    })
+
+    expect(scheduledTaskService.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      sessionBindingMode: 'current',
+      boundSessionId: 'embedded-session-mcp-1'
     }))
   })
 
