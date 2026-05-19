@@ -87,7 +87,7 @@
             </n-form-item>
           </n-grid-item>
 
-          <n-grid-item>
+          <n-grid-item class="settings-grid-item-spaced">
             <n-form-item :label="t('globalSettings.allowScheduledSessionScheduleTools')">
               <n-switch v-model:value="formData.allowScheduledSessionScheduleTools" />
               <template #feedback>{{ t('globalSettings.allowScheduledSessionScheduleToolsHint') }}</template>
@@ -387,5 +387,9 @@ const handleClose = () => {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-color-1, #222);
+}
+
+.settings-grid-item-spaced {
+  padding-top: 10px;
 }
 </style>
