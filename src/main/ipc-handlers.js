@@ -328,6 +328,17 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     return { success: true };
   });
 
+  ipcMain.handle('window:openChannelSettings', async () => {
+    createSubWindow({
+      width: 1180,
+      height: 820,
+      title: translate('app.windows.channelSettings'),
+      page: 'channel-settings',
+      trustWeixinNotifyIPC: true
+    });
+    return { success: true };
+  });
+
   // 打开能力管理窗口（跨模式可访问）
   ipcMain.handle('window:openSettingsWorkbench', async (_event, options = {}) => {
     const params = new URLSearchParams()

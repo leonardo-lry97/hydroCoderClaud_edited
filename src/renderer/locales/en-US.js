@@ -835,6 +835,7 @@ export default {
     apiConfig: 'API Configuration',
     providerManager: 'Provider Manager',
     globalSettings: 'Global Settings',
+    channelSettings: 'Channel Settings',
     embeddedApps: 'Embedded Apps',
     capabilityWorkbench: 'Capability Workbench',
     appearanceSettings: 'Appearance',
@@ -860,6 +861,22 @@ export default {
     sourceRecent: 'Other',
     projectTipNone: 'No project selected. Only global scopes are shown and editable; select a project to manage project scopes.',
     projectTipSelected: 'Current project: {name}. Global and project scopes are both available.'
+  },
+
+  channelSettings: {
+    title: 'Channel Settings',
+    subtitle: 'Manage desktop messaging channels from one place. DingTalk and WeChat are supported now, with room for Feishu and more later.',
+    sidebarTitle: 'Channels',
+    channels: {
+      dingtalk: {
+        label: 'DingTalk',
+        description: 'Internal bot bridge and conversation access'
+      },
+      weixin: {
+        label: 'WeChat',
+        description: 'QR login, target capture, and notification delivery'
+      }
+    }
   },
 
   embeddedApps: {
@@ -1600,6 +1617,7 @@ export default {
   // DingTalk Bridge Settings
   dingtalkSettings: {
     title: 'DingTalk Bridge Settings',
+    embeddedSubtitle: 'Manage the DingTalk bridge, connection state, and session history strategy.',
     description: 'DingTalk robot bridge allows you to chat with Agent mode from your phone via DingTalk. You need to create an enterprise internal app on DingTalk Open Platform and enable the robot.',
     basicConfig: 'Basic Configuration',
     enableBridge: 'Enable DingTalk Bridge',
@@ -1897,6 +1915,7 @@ export default {
       globalSettings: 'Global Settings - Hydro Desktop',
       appearanceSettings: 'Appearance Settings - Hydro Desktop',
       embeddedAppDemo: 'Embedded App Demo - Hydro Desktop',
+      channelSettings: 'Channel Settings - Hydro Desktop',
       dingtalkSettings: 'DingTalk Bridge Settings - Hydro Desktop',
       providerManager: 'Provider Manager - Hydro Desktop',
       sessionManager: 'Session Browser - Hydro Desktop',

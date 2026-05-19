@@ -1,13 +1,22 @@
 <template>
   <div class="settings-page" :style="cssVars">
     <!-- Header -->
-    <div class="settings-header">
+    <div v-if="!embedded" class="settings-header">
       <h1>{{ t('dingtalkSettings.title') }}</h1>
       <n-space>
         <n-tag :type="statusType" size="small" round>
           {{ statusText }}
         </n-tag>
       </n-space>
+    </div>
+    <div v-else class="embedded-header">
+      <div>
+        <div class="embedded-title">{{ t('dingtalkSettings.title') }}</div>
+        <div class="embedded-subtitle">{{ t('dingtalkSettings.embeddedSubtitle') }}</div>
+      </div>
+      <n-tag :type="statusType" size="small" round>
+        {{ statusText }}
+      </n-tag>
     </div>
 
     <!-- Description -->
@@ -88,7 +97,7 @@
     <!-- Footer Buttons -->
     <div class="settings-footer">
       <n-space>
-        <n-button @click="handleClose">{{ t('common.close') }}</n-button>
+        <n-button v-if="!embedded" @click="handleClose">{{ t('common.close') }}</n-button>
         <n-button type="primary" @click="handleSave">{{ t('common.save') }}</n-button>
       </n-space>
     </div>
@@ -101,6 +110,13 @@ import { useMessage } from 'naive-ui'
 import { useIPC } from '@composables/useIPC'
 import { useTheme } from '@composables/useTheme'
 import { useLocale } from '@composables/useLocale'
+
+const props = defineProps({
+  embedded: {
+    type: Boolean,
+    default: false
+  }
+})
 
 const message = useMessage()
 const { invoke } = useIPC()
@@ -239,11 +255,33 @@ const openGuide = () => {
 }
 
 const handleClose = () => {
+  if (props.embedded) return
   window.close()
 }
 </script>
 
 <style scoped>
+.embedded-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.embedded-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.embedded-subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-color-2);
+}
+
 .session-info {
   margin-top: 12px;
   font-size: 13px;

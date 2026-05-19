@@ -349,7 +349,7 @@ const projectMenuOptions = computed(() => [
 const settingsOptions = computed(() => [
   { label: t('settingsMenu.apiConfig'), key: 'api-config', icon: renderMenuIcon('key') },
   { label: t('settingsMenu.providerManager'), key: 'provider-manager', icon: renderMenuIcon('building') },
-  { label: t('settingsMenu.dingtalkBridge'), key: 'dingtalk-settings', icon: renderMenuIcon('robot') },
+  { label: t('settingsMenu.channelSettings'), key: 'channel-settings', icon: renderMenuIcon('chat') },
   { label: t('settingsMenu.globalSettings'), key: 'global-settings', icon: renderMenuIcon('settings') },
   {
     label: t('settingsMenu.embeddedApps'),
@@ -493,8 +493,8 @@ const handleSettingsSelect = async (key) => {
     case 'session-history':
       window.electronAPI.openSessionManager()
       break
-    case 'dingtalk-settings':
-      window.electronAPI.openDingTalkSettings()
+    case 'channel-settings':
+      window.electronAPI.openChannelSettings()
       break
     case 'app-update':
       window.electronAPI.openUpdateManager()

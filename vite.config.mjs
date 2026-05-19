@@ -30,6 +30,7 @@ export default defineConfig({
         providerManager: path.resolve(__dirname, 'src/renderer/pages/provider-manager/index.html'),
         globalSettings: path.resolve(__dirname, 'src/renderer/pages/global-settings/index.html'),
         appearanceSettings: path.resolve(__dirname, 'src/renderer/pages/appearance-settings/index.html'),
+        channelSettings: path.resolve(__dirname, 'src/renderer/pages/channel-settings/index.html'),
         settingsWorkbench: path.resolve(__dirname, 'src/renderer/pages/settings-workbench/index.html'),
         embeddedAppDemo: path.resolve(__dirname, 'src/renderer/pages/embedded-app-demo/index.html'),
         hydrologyWorkbench: path.resolve(__dirname, 'src/renderer/pages/hydrology-workbench/index.html'),

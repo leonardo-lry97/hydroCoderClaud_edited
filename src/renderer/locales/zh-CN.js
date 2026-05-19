@@ -838,6 +838,7 @@ export default {
     apiConfig: 'API 配置管理',
     providerManager: '服务商管理',
     globalSettings: '全局设置',
+    channelSettings: '渠道配置',
     embeddedApps: '内嵌应用',
     capabilityWorkbench: '能力管理',
     appearanceSettings: '外观设置',
@@ -863,6 +864,22 @@ export default {
     sourceRecent: '其他',
     projectTipNone: '当前未选择目录，仅显示和编辑全局能力；选择目录后可管理项目级能力。',
     projectTipSelected: '当前目录：{name}，可同时管理全局与项目级能力。'
+  },
+
+  channelSettings: {
+    title: '渠道配置',
+    subtitle: '统一管理桌面端消息渠道的接入配置。当前支持钉钉与微信，后续可继续扩展飞书等渠道。',
+    sidebarTitle: '渠道列表',
+    channels: {
+      dingtalk: {
+        label: '钉钉',
+        description: '企业内部机器人桥接与会话接入'
+      },
+      weixin: {
+        label: '微信',
+        description: '扫码授权、目标捕获与通知发送'
+      }
+    }
   },
 
   embeddedApps: {
@@ -1605,6 +1622,7 @@ export default {
   // 钉钉桥接设置
   dingtalkSettings: {
     title: '钉钉桥接设置',
+    embeddedSubtitle: '管理钉钉机器人桥接、连接状态和会话历史策略。',
     description: '通过钉钉机器人桥接，可以在手机钉钉上直接与 Agent 模式对话。需要先在钉钉开放平台创建企业内部应用并启用机器人。',
     basicConfig: '基本配置',
     enableBridge: '启用钉钉桥接',
@@ -1903,6 +1921,7 @@ export default {
       globalSettings: '全局设置 - Hydro Desktop',
       appearanceSettings: '外观设置 - Hydro Desktop',
       embeddedAppDemo: '内嵌应用 Demo - Hydro Desktop',
+      channelSettings: '渠道配置 - Hydro Desktop',
       dingtalkSettings: '钉钉桥接设置 - Hydro Desktop',
       providerManager: '服务商管理 - Hydro Desktop',
       sessionManager: '会话查询 - Hydro Desktop',
