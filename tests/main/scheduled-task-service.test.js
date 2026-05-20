@@ -15,7 +15,7 @@ describe('ScheduledTaskService', () => {
 
     expect(service._normalizeTaskInput({ name: 'a', prompt: 'b', scheduleType: 'interval', intervalMinutes: 5, firstRunAt: INTERVAL_FIRST_RUN_AT, modelId: ' glm-5.1 ' }).modelId).toBe('glm-5.1')
     expect(service._normalizeTaskInput({ name: 'a', prompt: 'b', scheduleType: 'interval', intervalMinutes: 5, firstRunAt: INTERVAL_FIRST_RUN_AT, modelId: 'Qwen/Qwen3.6-27B' }).modelId).toBe('Qwen/Qwen3.6-27B')
-    expect(service._normalizeTaskInput({ name: 'a', prompt: 'b', scheduleType: 'interval', intervalMinutes: 5, firstRunAt: INTERVAL_FIRST_RUN_AT, modelId: '' }).modelId).toBeNull()
+    expect(() => service._normalizeTaskInput({ name: 'a', prompt: 'b', scheduleType: 'interval', intervalMinutes: 5, firstRunAt: INTERVAL_FIRST_RUN_AT, modelId: '' })).toThrow('Task modelId is required')
   })
 
   it('normalizes maxRuns as an optional positive integer', async () => {
@@ -28,6 +28,7 @@ describe('ScheduledTaskService', () => {
       scheduleType: 'interval',
       intervalMinutes: 5,
       firstRunAt: INTERVAL_FIRST_RUN_AT,
+      modelId: 'glm-5.1',
       maxRuns: 3
     }).maxRuns).toBe(3)
 
@@ -37,6 +38,7 @@ describe('ScheduledTaskService', () => {
       scheduleType: 'interval',
       intervalMinutes: 5,
       firstRunAt: INTERVAL_FIRST_RUN_AT,
+      modelId: 'glm-5.1',
       maxRuns: ''
     }).maxRuns).toBeNull()
   })
@@ -50,7 +52,8 @@ describe('ScheduledTaskService', () => {
       prompt: 'b',
       scheduleType: 'interval',
       intervalMinutes: 1.5,
-      firstRunAt: INTERVAL_FIRST_RUN_AT
+      firstRunAt: INTERVAL_FIRST_RUN_AT,
+      modelId: 'glm-5.1'
     })).toThrow('Interval minutes must be a positive integer')
 
     expect(() => service._normalizeTaskInput({
@@ -59,6 +62,7 @@ describe('ScheduledTaskService', () => {
       scheduleType: 'interval',
       intervalMinutes: 5,
       firstRunAt: INTERVAL_FIRST_RUN_AT,
+      modelId: 'glm-5.1',
       maxRuns: 2.5
     })).toThrow('Max runs must be a positive integer')
   })
@@ -72,7 +76,8 @@ describe('ScheduledTaskService', () => {
       prompt: 'b',
       scheduleType: 'interval',
       intervalMinutes: 5,
-      firstRunAt: INTERVAL_FIRST_RUN_AT
+      firstRunAt: INTERVAL_FIRST_RUN_AT,
+      modelId: 'glm-5.1'
     }).intervalAnchorMode).toBe('started_at')
 
     expect(service._normalizeTaskInput({
@@ -81,6 +86,7 @@ describe('ScheduledTaskService', () => {
       scheduleType: 'interval',
       intervalMinutes: 5,
       firstRunAt: INTERVAL_FIRST_RUN_AT,
+      modelId: 'glm-5.1',
       intervalAnchorMode: 'finished_at'
     }).intervalAnchorMode).toBe('finished_at')
   })
@@ -94,7 +100,8 @@ describe('ScheduledTaskService', () => {
       prompt: 'b',
       scheduleType: 'interval',
       intervalMinutes: 5,
-      firstRunAt: INTERVAL_FIRST_RUN_AT
+      firstRunAt: INTERVAL_FIRST_RUN_AT,
+      modelId: 'glm-5.1'
     }).resetCountOnEnable).toBe(false)
 
     expect(service._normalizeTaskInput({
@@ -103,6 +110,7 @@ describe('ScheduledTaskService', () => {
       scheduleType: 'interval',
       intervalMinutes: 5,
       firstRunAt: INTERVAL_FIRST_RUN_AT,
+      modelId: 'glm-5.1',
       resetCountOnEnable: true
     }).resetCountOnEnable).toBe(true)
   })
@@ -115,7 +123,8 @@ describe('ScheduledTaskService', () => {
       name: 'a',
       prompt: 'b',
       scheduleType: 'daily',
-      dailyTime: '99:99'
+      dailyTime: '99:99',
+      modelId: 'glm-5.1'
     })).toThrow('Daily schedule requires execution time')
 
     expect(() => service._normalizeTaskInput({
@@ -123,14 +132,16 @@ describe('ScheduledTaskService', () => {
       prompt: 'b',
       scheduleType: 'weekly',
       dailyTime: '24:00',
-      weeklyDays: [1]
+      weeklyDays: [1],
+      modelId: 'glm-5.1'
     })).toThrow('Weekly schedule requires execution time')
 
     expect(() => service._normalizeTaskInput({
       name: 'a',
       prompt: 'b',
       scheduleType: 'workdays',
-      dailyTime: '24:00'
+      dailyTime: '24:00',
+      modelId: 'glm-5.1'
     })).toThrow('Workday schedule requires execution time')
 
     expect(() => service._normalizeTaskInput({
@@ -139,7 +150,8 @@ describe('ScheduledTaskService', () => {
       scheduleType: 'monthly',
       dailyTime: '24:00',
       monthlyMode: 'day_of_month',
-      monthlyDay: 15
+      monthlyDay: 15,
+      modelId: 'glm-5.1'
     })).toThrow('Monthly schedule requires execution time')
 
     expect(() => service._normalizeTaskInput({
@@ -148,7 +160,8 @@ describe('ScheduledTaskService', () => {
       scheduleType: 'monthly',
       firstRunAt: Date.UTC(2026, 3, 24, 9, 0, 0),
       monthlyMode: 'day_of_month',
-      monthlyDay: 32
+      monthlyDay: 32,
+      modelId: 'glm-5.1'
     })).toThrow('Monthly schedule requires a valid day of month')
   })
 
@@ -161,7 +174,8 @@ describe('ScheduledTaskService', () => {
       name: 'a',
       prompt: 'b',
       scheduleType: 'daily',
-      firstRunAt: dailyFirstRunAt
+      firstRunAt: dailyFirstRunAt,
+      modelId: 'glm-5.1'
     })
 
     expect(normalized.firstRunAt).toBe(dailyFirstRunAt)
@@ -170,7 +184,8 @@ describe('ScheduledTaskService', () => {
     expect(() => service._normalizeTaskInput({
       name: 'a',
       prompt: 'b',
-      scheduleType: 'once'
+      scheduleType: 'once',
+      modelId: 'glm-5.1'
     })).toThrow('One-time schedule requires execution time')
   })
 
@@ -560,6 +575,7 @@ describe('ScheduledTaskService', () => {
     const created = await service.createTask({
       name: '会话内定时任务',
       prompt: '继续当前对话',
+      modelId: 'glm-5.1',
       enabled: true,
       scheduleType: 'interval',
       intervalMinutes: 30,
@@ -589,6 +605,93 @@ describe('ScheduledTaskService', () => {
     vi.restoreAllMocks()
   })
 
+  it('persists embedded session metadata when binding a newly created task to the current embedded session', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const firstRunAt = Date.UTC(2026, 3, 25, 10, 0, 0)
+    const taskState = {
+      id: 42,
+      name: '水文工作台会话内任务',
+      prompt: '继续当前工作台巡检',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      firstRunAt,
+      lastRunAt: null,
+      sessionId: null
+    }
+
+    const sessionDatabase = {
+      createScheduledTask: vi.fn((task) => ({ ...taskState, ...task })),
+      updateScheduledTaskState: vi.fn((_taskId, updates) => {
+        Object.assign(taskState, updates)
+        return { ...taskState }
+      }),
+      updateAgentConversation: vi.fn(),
+      getAgentConversation: vi.fn((sessionId) => (
+        sessionId === 'embedded-session-1'
+          ? { id: 109, session_id: sessionId, source: 'manual', client_type: 'embedded' }
+          : null
+      )),
+      getScheduledTask: vi.fn(() => ({ ...taskState }))
+    }
+
+    const liveSession = {
+      id: 'embedded-session-1',
+      source: 'manual',
+      taskId: null,
+      ownerClientId: 'embed:hydrology-workbench',
+      clientType: 'embedded',
+      clientMeta: {
+        appId: 'hydrology-workbench',
+        component: 'EmbeddedAgentPanel'
+      },
+      meta: {}
+    }
+
+    const agentSessionManager = {
+      on: vi.fn(),
+      create: vi.fn(() => ({ id: 'agent-session-new' })),
+      get: vi.fn(() => ({ status: 'idle' })),
+      reopen: vi.fn(),
+      sendMessage: vi.fn().mockResolvedValue(),
+      sessions: new Map([['embedded-session-1', liveSession]])
+    }
+
+    const service = new ScheduledTaskService({}, agentSessionManager)
+    service.setSessionDatabase(sessionDatabase)
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 3, 25, 9, 0, 0))
+
+    const created = await service.createTask({
+      name: '水文工作台会话内任务',
+      prompt: '继续当前工作台巡检',
+      modelId: 'glm-5.1',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      firstRunAt,
+      sessionBindingMode: 'current',
+      boundSessionId: 'embedded-session-1'
+    })
+
+    expect(agentSessionManager.create).not.toHaveBeenCalled()
+    expect(created.sessionId).toBe('embedded-session-1')
+    expect(sessionDatabase.updateAgentConversation).toHaveBeenCalledWith('embedded-session-1', {
+      source: 'scheduled',
+      taskId: 42,
+      ownerClientId: 'embed:hydrology-workbench',
+      clientType: 'embedded',
+      clientMeta: {
+        appId: 'hydrology-workbench',
+        component: 'EmbeddedAgentPanel'
+      }
+    })
+    expect(liveSession.source).toBe('scheduled')
+    expect(liveSession.taskId).toBe(42)
+    expect(liveSession.meta.scheduledTaskId).toBe(42)
+    vi.restoreAllMocks()
+  })
+
   it('rearms one-time tasks when schedule is changed to once or first run time changes', async () => {
     const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
 
@@ -597,6 +700,7 @@ describe('ScheduledTaskService', () => {
       id: 52,
       name: '巡检任务',
       prompt: '执行巡检',
+      modelId: 'glm-5.1',
       enabled: true,
       scheduleType: 'interval',
       intervalMinutes: 30,
@@ -651,6 +755,7 @@ describe('ScheduledTaskService', () => {
         id: 77,
         name: '复用当前会话',
         prompt: '基于当前上下文继续',
+        modelId: 'glm-5.1',
         enabled: true,
         scheduleType: 'interval',
         intervalMinutes: 15,
@@ -705,6 +810,106 @@ describe('ScheduledTaskService', () => {
       expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
         'chat-session-2',
         '基于当前上下文继续',
+        expect.objectContaining({
+          meta: { source: 'scheduled' }
+        })
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reuses a bound embedded session when the scheduled task runs and the app instance is active', async () => {
+    vi.useFakeTimers()
+
+    try {
+      const startedAt = Date.UTC(2026, 3, 30, 11, 0, 0)
+      vi.setSystemTime(startedAt)
+
+      const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+      const taskState = {
+        id: 177,
+        name: '水文工作台复用当前会话',
+        prompt: '基于当前工作台上下文继续巡检',
+        modelId: 'glm-5.1',
+        enabled: true,
+        scheduleType: 'interval',
+        intervalMinutes: 15,
+        firstRunAt: Date.UTC(2026, 3, 30, 10, 45, 0),
+        sessionId: 'embedded-session-77',
+        runCount: 0,
+        failureCount: 0,
+        runtimeState: null
+      }
+
+      const sessionDatabase = {
+        getScheduledTask: vi.fn(() => ({ ...taskState })),
+        updateScheduledTaskState: vi.fn((_taskId, updates) => {
+          Object.assign(taskState, updates)
+          return { ...taskState }
+        }),
+        createScheduledTaskRun: vi.fn(),
+        updateAgentConversation: vi.fn(),
+        getAgentConversation: vi.fn((sessionId) => (
+          sessionId === 'embedded-session-77'
+            ? {
+                id: 177,
+                session_id: sessionId,
+                source: 'manual',
+                client_type: 'embedded',
+                client_meta: JSON.stringify({ appId: 'hydrology-workbench' })
+              }
+            : null
+        ))
+      }
+
+      const liveSession = {
+        id: 'embedded-session-77',
+        status: 'idle',
+        source: 'manual',
+        taskId: null,
+        clientType: 'embedded',
+        clientMeta: { appId: 'hydrology-workbench', component: 'EmbeddedAgentPanel' },
+        meta: {}
+      }
+      const agentSessionManager = {
+        on: vi.fn(),
+        create: vi.fn(() => ({ id: 'agent-session-should-not-create' })),
+        get: vi.fn(() => ({ ...liveSession })),
+        reopen: vi.fn(() => ({ ...liveSession })),
+        sendMessage: vi.fn().mockResolvedValue(),
+        sessions: new Map([['embedded-session-77', liveSession]]),
+        embeddedAppRuntimeManager: {
+          appStates: new Map([['hydrology-workbench', {
+            commands: new Map([['hydrology_context_get', { id: 'hydrology_context_get' }]])
+          }]])
+        }
+      }
+
+      const service = new ScheduledTaskService({}, agentSessionManager)
+      service.setSessionDatabase(sessionDatabase)
+      vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+      vi.spyOn(service, '_hasConversationHistory').mockReturnValue(true)
+      vi.spyOn(service, '_rearmScheduler').mockImplementation(() => {})
+
+      await service._executeTask(taskState, 'manual', { allowDisabled: true })
+
+      expect(agentSessionManager.create).not.toHaveBeenCalled()
+      expect(sessionDatabase.updateAgentConversation).toHaveBeenCalledWith('embedded-session-77', {
+        source: 'scheduled',
+        taskId: taskState.id,
+        clientType: 'embedded',
+        clientMeta: {
+          appId: 'hydrology-workbench',
+          component: 'EmbeddedAgentPanel'
+        }
+      })
+      expect(liveSession.source).toBe('scheduled')
+      expect(liveSession.taskId).toBe(taskState.id)
+      expect(liveSession.meta.scheduledTaskId).toBe(taskState.id)
+      expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
+        'embedded-session-77',
+        '基于当前工作台上下文继续巡检',
         expect.objectContaining({
           meta: { source: 'scheduled' }
         })
@@ -1308,6 +1513,64 @@ describe('ScheduledTaskService', () => {
     expect(liveSession.meta.scheduledTaskId).toBeUndefined()
   })
 
+  it('does not clear another task active run when deleting a shared-session task', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const deletedTask = {
+      id: 120,
+      name: '共享会话任务 B',
+      prompt: '删除这个',
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      enabled: true,
+      sessionId: 'shared-session-120'
+    }
+
+    const liveSession = {
+      source: 'scheduled',
+      taskId: 119,
+      meta: { scheduledTaskId: 119 }
+    }
+
+    const sessionDatabase = {
+      getScheduledTask: vi.fn(() => deletedTask),
+      updateAgentConversation: vi.fn(),
+      deleteScheduledTask: vi.fn(() => ({ success: true })),
+      listScheduledTasks: vi.fn(() => [
+        { id: 119, sessionId: 'shared-session-120' },
+        deletedTask
+      ])
+    }
+
+    const service = new ScheduledTaskService({}, {
+      on: vi.fn(),
+      sessions: new Map([[deletedTask.sessionId, liveSession]])
+    })
+    service.setSessionDatabase(sessionDatabase)
+    service.activeRuns.set(deletedTask.sessionId, {
+      taskId: 119,
+      sessionId: deletedTask.sessionId,
+      triggerReason: 'scheduled',
+      scheduledAt: 1000,
+      startedAt: 1100
+    })
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+
+    const result = service.deleteTask(deletedTask.id)
+
+    expect(result).toEqual({ success: true })
+    expect(service.activeRuns.get(deletedTask.sessionId)).toMatchObject({
+      taskId: 119,
+      sessionId: deletedTask.sessionId
+    })
+    expect(sessionDatabase.updateAgentConversation).toHaveBeenCalledWith(deletedTask.sessionId, {
+      source: 'scheduled',
+      taskId: 119
+    })
+    expect(liveSession.source).toBe('scheduled')
+    expect(liveSession.taskId).toBe(119)
+    expect(liveSession.meta.scheduledTaskId).toBe(119)
+  })
+
   it('unlinks a scheduled task when its agent session is deleted', async () => {
     const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
     const currentTask = {
@@ -1473,12 +1736,68 @@ describe('ScheduledTaskService', () => {
     expect(service._broadcastChange).toHaveBeenCalledWith(currentTask.id, 'interrupted')
   })
 
+  it('releases a running scheduled task when its agent session is interrupted by user cancel and rearms the next run', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const currentTask = {
+      id: 151,
+      name: '手动中断后继续',
+      prompt: '执行后台巡检',
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      enabled: true,
+      sessionId: 'agent-session-151',
+      runtimeState: null
+    }
+
+    const sessionDatabase = {
+      getScheduledTask: vi.fn(() => ({ ...currentTask })),
+      updateScheduledTaskState: vi.fn(),
+      createScheduledTaskRun: vi.fn()
+    }
+
+    const service = new ScheduledTaskService({}, { on: vi.fn() })
+    service.setSessionDatabase(sessionDatabase)
+    service.runningTasks.add(currentTask.id)
+    service.activeRuns.set(currentTask.sessionId, {
+      taskId: currentTask.id,
+      sessionId: currentTask.sessionId,
+      triggerReason: 'scheduled',
+      scheduledAt: 5000,
+      startedAt: 5100
+    })
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(service, '_computeNextRunAt').mockReturnValue(8000)
+
+    service._handleAgentInterrupted(currentTask.sessionId, { reason: 'user-cancel' })
+
+    expect(service.runningTasks.has(currentTask.id)).toBe(false)
+    expect(service.activeRuns.has(currentTask.sessionId)).toBe(false)
+    expect(sessionDatabase.updateScheduledTaskState).toHaveBeenCalledWith(currentTask.id, expect.objectContaining({
+      sessionId: currentTask.sessionId,
+      lastScheduledAt: 5000,
+      lastStartedAt: 5100,
+      nextRunAt: 8000,
+      lastError: 'Agent session interrupted'
+    }))
+    expect(sessionDatabase.createScheduledTaskRun).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: currentTask.id,
+      sessionId: currentTask.sessionId,
+      triggerReason: 'scheduled',
+      status: 'skipped',
+      errorMessage: 'Agent session interrupted',
+      scheduledAt: 5000,
+      startedAt: 5100
+    }))
+    expect(service._broadcastChange).toHaveBeenCalledWith(currentTask.id, 'interrupted')
+  })
+
   it('queues a scheduled run when the bound agent session is busy', async () => {
     const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
     const currentTask = {
       id: 16,
       name: '忙碌跳过任务',
       prompt: '检查状态',
+      modelId: 'glm-5.1',
       enabled: true,
       scheduleType: 'interval',
       intervalMinutes: 30,
@@ -1520,6 +1839,76 @@ describe('ScheduledTaskService', () => {
       allowDisabled: false,
       scheduledAt: 2000
     }])
+  })
+
+  it('skips a bound embedded-app session task when the embedded app instance is not active', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const currentTask = {
+      id: 161,
+      name: '水文工作台定时任务',
+      prompt: '读取当前站点并执行巡检',
+      modelId: 'glm-5.1',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      firstRunAt: INTERVAL_FIRST_RUN_AT,
+      nextRunAt: 7000,
+      sessionId: 'agent-session-161',
+      runCount: 0
+    }
+
+    const sessionDatabase = {
+      getAgentConversation: vi.fn(() => ({
+        id: 1,
+        session_id: currentTask.sessionId,
+        client_type: 'embedded',
+        client_meta: JSON.stringify({ appId: 'hydrology-workbench' })
+      })),
+      createScheduledTaskRun: vi.fn(),
+      updateScheduledTaskState: vi.fn()
+    }
+
+    const agentSessionManager = {
+      on: vi.fn(),
+      get: vi.fn(() => ({
+        status: 'idle',
+        clientType: 'embedded',
+        clientMeta: { appId: 'hydrology-workbench' }
+      })),
+      reopen: vi.fn(() => ({
+        status: 'idle',
+        clientType: 'embedded',
+        clientMeta: { appId: 'hydrology-workbench' }
+      })),
+      embeddedAppRuntimeManager: {
+        appStates: new Map()
+      }
+    }
+
+    const service = new ScheduledTaskService({}, agentSessionManager)
+    service.setSessionDatabase(sessionDatabase)
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(service, '_ensureTaskSession').mockReturnValue(currentTask.sessionId)
+    vi.spyOn(service, '_hasConversationHistory').mockReturnValue(true)
+    vi.spyOn(service, '_computeNextRunAt').mockReturnValue(9000)
+
+    await service._executeTask(currentTask, 'scheduled')
+
+    expect(sessionDatabase.updateScheduledTaskState).toHaveBeenCalledWith(currentTask.id, {
+      lastScheduledAt: 7000,
+      lastError: 'Embedded app "hydrology-workbench" is not active',
+      nextRunAt: 9000
+    })
+    expect(sessionDatabase.createScheduledTaskRun).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: currentTask.id,
+      sessionId: currentTask.sessionId,
+      triggerReason: 'scheduled',
+      status: 'skipped',
+      errorMessage: 'Embedded app "hydrology-workbench" is not active',
+      scheduledAt: 7000,
+      startedAt: null
+    }))
+    expect(service._broadcastChange).toHaveBeenCalledWith(currentTask.id, 'skipped')
   })
 
   it('drains queued tasks after an active scheduled run completes on the same session', async () => {
@@ -1643,6 +2032,7 @@ describe('ScheduledTaskService', () => {
       id: 20,
       name: '手动排队任务',
       prompt: '检查状态',
+      modelId: 'glm-5.1',
       enabled: true,
       scheduleType: 'interval',
       intervalMinutes: 30,
@@ -1688,6 +2078,7 @@ describe('ScheduledTaskService', () => {
       id: 21,
       name: '去重排队任务',
       prompt: '检查状态',
+      modelId: 'glm-5.1',
       enabled: true,
       scheduleType: 'interval',
       intervalMinutes: 30,
@@ -1726,5 +2117,42 @@ describe('ScheduledTaskService', () => {
     }])
     expect(service._broadcastChange).toHaveBeenCalledTimes(1)
     vi.restoreAllMocks()
+  })
+
+  it('rejects creating a task without an explicit model id', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const service = new ScheduledTaskService({}, { on: vi.fn() })
+    service.setSessionDatabase({
+      createScheduledTask: vi.fn(),
+      updateScheduledTaskState: vi.fn()
+    })
+
+    await expect(service.createTask({
+      name: '缺少模型',
+      prompt: '执行任务',
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      firstRunAt: Date.UTC(2026, 3, 25, 10, 0, 0),
+      modelId: null
+    })).rejects.toThrow('Task modelId is required')
+  })
+
+  it('rejects running an existing task without an explicit model id', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const service = new ScheduledTaskService({}, { on: vi.fn() })
+    service.setSessionDatabase({
+      getScheduledTask: vi.fn(() => ({
+        id: 301,
+        name: '旧任务',
+        prompt: '执行',
+        modelId: null,
+        enabled: true,
+        scheduleType: 'interval',
+        intervalMinutes: 30,
+        firstRunAt: Date.UTC(2026, 3, 25, 10, 0, 0)
+      }))
+    })
+
+    await expect(service.runTaskNow(301)).rejects.toThrow('Scheduled task requires an explicit modelId')
   })
 })

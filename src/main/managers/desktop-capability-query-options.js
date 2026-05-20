@@ -139,6 +139,13 @@ function getDisplayDict(locale) {
   return DISPLAY_I18N[DISPLAY_I18N[locale] ? locale : 'zh-CN']
 }
 
+function buildRequiredStringSchema(z, description) {
+  return z.union([z.string(), z.number()])
+    .transform(value => String(value ?? '').trim())
+    .refine(value => value.length > 0, { message: '不能为空' })
+    .describe(description)
+}
+
 function normalizeModelId(modelId) {
   return typeof modelId === 'string' ? modelId.trim() : ''
 }
@@ -511,7 +518,7 @@ async function buildDesktopCapabilityQueryOptions({ scheduledTaskService, weixin
     prompt: z.string().min(1).optional().describe('任务执行时发送给智能体的提示词'),
     cwd: buildClearableStringSchema(z, '执行工作目录；传 null 或空字符串表示清空并回退到默认工作目录'),
     apiProfileId: buildClearableStringSchema(z, 'API Profile ID；传 null 或空字符串表示清空并回退到默认 API Profile'),
-    modelId: buildClearableStringSchema(z, '真实模型 ID；传 null 或空字符串表示跟随所选 API Profile 的默认模型'),
+    modelId: buildRequiredStringSchema(z, '真实模型 ID。必须提供明确的模型 ID，不能留空。'),
     maxRuns: buildPositiveIntegerLikeSchema(z, '任务生命周期内的累计执行次数上限，可为 null；这不是单次会话的 maxTurns', { nullable: true }),
     resetCountOnEnable: z.boolean().optional().describe('从停用重新启用时，是否重置已执行次数和运行态'),
     intervalAnchorMode: z.enum(INTERVAL_ANCHOR_MODES).optional().describe('间隔调度推进基准：按开始时间或结束时间'),
@@ -587,7 +594,7 @@ async function buildDesktopCapabilityQueryOptions({ scheduledTaskService, weixin
         firstRunAt: buildExecutionTimeSchema(z, '执行时间戳（毫秒）或可解析的日期时间字符串。interval 用作固定相位基准；once 为唯一触发时间；daily/weekly/monthly/workdays 仅使用其中的时分秒'),
         cwd: buildClearableStringSchema(z, '执行工作目录；传 null 或空字符串表示清空并回退到默认工作目录'),
         apiProfileId: buildClearableStringSchema(z, 'API Profile ID；传 null 或空字符串表示清空并回退到默认 API Profile'),
-        modelId: buildClearableStringSchema(z, '真实模型 ID；传 null 或空字符串表示跟随所选 API Profile 的默认模型'),
+        modelId: buildRequiredStringSchema(z, '真实模型 ID。必须提供明确的模型 ID，不能留空。'),
         maxRuns: buildPositiveIntegerLikeSchema(z, '任务生命周期内的累计执行次数上限，可为 null；这不是单次会话的 maxTurns', { nullable: true }),
         resetCountOnEnable: z.boolean().optional().describe('从停用重新启用时，是否重置已执行次数和运行态'),
         intervalAnchorMode: z.enum(INTERVAL_ANCHOR_MODES).optional().describe('间隔调度推进基准：按开始时间或结束时间'),

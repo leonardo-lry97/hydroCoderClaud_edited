@@ -73,6 +73,18 @@ function parseClientMeta(value) {
   }
 }
 
+function parseRuntimeSignature(value) {
+  if (!value) return null
+  if (typeof value === 'object' && !Array.isArray(value)) return value
+  if (typeof value !== 'string') return null
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 function buildRuntimeSignature({ apiProfileId = null, apiBaseUrl = null, modelId = null, executablePath = null } = {}) {
   return {
     apiProfileId: apiProfileId || null,
@@ -142,6 +154,7 @@ class AgentSessionManager extends EventEmitter {
     this.mainWindow = mainWindow
     this.configManager = configManager
     this.eventRouter = null
+    this.isShuttingDown = false
 
     // Agent 会话映射: sessionId -> AgentSession
     this.sessions = new Map()
@@ -207,6 +220,10 @@ class AgentSessionManager extends EventEmitter {
    * 安全地发送消息到渲染进程（委托给共享工具函数）
    */
   _safeSend(channel, data) {
+    if (this.isShuttingDown && channel !== 'agent:allSessionsClosed') {
+      return false
+    }
+
     const sessionId = data?.sessionId
     const ownerClientId = sessionId ? this.getSessionOwnerClientId(sessionId) : null
     const shouldSendToHost = !ownerClientId || ownerClientId === 'host-ui' || channel === 'agent:allSessionsClosed'
@@ -357,6 +374,24 @@ class AgentSessionManager extends EventEmitter {
       embeddedContextAvailable: Boolean(embeddedContext),
       embeddedContextSummary: embeddedContext?.summary || embeddedContext?.title || '',
       ...extra
+    }
+  }
+
+  _persistRuntimeState(session) {
+    if (!session?.id || !this.sessionDatabase?.updateAgentConversation) {
+      return
+    }
+
+    try {
+      this.sessionDatabase.updateAgentConversation(session.id, {
+        lastBootstrappedRuntime: session.lastBootstrappedRuntime || null,
+        pendingRuntimeChange: session.pendingRuntimeChange || 'unknown'
+      })
+    } catch (err) {
+      console.error('[AgentSession] Failed to persist runtime state:', {
+        sessionId: session.id,
+        error: err.message
+      })
     }
   }
 
@@ -992,7 +1027,17 @@ class AgentSessionManager extends EventEmitter {
       session.apiProfileId = row.api_profile_id || null
       session.apiBaseUrl = row.api_base_url || null
       session.modelId = normalizeModelIdOrNull(row.model_id)
-      session.pendingRuntimeChange = session.sdkSessionId ? 'none' : 'unknown'
+      const persistedRuntimeSignature = parseRuntimeSignature(row.last_bootstrapped_runtime)
+      if (persistedRuntimeSignature) {
+        session.lastBootstrappedRuntime = persistedRuntimeSignature
+      } else if (session.sdkSessionId) {
+        session.lastBootstrappedRuntime = this._buildSessionRuntimeSignature(session, {
+          executablePath: this._getDeveloperClaudeExecutablePath()
+        })
+      }
+      session.pendingRuntimeChange = typeof row.pending_runtime_change === 'string' && row.pending_runtime_change.trim()
+        ? row.pending_runtime_change.trim()
+        : (session.sdkSessionId ? 'none' : 'unknown')
 
       // 放回内存 Map
       this.sessions.set(session.id, session)
@@ -1298,9 +1343,7 @@ class AgentSessionManager extends EventEmitter {
         }
       }
 
-      let appendSystemPrompt = session.source === 'scheduled'
-        ? undefined
-        : HYDRO_IDENTITY_SYSTEM_PROMPT
+      let appendSystemPrompt = HYDRO_IDENTITY_SYSTEM_PROMPT
 
       try {
         const desktopCapabilityOptions = await buildDesktopCapabilityQueryOptions({
@@ -1423,7 +1466,7 @@ class AgentSessionManager extends EventEmitter {
       queryOptions.pathToClaudeCodeExecutable = claudeCodeExecutablePath
 
       // resume：恢复历史对话上下文（应用重启、会话重新打开等场景必需）
-      if (session.sdkSessionId && runtimeDiff !== 'hard') {
+      if (session.sdkSessionId) {
         // 跨模式占用检查：该 CLI 会话是否正在 Terminal 模式中使用
         if (this.peerManager?.isCliSessionActive(session.sdkSessionId)) {
           throw new Error('SESSION_IN_USE_BY_TERMINAL')
@@ -1462,6 +1505,7 @@ class AgentSessionManager extends EventEmitter {
       session.queryGenerator = generator
       session.lastBootstrappedRuntime = targetSignature
       session.pendingRuntimeChange = 'none'
+      this._persistRuntimeState(session)
 
       // push 第一条消息
       messageQueue.push(sdkUserMessage)
@@ -1834,6 +1878,8 @@ class AgentSessionManager extends EventEmitter {
     const session = this.sessions.get(sessionId)
     if (!session) return
 
+    const hadActiveQuery = Boolean(session.queryGenerator)
+
     // Streaming input 模式：使用 interrupt() 中断当前生成
     if (session.queryGenerator) {
       try {
@@ -1859,6 +1905,10 @@ class AgentSessionManager extends EventEmitter {
       sessionId: session.id,
       status: AgentStatus.IDLE
     })
+
+    if (hadActiveQuery) {
+      this.emit('agentInterrupted', session.id, { reason: 'user-cancel' })
+    }
   }
 
   /**
@@ -1907,6 +1957,7 @@ class AgentSessionManager extends EventEmitter {
       apiBaseUrl: profile.baseUrl || null
     })
     this.sessionDatabase.updateAgentConversationModel(sessionId, session.modelId)
+    this._persistRuntimeState(session)
 
     session.status = AgentStatus.IDLE
     this._safeSend('agent:statusChange', { sessionId, status: AgentStatus.IDLE })
@@ -2021,6 +2072,7 @@ class AgentSessionManager extends EventEmitter {
   closeAllSync() {
     const count = this.sessions.size
     if (count === 0) return
+    this.isShuttingDown = true
     for (const [sessionId, session] of this.sessions) {
       this._cleanupPendingInteractions(session, 'Session closed')
       // 异常关闭 MessageQueue（清空缓冲区 + 结束）
@@ -2464,6 +2516,13 @@ class AgentSessionManager extends EventEmitter {
         session.pendingRuntimeChange = 'soft'
       }
       this.sessionDatabase?.updateAgentConversationModel?.(sessionId, null)
+      if (session) {
+        this._persistRuntimeState(session)
+      } else {
+        this.sessionDatabase?.updateAgentConversation?.(sessionId, {
+          pendingRuntimeChange: 'soft'
+        })
+      }
       if (!session?.queryGenerator) {
         console.log('[AgentSession] setModel persisted without active query:', {
           sessionId,
@@ -2492,6 +2551,13 @@ class AgentSessionManager extends EventEmitter {
         session.pendingRuntimeChange = 'soft'
       }
       this.sessionDatabase?.updateAgentConversationModel?.(sessionId, resolvedRequest.queryModel)
+      if (session) {
+        this._persistRuntimeState(session)
+      } else {
+        this.sessionDatabase?.updateAgentConversation?.(sessionId, {
+          pendingRuntimeChange: 'soft'
+        })
+      }
       if (!session?.queryGenerator) {
         console.log('[AgentSession] setModel persisted without active query:', {
           sessionId,

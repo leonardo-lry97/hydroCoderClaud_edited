@@ -70,12 +70,13 @@ function getProviderModelIds(serviceProviderDefinitions = [], serviceProvider = 
 }
 
 export function createScheduledTaskFormDefaults(defaultCwd = '') {
+  const modelIds = getScheduledTaskProfileModelIds()
   return {
     name: '',
     prompt: '',
     cwd: defaultCwd,
     apiProfileId: null,
-    modelId: '',
+    modelId: modelIds[0] || null,
     maxRuns: null,
     resetCountOnEnable: false,
     intervalAnchorMode: 'started_at',
@@ -147,12 +148,11 @@ export function buildScheduledTaskModelOptions(context = {}) {
 
 export function resolveScheduledTaskModelId(context = {}, preferredModelId = '') {
   const normalizedPreferredModelId = normalizeModelValue(preferredModelId)
-  if (!normalizedPreferredModelId) {
-    return ''
-  }
-
   const modelIds = getScheduledTaskProfileModelIds(context)
-  return modelIds.includes(normalizedPreferredModelId) ? normalizedPreferredModelId : ''
+  if (normalizedPreferredModelId) {
+    return modelIds.includes(normalizedPreferredModelId) ? normalizedPreferredModelId : (modelIds[0] || null)
+  }
+  return modelIds[0] || null
 }
 
 export function resolveScheduledTaskEffectiveModelId(context = {}, preferredModelId = '') {
@@ -173,7 +173,7 @@ export function resolveScheduledTaskEffectiveModelId(context = {}, preferredMode
 }
 
 export function getScheduledTaskModelLabel(modelId, t) {
-  return normalizeModelValue(modelId) || t('rightPanel.scheduledTasks.defaultModelId')
+  return normalizeModelValue(modelId) || '-'
 }
 
 export function formatScheduledTaskDateTime(value) {

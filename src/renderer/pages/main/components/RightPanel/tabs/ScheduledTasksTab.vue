@@ -475,9 +475,17 @@ let cleanupTaskChanged = null
 const form = ref(createDefaultForm())
 
 function createDefaultForm() {
+  const modelId = resolveScheduledTaskModelId({
+    apiProfiles: apiProfiles.value,
+    serviceProviderDefinitions: serviceProviderDefinitions.value,
+    defaultProfileId: defaultProfileId.value,
+    apiProfileId: null
+  })
+
   return {
     ...createScheduledTaskFormDefaults(props.currentProject?.path || ''),
     apiProfileId: DEFAULT_PROFILE_OPTION_VALUE,
+    modelId
   }
 }
 
@@ -503,10 +511,7 @@ const baseModelOptions = computed(() => buildScheduledTaskModelOptions({
   defaultProfileId: defaultProfileId.value,
   apiProfileId: resolvedFormApiProfileId.value
 }))
-const modelOptions = computed(() => [
-  { label: t('rightPanel.scheduledTasks.defaultModelId'), value: '' },
-  ...baseModelOptions.value
-])
+const modelOptions = computed(() => baseModelOptions.value)
 
 watch(() => form.value.scheduleType, (nextType, previousType) => {
   if (!previousType || nextType === previousType) return
@@ -669,6 +674,11 @@ const openRunsModal = async (task) => {
 }
 
 const saveTask = async () => {
+  if (!form.value.modelId) {
+    message.error(t('rightPanel.scheduledTasks.modelIdRequired'))
+    return
+  }
+
   saving.value = true
   try {
     const payload = {

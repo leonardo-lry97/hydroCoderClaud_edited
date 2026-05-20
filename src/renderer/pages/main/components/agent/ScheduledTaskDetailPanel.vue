@@ -1,10 +1,10 @@
 <template>
   <div class="task-detail">
-    <div v-if="loading && !task" class="state-box">
+    <div v-if="loading && !isCreateMode && !task" class="state-box">
       <Icon name="clock" :size="18" class="spin" />
       <span>{{ t('common.loading') }}</span>
     </div>
-    <div v-else-if="!task" class="state-box">
+    <div v-else-if="!isCreateMode && !task" class="state-box">
       <Icon name="warning" :size="18" />
       <strong>{{ t('rightPanel.scheduledTasks.taskNotFound') }}</strong>
       <span>{{ t('rightPanel.scheduledTasks.taskNotFoundHint') }}</span>
@@ -17,29 +17,32 @@
             <div class="icon-wrap"><Icon name="clock" :size="16" /></div>
             <div class="title-copy">
               <div class="title-line">
-                <h3>{{ task.name }}</h3>
-                <n-tag size="small" :type="task.enabled ? 'success' : 'default'">
-                  {{ task.enabled ? t('rightPanel.scheduledTasks.enabled') : t('rightPanel.scheduledTasks.disabled') }}
+                <h3>{{ headerTitle }}</h3>
+                <n-tag size="small" :type="headerEnabled ? 'success' : 'default'">
+                  {{ headerEnabled ? t('rightPanel.scheduledTasks.enabled') : t('rightPanel.scheduledTasks.disabled') }}
                 </n-tag>
               </div>
-              <div class="title-meta">
+              <div class="title-meta" v-if="!isCreateMode">
                 <span>{{ describeSchedule(task) }}</span>
                 <span>{{ t('rightPanel.scheduledTasks.modelId') }}: {{ getTaskModelLabel(task) }}</span>
                 <span>{{ task.cwd || t('rightPanel.scheduledTasks.defaultWorkspace') }}</span>
+              </div>
+              <div class="title-meta" v-else>
+                <span>{{ t('rightPanel.scheduledTasks.createTaskHint') }}</span>
               </div>
             </div>
           </div>
         </div>
         <div class="header-actions">
-          <button class="icon-btn" :title="t('common.refresh')" @click="loadData"><Icon name="refresh" :size="14" /></button>
-          <n-button secondary @click="runNow"><template #icon><Icon name="play" :size="14" /></template>{{ t('rightPanel.scheduledTasks.runNow') }}</n-button>
+          <button v-if="!isCreateMode" class="icon-btn" :title="t('common.refresh')" @click="loadData"><Icon name="refresh" :size="14" /></button>
+          <n-button v-if="!isCreateMode" secondary @click="runNow"><template #icon><Icon name="play" :size="14" /></template>{{ t('rightPanel.scheduledTasks.runNow') }}</n-button>
           <n-button type="primary" :loading="saving" @click="saveTask">{{ t('common.save') }}</n-button>
-          <n-button type="error" ghost @click="showDeleteConfirm = true">{{ t('common.delete') }}</n-button>
+          <n-button v-if="!isCreateMode" type="error" ghost @click="showDeleteConfirm = true">{{ t('common.delete') }}</n-button>
           <n-button @click="$emit('close')">{{ t('common.close') }}</n-button>
         </div>
       </div>
 
-      <div class="summary-grid">
+      <div v-if="!isCreateMode" class="summary-grid">
         <div class="summary-card"><span>{{ t('rightPanel.scheduledTasks.scheduleType') }}</span><strong>{{ describeSchedule(task) }}</strong></div>
         <div class="summary-card"><span>{{ t('rightPanel.scheduledTasks.nextRun') }}</span><strong>{{ formatTimestamp(task.nextRunAt) }}</strong></div>
         <div class="summary-card"><span>{{ t('rightPanel.scheduledTasks.lastStartedAt') }}</span><strong>{{ formatTimestamp(task.lastStartedAt) }}</strong></div>
@@ -128,7 +131,7 @@
             </div>
           </section>
 
-          <section class="panel st-panel history-panel">
+          <section v-if="!isCreateMode" class="panel st-panel history-panel">
             <div class="panel-title st-panel-title row-title">
               <span>{{ t('rightPanel.scheduledTasks.historyTitle') }}</span>
               <div class="history-actions">
@@ -167,7 +170,7 @@
       preset="dialog"
       type="warning"
       :title="t('rightPanel.scheduledTasks.deleteConfirmTitle')"
-      :content="t('rightPanel.scheduledTasks.deleteConfirmContent', { name: task?.name || '' })"
+      :content="t('rightPanel.scheduledTasks.deleteConfirmContent', { name: task?.name || form.name || '' })"
       :positive-text="t('common.delete')"
       :negative-text="t('common.cancel')"
       @positive-click="deleteTask"
@@ -197,10 +200,11 @@ import {
 } from '@utils/scheduled-task-meta'
 
 const props = defineProps({ taskId: { type: Number, default: null }, currentProject: { type: Object, default: null } })
-const emit = defineEmits(['close', 'updated', 'deleted'])
+const emit = defineEmits(['close', 'updated', 'deleted', 'created'])
 const { t } = useLocale()
 const message = useMessage()
 const DEFAULT_PROFILE = '__scheduled_task_default_profile__'
+const isCreateMode = computed(() => !props.taskId)
 const loading = ref(false)
 const runsLoading = ref(false)
 const saving = ref(false)
@@ -212,7 +216,7 @@ const serviceProviderDefinitions = ref([])
 const defaultProfileId = ref(null)
 const cleanupTaskChanged = ref(null)
 const showHistory = ref(false)
-const form = ref({ ...createScheduledTaskFormDefaults(''), apiProfileId: DEFAULT_PROFILE })
+const form = ref({ ...createScheduledTaskFormDefaults(props.currentProject?.path || ''), apiProfileId: DEFAULT_PROFILE })
 
 const scheduleTypeOptions = computed(() => buildScheduleTypeOptions(t))
 const intervalAnchorOptions = computed(() => buildIntervalAnchorOptions(t))
@@ -230,10 +234,19 @@ const baseModelOptions = computed(() => buildScheduledTaskModelOptions({
   defaultProfileId: defaultProfileId.value,
   apiProfileId: resolvedFormApiProfileId.value
 }))
-const modelOptions = computed(() => [
-  { label: t('rightPanel.scheduledTasks.defaultModelId'), value: '' },
-  ...baseModelOptions.value
-])
+const modelOptions = computed(() => baseModelOptions.value)
+const headerTitle = computed(() => {
+  if (!isCreateMode.value) {
+    return task.value?.name || t('rightPanel.scheduledTasks.createTask')
+  }
+  return form.value.name?.trim() || t('rightPanel.scheduledTasks.createTask')
+})
+const headerEnabled = computed(() => {
+  if (!isCreateMode.value) {
+    return !!task.value?.enabled
+  }
+  return !!form.value.enabled
+})
 
 watch(() => form.value.scheduleType, (nextType, previousType) => {
   if (!previousType || nextType === previousType) return
@@ -291,16 +304,22 @@ const loadRuns = async () => {
 }
 
 const loadData = async () => {
-  if (!props.taskId) return
   loading.value = true
   try {
     const [taskList, profiles, config] = await Promise.all([window.electronAPI.listScheduledTasks(), window.electronAPI.listAPIProfiles?.() || Promise.resolve([]), window.electronAPI.getConfig?.() || Promise.resolve(null)])
-    task.value = Array.isArray(taskList) ? taskList.find(item => item.id === props.taskId) || null : null
+    task.value = props.taskId && Array.isArray(taskList) ? taskList.find(item => item.id === props.taskId) || null : null
     apiProfiles.value = Array.isArray(profiles) ? profiles : []
     defaultProfileId.value = config?.defaultProfileId || null
     serviceProviderDefinitions.value = Array.isArray(config?.serviceProviderDefinitions) ? config.serviceProviderDefinitions : []
-    syncForm(task.value)
-    await loadRuns()
+    syncForm(task.value || {
+      ...createScheduledTaskFormDefaults(props.currentProject?.path || ''),
+      apiProfileId: DEFAULT_PROFILE
+    })
+    if (props.taskId) {
+      await loadRuns()
+    } else {
+      runs.value = []
+    }
   } catch (err) {
     console.error('[ScheduledTaskDetailPanel] loadData failed:', err)
     message.error(err.message || t('agent.loadFailed'))
@@ -310,7 +329,11 @@ const loadData = async () => {
 }
 
 const saveTask = async () => {
-  if (!props.taskId) return
+  if (!form.value.modelId) {
+    message.error(t('rightPanel.scheduledTasks.modelIdRequired'))
+    return
+  }
+
   saving.value = true
   try {
     const payload = {
@@ -318,7 +341,7 @@ const saveTask = async () => {
       prompt: form.value.prompt.trim(),
       cwd: form.value.cwd?.trim() || null,
       apiProfileId: form.value.apiProfileId === DEFAULT_PROFILE ? null : form.value.apiProfileId,
-      modelId: form.value.modelId || null,
+      modelId: form.value.modelId,
       maxRuns: form.value.maxRuns ?? null,
       resetCountOnEnable: !!form.value.resetCountOnEnable,
       intervalAnchorMode: form.value.intervalAnchorMode || 'started_at',
@@ -330,10 +353,17 @@ const saveTask = async () => {
       monthlyDay: form.value.monthlyMode === 'last_day' ? null : (form.value.monthlyDay ?? null),
       firstRunAt: form.value.firstRunAt ?? null
     }
-    const result = await window.electronAPI.updateScheduledTask({ taskId: props.taskId, updates: payload })
+    const result = props.taskId
+      ? await window.electronAPI.updateScheduledTask({ taskId: props.taskId, updates: payload })
+      : await window.electronAPI.createScheduledTask(payload)
     if (result?.error) throw new Error(result.error)
-    await loadData()
-    emit('updated', props.taskId)
+    if (props.taskId) {
+      await loadData()
+      emit('updated', props.taskId)
+    } else {
+      emit('created', result?.id || null)
+      emit('updated', result?.id || null)
+    }
     message.success(t('globalSettings.saveSuccess'))
   } catch (err) {
     message.error(err.message || t('agent.saveFailed'))
@@ -384,6 +414,12 @@ const toggleHistory = async () => {
 }
 
 watch(() => props.taskId, loadData, { immediate: true })
+watch(() => props.currentProject?.path, (nextPath) => {
+  if (!isCreateMode.value) return
+  if (!form.value.cwd) {
+    form.value.cwd = nextPath || ''
+  }
+})
 watch([resolvedFormApiProfileId, apiProfiles, serviceProviderDefinitions, defaultProfileId], () => {
   const nextModelId = resolveScheduledTaskModelId({
     apiProfiles: apiProfiles.value,

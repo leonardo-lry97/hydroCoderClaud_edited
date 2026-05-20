@@ -61,6 +61,19 @@ function normalizeIntervalAnchorMode(mode) {
   return normalized === 'finished_at' ? 'finished_at' : 'started_at'
 }
 
+function parseClientMeta(value) {
+  if (!value) return null
+  if (typeof value === 'object' && !Array.isArray(value)) return value
+  if (typeof value !== 'string') return null
+
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 function getMonthDays(year, monthIndex) {
   return new Date(year, monthIndex + 1, 0).getDate()
 }
@@ -373,7 +386,7 @@ class ScheduledTaskService {
     this.runningTasks.delete(taskId)
     this._removeQueuedTask(taskId)
     if (current.sessionId) {
-      this.activeRuns.delete(current.sessionId)
+      this._clearTaskActiveRun(current)
       this._detachTaskSession(current)
     }
     const result = this.sessionDatabase.deleteScheduledTask(taskId)
@@ -398,6 +411,7 @@ class ScheduledTaskService {
       this._rearmScheduler()
       throw new Error('Scheduled task run limit reached')
     }
+    this._assertTaskModelId(task)
     await this._executeTask(task, 'manual', { allowDisabled: true })
     return this.sessionDatabase.getScheduledTask(taskId)
   }
@@ -421,6 +435,7 @@ class ScheduledTaskService {
         })
 
       for (const task of tasks) {
+        this._assertTaskModelId(task)
         await this._executeTask(task, 'scheduled')
       }
     } finally {
@@ -451,6 +466,38 @@ class ScheduledTaskService {
       activeSessionId = sessionId
       const liveSession = this.agentSessionManager.get(sessionId) || this.agentSessionManager.reopen(sessionId)
       const isBootstrapRun = !this._hasConversationHistory(sessionId)
+      const embeddedUnavailableReason = this._getEmbeddedAppUnavailableReason(sessionId, liveSession)
+
+      if (embeddedUnavailableReason) {
+        const skippedAt = Date.now()
+        const intervalAnchorTs = this._resolveIntervalAnchorTs(task, {
+          startedAt: null,
+          scheduledAt,
+          finishedAt: skippedAt,
+          fallbackTs: skippedAt
+        })
+        this.sessionDatabase.createScheduledTaskRun({
+          taskId: task.id,
+          sessionId,
+          triggerReason,
+          status: 'skipped',
+          errorMessage: embeddedUnavailableReason,
+          scheduledAt,
+          startedAt: null,
+          finishedAt: skippedAt
+        })
+        const nextRunAt = task.enabled
+          ? this._computeNextRunAt({ ...task, lastRunAt: intervalAnchorTs }, skippedAt, { intervalAnchorTs })
+          : task.nextRunAt
+        this.sessionDatabase.updateScheduledTaskState(task.id, {
+          lastScheduledAt: scheduledAt ?? undefined,
+          lastError: embeddedUnavailableReason,
+          nextRunAt
+        })
+        this._broadcastChange(task.id, 'skipped')
+        this._rearmScheduler()
+        return
+      }
 
       if (liveSession?.status === 'streaming') {
         this._enqueueTaskForSession(sessionId, task, {
@@ -658,11 +705,22 @@ class ScheduledTaskService {
 
     if (!this.sessionDatabase?.updateAgentConversation) return
 
+    const persistedUpdates = {
+      source: 'scheduled',
+      taskId
+    }
+    if (liveSession?.ownerClientId) {
+      persistedUpdates.ownerClientId = liveSession.ownerClientId
+    }
+    if (liveSession?.clientType) {
+      persistedUpdates.clientType = liveSession.clientType
+    }
+    if (liveSession?.clientMeta && typeof liveSession.clientMeta === 'object' && !Array.isArray(liveSession.clientMeta)) {
+      persistedUpdates.clientMeta = liveSession.clientMeta
+    }
+
     try {
-      this.sessionDatabase.updateAgentConversation(sessionId, {
-        source: 'scheduled',
-        taskId
-      })
+      this.sessionDatabase.updateAgentConversation(sessionId, persistedUpdates)
     } catch (err) {
       console.error(`[ScheduledTask] Failed to attach existing session ${sessionId} to task ${taskId}:`, err)
     }
@@ -680,6 +738,16 @@ class ScheduledTaskService {
       .find(task => task?.sessionId === sessionId && task?.id !== excludingTaskId)
 
     return remainingTask?.id || null
+  }
+
+  _clearTaskActiveRun(task) {
+    const sessionId = task?.sessionId
+    if (!sessionId) return
+
+    const activeRun = this.activeRuns.get(sessionId)
+    if (activeRun?.taskId !== task.id) return
+
+    this.activeRuns.delete(sessionId)
   }
 
   _handleAgentResult(sessionId) {
@@ -943,6 +1011,9 @@ class ScheduledTaskService {
     if (!partial || Object.prototype.hasOwnProperty.call(input, 'prompt')) {
       if (!String(input.prompt || '').trim()) throw new Error('Task prompt is required')
     }
+    if (!partial || Object.prototype.hasOwnProperty.call(input, 'modelId')) {
+      if (!normalizeModelId(input.modelId)) throw new Error('Task modelId is required')
+    }
 
     if (Object.prototype.hasOwnProperty.call(input, 'maxRuns') && Number.isNaN(maxRuns)) {
       throw new Error('Max runs must be a positive integer')
@@ -1001,6 +1072,12 @@ class ScheduledTaskService {
       monthlyMode,
       monthlyDay,
       firstRunAt: normalizedFirstRunAt
+    }
+  }
+
+  _assertTaskModelId(task) {
+    if (!normalizeModelId(task?.modelId)) {
+      throw new Error('Scheduled task requires an explicit modelId')
     }
   }
 
@@ -1115,6 +1192,51 @@ class ScheduledTaskService {
       return finishedAt
     }
     return fallbackTs
+  }
+
+  _getEmbeddedAppUnavailableReason(sessionId, liveSession = null) {
+    const binding = this._resolveEmbeddedAppBinding(sessionId, liveSession)
+    if (!binding?.appId) return null
+    return this._isEmbeddedAppCommandBridgeAvailable(binding.appId)
+      ? null
+      : `Embedded app "${binding.appId}" is not active`
+  }
+
+  _resolveEmbeddedAppBinding(sessionId, liveSession = null) {
+    const session = liveSession || this._getLiveSession(sessionId) || this.agentSessionManager?.get?.(sessionId) || null
+    const sessionClientType = typeof session?.clientType === 'string' ? session.clientType.trim() : ''
+    const sessionClientMeta = parseClientMeta(session?.clientMeta)
+    const sessionAppId = sessionClientMeta?.appId || sessionClientMeta?.embeddedAppId || null
+    if (sessionClientType === 'embedded' && sessionAppId) {
+      return {
+        appId: sessionAppId,
+        clientType: sessionClientType
+      }
+    }
+
+    const row = this.sessionDatabase?.getAgentConversation?.(sessionId)
+    const rowClientType = typeof row?.client_type === 'string' ? row.client_type.trim() : ''
+    const rowClientMeta = parseClientMeta(row?.client_meta)
+    const rowAppId = rowClientMeta?.appId || rowClientMeta?.embeddedAppId || null
+    if (rowClientType === 'embedded' && rowAppId) {
+      return {
+        appId: rowAppId,
+        clientType: rowClientType
+      }
+    }
+
+    return null
+  }
+
+  _isEmbeddedAppCommandBridgeAvailable(appId) {
+    const runtimeManager = this.agentSessionManager?.embeddedAppRuntimeManager
+    if (!runtimeManager || !appId) return false
+
+    const normalizedAppId = typeof runtimeManager._normalizeAppId === 'function'
+      ? runtimeManager._normalizeAppId(appId)
+      : String(appId).trim()
+    const appState = runtimeManager.appStates?.get?.(normalizedAppId)
+    return Boolean(appState && appState.commands instanceof Map && appState.commands.size > 0)
   }
 
   _enqueueTaskForSession(sessionId, task, { triggerReason, allowDisabled = false, scheduledAt } = {}) {

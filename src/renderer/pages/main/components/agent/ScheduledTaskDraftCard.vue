@@ -35,6 +35,15 @@
         </div>
       </n-form-item>
 
+      <n-form-item :label="t('agent.scheduleDraftSessionBindingLabel')">
+        <n-radio-group v-model:value="form.sessionBindingMode">
+          <n-space>
+            <n-radio value="current">{{ t('agent.scheduleDraftSessionBindingCurrent') }}</n-radio>
+            <n-radio value="new">{{ t('agent.scheduleDraftSessionBindingNew') }}</n-radio>
+          </n-space>
+        </n-radio-group>
+      </n-form-item>
+
       <div class="task-grid st-form-grid">
         <n-form-item :label="t('rightPanel.scheduledTasks.apiProfile')">
         <n-select v-model:value="form.apiProfileId" :options="apiProfileOptions" clearable />
@@ -152,7 +161,7 @@
 
 <script setup>
 import { computed, ref, watch, onMounted } from 'vue'
-import { NButton, NDatePicker, NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch, NTimePicker } from 'naive-ui'
+import { NButton, NDatePicker, NForm, NFormItem, NInput, NInputNumber, NRadio, NRadioGroup, NSelect, NSpace, NSwitch, NTimePicker } from 'naive-ui'
 import { useLocale } from '@composables/useLocale'
 import Icon from '@components/icons/Icon.vue'
 import {
@@ -190,6 +199,7 @@ function createDefaultForm() {
   return {
     ...createScheduledTaskFormDefaults(''),
     apiProfileId: null,
+    sessionBindingMode: 'current'
   }
 }
 
@@ -199,6 +209,7 @@ const applyDraft = (draft) => {
     ...createDefaultForm(),
     ...next,
     cwd: next.cwd || '',
+    sessionBindingMode: next.sessionBindingMode === 'new' ? 'new' : 'current',
     weeklyDays: Array.isArray(next.weeklyDays) && next.weeklyDays.length > 0 ? [...next.weeklyDays] : [1],
     monthlyMode: next.monthlyMode === 'last_day' ? 'last_day' : 'day_of_month',
     monthlyDay: next.monthlyDay == null ? 1 : (Number.isInteger(Number(next.monthlyDay)) ? Number(next.monthlyDay) : 1),
@@ -252,10 +263,7 @@ const baseModelOptions = computed(() => buildScheduledTaskModelOptions({
   defaultProfileId: defaultProfileId.value,
   apiProfileId: form.value.apiProfileId || null
 }))
-const modelOptions = computed(() => [
-  { label: t('rightPanel.scheduledTasks.defaultModelId'), value: '' },
-  ...baseModelOptions.value
-])
+const modelOptions = computed(() => baseModelOptions.value)
 
 watch(() => form.value.scheduleType, (nextType, previousType) => {
   if (!previousType || nextType === previousType) return
@@ -336,7 +344,8 @@ const handleSubmit = () => {
       name: form.value.name.trim(),
       prompt: form.value.prompt.trim(),
       cwd: form.value.cwd?.trim() || null,
-      modelId: form.value.modelId || null,
+      modelId: form.value.modelId,
+      sessionBindingMode: form.value.sessionBindingMode === 'new' ? 'new' : 'current',
       monthlyMode: form.value.monthlyMode,
       monthlyDay: form.value.monthlyMode === 'last_day' ? null : (form.value.monthlyDay ?? null),
       firstRunAt: form.value.firstRunAt ?? null

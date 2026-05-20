@@ -238,8 +238,9 @@ describe('desktop capability query options', () => {
 
     expect(tools.schedule_create.inputSchema.cwd.safeParse('').success).toBe(true)
     expect(tools.schedule_create.inputSchema.apiProfileId.safeParse('').success).toBe(true)
-    expect(tools.schedule_create.inputSchema.modelId.safeParse('').success).toBe(true)
-    expect(tools.schedule_create.inputSchema.modelId.safeParse(null).success).toBe(true)
+    expect(tools.schedule_create.inputSchema.modelId.safeParse('glm-5.1').success).toBe(true)
+    expect(tools.schedule_create.inputSchema.modelId.safeParse('').success).toBe(false)
+    expect(tools.schedule_create.inputSchema.modelId.safeParse(null).success).toBe(false)
     expect(tools.schedule_create.inputSchema.maxRuns.safeParse('6').success).toBe(true)
     expect(tools.schedule_create.inputSchema.intervalMinutes.safeParse('30').success).toBe(true)
     expect(tools.schedule_create.inputSchema.monthlyDay.safeParse('12').success).toBe(true)
@@ -251,7 +252,8 @@ describe('desktop capability query options', () => {
 
     expect(tools.schedule_update.inputSchema.cwd.safeParse('').success).toBe(true)
     expect(tools.schedule_update.inputSchema.apiProfileId.safeParse('').success).toBe(true)
-    expect(tools.schedule_update.inputSchema.modelId.safeParse(null).success).toBe(true)
+    expect(tools.schedule_update.inputSchema.modelId.safeParse('glm-5.1').success).toBe(true)
+    expect(tools.schedule_update.inputSchema.modelId.safeParse(null).success).toBe(false)
     expect(tools.schedule_update.inputSchema.firstRunAt.safeParse('2026-05-01T09:30:00+08:00').success).toBe(true)
   })
 
@@ -288,6 +290,7 @@ describe('desktop capability query options', () => {
       name: 'MCP 会话绑定任务',
       prompt: '继续当前会话',
       scheduleType: 'interval',
+      modelId: 'glm-5.1',
       intervalMinutes: 30,
       firstRunAt: '2026-05-01T09:30:00+08:00'
     })
@@ -330,6 +333,7 @@ describe('desktop capability query options', () => {
       name: '工作台当前会话任务',
       prompt: '继续当前水文工作台会话',
       scheduleType: 'interval',
+      modelId: 'glm-5.1',
       intervalMinutes: 20,
       firstRunAt: '2026-05-01T09:30:00+08:00'
     })
@@ -403,6 +407,7 @@ describe('desktop capability query options', () => {
       name: '同会话追加任务',
       prompt: '继续当前定时任务会话',
       scheduleType: 'interval',
+      modelId: 'glm-5.1',
       intervalMinutes: 45,
       firstRunAt: '2026-05-01T10:00:00+08:00'
     })

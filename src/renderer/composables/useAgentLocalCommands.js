@@ -15,9 +15,13 @@ export function useAgentLocalCommands({
   addAssistantMessage,
   compactConversation
 }) {
+  const normalizeScheduledTaskSessionBindingMode = (value) => {
+    return value === 'new' ? 'new' : 'current'
+  }
+
   const normalizeScheduledTaskModelId = (value) => {
     const normalized = typeof value === 'string' ? value.trim() : ''
-    return normalized || null
+    return normalized || ''
   }
 
   const buildScheduledTaskName = (prompt) => {
@@ -72,6 +76,7 @@ export function useAgentLocalCommands({
       cwd: typeof draft.cwd === 'string' && draft.cwd.trim() ? draft.cwd.trim() : null,
       apiProfileId: draft.apiProfileId || null,
       modelId: normalizeScheduledTaskModelId(draft.modelId),
+      sessionBindingMode: normalizeScheduledTaskSessionBindingMode(draft.sessionBindingMode),
       maxRuns,
       resetCountOnEnable: !!draft.resetCountOnEnable,
       intervalAnchorMode,
@@ -96,6 +101,7 @@ export function useAgentLocalCommands({
       cwd: options.sessionCwd || null,
       apiProfileId: options.apiProfileId || null,
       modelId: normalizeScheduledTaskModelId(selectedModel.value),
+      sessionBindingMode: 'current',
       maxRuns: null,
       resetCountOnEnable: false,
       intervalAnchorMode: 'started_at',
@@ -143,6 +149,9 @@ export function useAgentLocalCommands({
     }
 
     const payload = normalizeScheduledTaskDraft(draft)
+    if (!payload.modelId) {
+      return { error: t('rightPanel.scheduledTasks.modelIdRequired') }
+    }
 
     try {
       message.input = {
@@ -150,7 +159,14 @@ export function useAgentLocalCommands({
         draft: payload
       }
 
-      const result = await window.electronAPI.createScheduledTask(payload)
+      const createPayload = payload.sessionBindingMode === 'current'
+        ? {
+            ...payload,
+            boundSessionId: sessionId
+          }
+        : payload
+
+      const result = await window.electronAPI.createScheduledTask(createPayload)
       if (result?.error) {
         throw new Error(result.error)
       }

@@ -210,6 +210,57 @@ describe('AgentSessionManager interactions', () => {
     expect(manager.sessions.size).toBe(0)
   })
 
+  it('emits interruption events when user cancels an active session', async () => {
+    const { manager, sent } = createManager()
+    const session = new AgentSession({ id: 's-cancel', cwd: '/tmp', source: 'scheduled' })
+    const interrupted = []
+
+    session.queryGenerator = {
+      interrupt: vi.fn(async () => undefined)
+    }
+    manager.sessions.set(session.id, session)
+    manager.on('agentInterrupted', (sessionId, details) => {
+      interrupted.push({ sessionId, details })
+    })
+
+    await manager.cancel(session.id)
+
+    expect(session.queryGenerator.interrupt).toHaveBeenCalledOnce()
+    expect(interrupted).toEqual([{
+      sessionId: 's-cancel',
+      details: { reason: 'user-cancel' }
+    }])
+    expect(sent.some(item => item.channel === 'agent:statusChange' && item.data.sessionId === 's-cancel' && item.data.status === 'idle')).toBe(true)
+  })
+
+  it('suppresses host IPC after shutdown starts even if output loop finishes later', async () => {
+    const { manager, sent } = createManager()
+    const session = new AgentSession({ id: 's-shutdown-late', cwd: '/tmp' })
+    let releaseLoop
+    const generator = {
+      async *[Symbol.asyncIterator]() {
+        await new Promise((resolve) => {
+          releaseLoop = resolve
+        })
+      },
+      close: vi.fn(() => {
+        releaseLoop?.()
+      })
+    }
+    session.queryGenerator = generator
+    session.status = 'idle'
+    manager.sessions.set(session.id, session)
+    session.outputLoopPromise = manager._runOutputLoop(session)
+
+    manager.closeAllSync()
+    await session.outputLoopPromise
+
+    expect(manager.isShuttingDown).toBe(true)
+    expect(sent.some(item => item.channel === 'agent:statusChange')).toBe(false)
+    expect(sent.some(item => item.channel === 'agent:cliError')).toBe(false)
+    expect(sent.some(item => item.channel === 'agent:error')).toBe(false)
+  })
+
   it('preserves sdkSessionId when switching API profile', async () => {
     const { manager } = createManager()
     const updateAgentConversation = vi.fn()
@@ -317,6 +368,197 @@ describe('AgentSessionManager interactions', () => {
       apiBaseUrl: 'https://volc.example'
     })
     expect(updateAgentConversationModel).toHaveBeenCalledWith('s-reopen-switch', 'volc-model')
+  })
+
+  it('preserves resume eligibility after close and reopen', async () => {
+    const { manager } = createManager()
+    manager.configManager.getConfig = vi.fn(() => ({
+      settings: {
+        developerClaudeSource: 'bundled'
+      }
+    }))
+    manager.configManager.getAPIProfile = vi.fn((id) => id === 'p2'
+      ? {
+          id: 'p2',
+          name: 'ModelScope',
+          baseUrl: 'https://api-inference.modelscope.cn',
+          serviceProvider: 'modelscope',
+          selectedModelId: 'deepseek-ai/DeepSeek-V4-Pro'
+        }
+      : null)
+
+    let createQueryOptions = null
+    manager.runner = {
+      buildEnv: vi.fn(() => ({
+        ANTHROPIC_BASE_URL: 'https://api-inference.modelscope.cn'
+      })),
+      createQuery: vi.fn(async (_queue, options) => {
+        createQueryOptions = options
+        async function * emptyGenerator() {}
+        const generator = emptyGenerator()
+        generator.setModel = vi.fn()
+        generator.close = vi.fn()
+        generator.options = options
+        return generator
+      })
+    }
+
+    const persistedRow = {
+      id: 1,
+      session_id: 's-reopen-resume-gap',
+      type: 'chat',
+      title: '恢复会话',
+      cwd: '/tmp',
+      source: 'manual',
+      task_id: null,
+      sdk_session_id: 'sdk-old',
+      cwd_auto: 0,
+      message_count: 0,
+      total_cost_usd: 0,
+      created_at: Date.now(),
+      api_profile_id: 'p2',
+      api_base_url: 'https://api-inference.modelscope.cn',
+      model_id: 'deepseek-ai/DeepSeek-V4-Pro',
+      owner_client_id: 'host-ui',
+      client_type: 'host',
+      client_meta: null
+    }
+
+    manager.sessionDatabase = {
+      insertAgentMessage: vi.fn(),
+      updateAgentMessageToolOutput: vi.fn(),
+      updateAgentConversationModel: vi.fn(),
+      createAgentConversation: vi.fn(() => ({ id: 1 })),
+      closeAgentConversation: vi.fn(),
+      updateAgentConversation: vi.fn(),
+      getAgentConversation: vi.fn(() => persistedRow)
+    }
+
+    const session = new AgentSession({
+      id: 's-reopen-resume-gap',
+      cwd: '/tmp',
+      apiProfileId: 'p2',
+      apiBaseUrl: 'https://api-inference.modelscope.cn',
+      modelId: 'deepseek-ai/DeepSeek-V4-Pro'
+    })
+    session.dbConversationId = 1
+    session.sdkSessionId = 'sdk-old'
+    session.lastBootstrappedRuntime = {
+      apiProfileId: 'p2',
+      apiBaseUrl: 'https://api-inference.modelscope.cn',
+      modelId: 'deepseek-ai/DeepSeek-V4-Pro',
+      executablePath: FIXED_CLAUDE_EXE
+    }
+    session.pendingRuntimeChange = 'none'
+    manager.sessions.set(session.id, session)
+
+    await manager.close(session.id)
+    expect(manager.sessions.has(session.id)).toBe(false)
+
+    await manager.sendMessage(session.id, 'hello after reopen')
+
+    expect(createQueryOptions).toBeTruthy()
+    expect(createQueryOptions.resume).toBe('sdk-old')
+  })
+
+  it('keeps resume after close and reopen even when persisted runtime state says api profile changed', async () => {
+    const { manager } = createManager()
+    manager.configManager.getConfig = vi.fn(() => ({
+      settings: {
+        developerClaudeSource: 'bundled'
+      }
+    }))
+    manager.configManager.getAPIProfile = vi.fn((id) => id === 'p2'
+      ? {
+          id: 'p2',
+          name: 'Mirror Provider',
+          baseUrl: 'https://mirror.example.com',
+          serviceProvider: 'mirror',
+          selectedModelId: 'shared-model'
+        }
+      : null)
+
+    let createQueryOptions = null
+    manager.runner = {
+      buildEnv: vi.fn(() => ({
+        ANTHROPIC_BASE_URL: 'https://mirror.example.com',
+        ANTHROPIC_MODEL: 'shared-model'
+      })),
+      createQuery: vi.fn(async (_queue, options) => {
+        createQueryOptions = options
+        async function * emptyGenerator() {}
+        const generator = emptyGenerator()
+        generator.setModel = vi.fn()
+        generator.close = vi.fn()
+        generator.options = options
+        return generator
+      })
+    }
+
+    const persistedRow = {
+      id: 1,
+      session_id: 's-reopen-hard-change',
+      type: 'chat',
+      title: '恢复会话',
+      cwd: '/tmp',
+      source: 'manual',
+      task_id: null,
+      sdk_session_id: 'sdk-old',
+      cwd_auto: 0,
+      message_count: 0,
+      total_cost_usd: 0,
+      created_at: Date.now(),
+      api_profile_id: 'p2',
+      api_base_url: 'https://mirror.example.com',
+      model_id: 'shared-model',
+      last_bootstrapped_runtime: JSON.stringify({
+        apiProfileId: 'p1',
+        apiBaseUrl: 'https://example.com',
+        modelId: 'shared-model',
+        executablePath: FIXED_CLAUDE_EXE
+      }),
+      pending_runtime_change: 'hard',
+      owner_client_id: 'host-ui',
+      client_type: 'host',
+      client_meta: null
+    }
+
+    manager.sessionDatabase = {
+      insertAgentMessage: vi.fn(),
+      updateAgentMessageToolOutput: vi.fn(),
+      updateAgentConversationModel: vi.fn(),
+      createAgentConversation: vi.fn(() => ({ id: 1 })),
+      closeAgentConversation: vi.fn(),
+      updateAgentConversation: vi.fn(),
+      getAgentConversation: vi.fn(() => persistedRow)
+    }
+
+    const session = new AgentSession({
+      id: 's-reopen-hard-change',
+      cwd: '/tmp',
+      apiProfileId: 'p1',
+      apiBaseUrl: 'https://example.com',
+      modelId: 'shared-model'
+    })
+    session.dbConversationId = 1
+    session.sdkSessionId = 'sdk-old'
+    session.lastBootstrappedRuntime = {
+      apiProfileId: 'p1',
+      apiBaseUrl: 'https://example.com',
+      modelId: 'shared-model',
+      executablePath: FIXED_CLAUDE_EXE
+    }
+    session.pendingRuntimeChange = 'hard'
+    manager.sessions.set(session.id, session)
+
+    await manager.close(session.id)
+    expect(manager.sessions.has(session.id)).toBe(false)
+
+    await manager.sendMessage(session.id, 'hello after reopen')
+
+    expect(createQueryOptions).toBeTruthy()
+    expect(createQueryOptions.resume).toBe('sdk-old')
+    expect(createQueryOptions.env.ANTHROPIC_MODEL).toBe('shared-model')
   })
 
   it('passes explicit requestedModel through even when it is not listed by current profile', async () => {
@@ -512,7 +754,7 @@ describe('AgentSessionManager interactions', () => {
     expect(createQueryOptions.resume).toBe('sdk-old')
   })
 
-  it('does not resume prior sdk session when api profile changes with same model id', async () => {
+  it('keeps resume prior sdk session when api profile changes with same model id', async () => {
     const { manager } = createManager()
     manager.sessionDatabase.updateAgentConversation = vi.fn()
     manager.configManager.getConfig = vi.fn(() => ({
@@ -566,7 +808,7 @@ describe('AgentSessionManager interactions', () => {
     await manager.sendMessage(session.id, 'hello')
 
     const createQueryOptions = manager.runner.createQuery.mock.calls[0][1]
-    expect(createQueryOptions.resume).toBeUndefined()
+    expect(createQueryOptions.resume).toBe('sdk-old')
     expect(createQueryOptions.env.ANTHROPIC_MODEL).toBe('shared-model')
   })
 
@@ -1027,6 +1269,7 @@ describe('AgentSessionManager interactions', () => {
     const { manager } = createManager()
     const session = new AgentSession({ id: 'session-set-model-idle', cwd: '/tmp', apiProfileId: 'profile-1' })
     manager.sessions.set(session.id, session)
+    manager.sessionDatabase.updateAgentConversation = vi.fn()
     manager.configManager.getAPIProfile = vi.fn(() => ({
       id: 'profile-1',
       selectedModelId: 'glm-4.5',
@@ -1038,6 +1281,10 @@ describe('AgentSessionManager interactions', () => {
 
     expect(manager.queryManager.setModel).not.toHaveBeenCalled()
     expect(manager.sessionDatabase.updateAgentConversationModel).toHaveBeenCalledWith(session.id, 'deepseek-v3')
+    expect(manager.sessionDatabase.updateAgentConversation).toHaveBeenCalledWith(session.id, {
+      lastBootstrappedRuntime: null,
+      pendingRuntimeChange: 'soft'
+    })
     expect(session.modelId).toBe('deepseek-v3')
     expect(result).toEqual({ success: true, persistedOnly: true })
   })
@@ -1047,12 +1294,17 @@ describe('AgentSessionManager interactions', () => {
     const session = new AgentSession({ id: 'session-clear-model-idle', cwd: '/tmp', apiProfileId: 'profile-1' })
     session.modelId = 'glm-4.5'
     manager.sessions.set(session.id, session)
+    manager.sessionDatabase.updateAgentConversation = vi.fn()
     manager.queryManager.setModel = vi.fn(async () => {})
 
     const result = await manager.setModel(session.id, '')
 
     expect(manager.queryManager.setModel).not.toHaveBeenCalled()
     expect(manager.sessionDatabase.updateAgentConversationModel).toHaveBeenCalledWith(session.id, null)
+    expect(manager.sessionDatabase.updateAgentConversation).toHaveBeenCalledWith(session.id, {
+      lastBootstrappedRuntime: null,
+      pendingRuntimeChange: 'soft'
+    })
     expect(session.modelId).toBeNull()
     expect(result).toEqual({ success: true, persistedOnly: true })
   })
@@ -1291,13 +1543,23 @@ describe('AgentSessionManager interactions', () => {
     expect(createQueryOptions.appendSystemPrompt).toContain('Use hydrology tools for real business entities')
   })
 
-  it('skips scheduled-task MCP tools for scheduled source sessions', async () => {
+  it('injects scheduled-task MCP tools for scheduled source sessions by default', async () => {
     const { manager } = createManager()
     const session = new AgentSession({ id: 'scheduled-session', cwd: '/tmp', source: 'scheduled' })
     session.dbConversationId = 1
     manager.sessions.set(session.id, session)
     manager.scheduledTaskService = {
-      listTasks: vi.fn(() => [])
+      listTasks: vi.fn(() => []),
+      configManager: {
+        getConfig: () => ({
+          settings: {
+            locale: 'zh-CN',
+            agent: {
+              allowScheduledSessionScheduleTools: true
+            }
+          }
+        })
+      }
     }
 
     let createQueryOptions = null
@@ -1316,10 +1578,17 @@ describe('AgentSessionManager interactions', () => {
     await manager.sendMessage(session.id, '执行定时任务')
 
     expect(createQueryOptions).toBeTruthy()
-    expect(createQueryOptions.mcpServers).toBeUndefined()
-    expect(createQueryOptions.appendSystemPrompt).toBeUndefined()
-    expect(createQueryOptions.allowedTools).toBeUndefined()
-    expect(createQueryOptions.disallowedTools).toBeUndefined()
+    expect(Object.keys(createQueryOptions.mcpServers || {})).toEqual(['hydrodesktop'])
+    expect(createQueryOptions.allowedTools).toEqual(expect.arrayContaining(DESKTOP_CAPABILITY_ALLOWED_TOOLS))
+    expect(createQueryOptions.appendSystemPrompt).toContain('Hydro Desktop AI')
+    expect(createQueryOptions.appendSystemPrompt).toContain('Do not introduce yourself as Claude or Claude Code')
+    expect(createQueryOptions.appendSystemPrompt).toContain('HydroDesktop scheduled tasks')
+    expect(createQueryOptions.disallowedTools).toEqual(expect.arrayContaining([
+      'CronList',
+      'CronCreate',
+      'CronUpdate',
+      'CronDelete'
+    ]))
   })
 
   it('injects Hydro Desktop AI identity prompt for normal chat sessions', async () => {

@@ -18,14 +18,14 @@ describe('scheduled-task-meta model selection', () => {
     defaultProfileId: 'profile-a'
   }
 
-  it('preserves empty model selection so forms can follow the profile default', () => {
-    expect(resolveScheduledTaskModelId(context, '')).toBe('')
-    expect(resolveScheduledTaskModelId({ ...context, apiProfileId: 'profile-b' }, null)).toBe('')
+  it('falls back to the current profile default when the preferred model is empty', () => {
+    expect(resolveScheduledTaskModelId(context, '')).toBe('model-default-a')
+    expect(resolveScheduledTaskModelId({ ...context, apiProfileId: 'profile-b' }, null)).toBe('model-default-b')
   })
 
   it('keeps explicit model ids only when they are available under the current profile', () => {
     expect(resolveScheduledTaskModelId(context, 'model-alt-a')).toBe('model-alt-a')
-    expect(resolveScheduledTaskModelId({ ...context, apiProfileId: 'profile-b' }, 'model-alt-a')).toBe('')
+    expect(resolveScheduledTaskModelId({ ...context, apiProfileId: 'profile-b' }, 'model-alt-a')).toBe('model-default-b')
   })
 
   it('resolves the effective display model from the profile when the task follows default', () => {
