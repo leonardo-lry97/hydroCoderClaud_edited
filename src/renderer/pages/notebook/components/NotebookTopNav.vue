@@ -326,9 +326,6 @@ const handleSettingsSelect = (key) => {
     case 'global-settings':
       window.electronAPI.openGlobalSettings()
       break
-    case 'embedded-app-demo':
-      window.electronAPI.openEmbeddedAppDemo()
-      break
     case 'capability-workbench':
       window.electronAPI.openSettingsWorkbench({
         mode: 'notebook',

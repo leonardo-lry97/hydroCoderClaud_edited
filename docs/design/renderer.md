@@ -8,7 +8,7 @@
 
 ## 页面架构
 
-当前渲染进程共有 **12 个 BrowserWindow 页面入口**，均采用独立的 `index.html` → `main.js` 入口链；其中传统桌面页面与内嵌 app 页面分层管理。所有页面共享 composables、主题系统和国际化资源（通过 Vite alias 引用）。
+当前渲染进程共有 **11 个 BrowserWindow 页面入口**，均采用独立的 `index.html` → `main.js` 入口链；其中传统桌面页面与内嵌 app 页面分层管理。所有页面共享 composables、主题系统和国际化资源（通过 Vite alias 引用）。
 
 ### 主窗口
 
@@ -39,11 +39,10 @@
 
 窗口通过 `window.electronAPI.openXxxManager()` → IPC `window:openXxxManager` 打开，主进程保证单例（同一窗口不重复创建）。独立窗口间通过 **设置广播机制** 同步状态（详见 [跨窗口广播](#跨窗口广播机制)）。
 
-### 2 个内嵌 App 页面
+### 1 个内嵌 App 页面
 
 | 页面 | 用途 | 打开方式 |
 |------|------|---------|
-| embedded-app-demo | 内嵌 app / embedded agent 宿主能力演示 | `embedded-app:list` / `embedded-app:open` / `window:openEmbeddedAppDemo` |
 | hydrology-workbench | 水文站工作台，内嵌右侧 Agent 与工作目录 | `embedded-app:list` / `embedded-app:open` |
 
 内嵌 app 也运行在独立 `BrowserWindow` 中，但与 notebook、settings 这一类管理窗口不同，它们遵循统一的内嵌 app 注册表、运行态桥接和 Agent 能力注入约定。详细标准见 [内嵌 App 设计与实现标准](./embedded-app/embedded-app-development-standard.md)。

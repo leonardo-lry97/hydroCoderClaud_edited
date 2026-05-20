@@ -1294,10 +1294,6 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     })
   }
 
-  ipcMain.handle('window:openEmbeddedAppDemo', async () => {
-    return openEmbeddedAppWindow('embedded-app-demo');
-  });
-
   return {
     agentSessionBroker,
     agentEventRouter,

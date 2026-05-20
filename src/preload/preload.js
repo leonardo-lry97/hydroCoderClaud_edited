@@ -527,7 +527,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   runHydrologyQualityCheck: (payload) => ipcRenderer.invoke('hydrology:review:runQualityCheck', payload),
   getHydrologyLatestReviewRunSummary: (filters) => ipcRenderer.invoke('hydrology:review:getLatestRunSummary', filters),
   resolveHydrologyReviewTask: ({ taskId, payload }) => ipcRenderer.invoke('hydrology:review:resolveTask', { taskId, payload }),
-  openEmbeddedAppDemo: () => ipcRenderer.invoke('window:openEmbeddedAppDemo'),
   openProviderManager: () => ipcRenderer.invoke('window:openProviderManager'),
   openSessionManager: (options) => ipcRenderer.invoke('window:openSessionManager', options),
   openUpdateManager: () => ipcRenderer.invoke('window:openUpdateManager'),

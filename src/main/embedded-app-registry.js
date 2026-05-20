@@ -1,18 +1,5 @@
 const EMBEDDED_APPS = [
   {
-    id: 'agent-platform-demo',
-    menuKey: 'embedded-app-demo',
-    titleKey: 'app.windows.embeddedAppDemo',
-    labelKey: 'embeddedApps.demoTitle',
-    icon: 'panelLeft',
-    page: 'embedded-app-demo',
-    window: {
-      width: 1280,
-      height: 860
-    },
-    enabled: true
-  },
-  {
     id: 'hydrology-workbench',
     menuKey: 'hydrology-workbench',
     titleKey: 'app.windows.hydrologyWorkbench',

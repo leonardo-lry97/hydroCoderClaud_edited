@@ -13,54 +13,53 @@ const embeddedAppsComposablePath = path.resolve(__dirname, '../../src/renderer/c
 const leftPanelPath = path.resolve(__dirname, '../../src/renderer/pages/main/components/LeftPanel.vue')
 const notebookTopNavPath = path.resolve(__dirname, '../../src/renderer/pages/notebook/components/NotebookTopNav.vue')
 
-describe('embedded app demo wiring', () => {
-  it('defines the embedded app registry entry', () => {
+describe('embedded app registry wiring', () => {
+  it('keeps only the hydrology workbench in the embedded app registry', () => {
     const source = fs.readFileSync(registryPath, 'utf-8')
 
-    expect(source).toContain("id: 'agent-platform-demo'")
-    expect(source).toContain("menuKey: 'embedded-app-demo'")
-    expect(source).toContain("page: 'embedded-app-demo'")
+    expect(source).not.toContain("id: 'agent-platform-demo'")
+    expect(source).not.toContain("menuKey: 'embedded-app-demo'")
+    expect(source).not.toContain("page: 'embedded-app-demo'")
     expect(source).toContain("id: 'hydrology-workbench'")
     expect(source).toContain("menuKey: 'hydrology-workbench'")
     expect(source).toContain("page: 'hydrology-workbench'")
   })
 
-  it('registers a window route for the embedded app demo', () => {
+  it('keeps only the generic embedded app window handlers', () => {
     const source = fs.readFileSync(ipcHandlersPath, 'utf-8')
 
     expect(source).toContain("ipcMain.handle('embedded-app:list'")
     expect(source).toContain("ipcMain.handle('embedded-app:open'")
-    expect(source).toContain("ipcMain.handle('window:openEmbeddedAppDemo'")
-    expect(source).toContain("openEmbeddedAppWindow('embedded-app-demo')")
+    expect(source).not.toContain("ipcMain.handle('window:openEmbeddedAppDemo'")
+    expect(source).not.toContain("openEmbeddedAppWindow('embedded-app-demo')")
     expect(source).toContain('webviewTag: true')
   })
 
-  it('defines main-process labels for registered embedded apps', () => {
+  it('defines main-process labels for the remaining embedded app', () => {
     delete require.cache[appI18nPath]
     const { tMain } = require(appI18nPath)
     const zhConfig = { getConfig: () => ({ settings: { locale: 'zh-CN' } }) }
     const enConfig = { getConfig: () => ({ settings: { locale: 'en-US' } }) }
 
-    expect(tMain(zhConfig, 'embeddedApps.demoTitle')).toBe('Agent 平台 Demo')
     expect(tMain(zhConfig, 'embeddedApps.hydrologyWorkbenchTitle')).toBe('水文站工作台')
-    expect(tMain(enConfig, 'embeddedApps.demoTitle')).toBe('Agent Platform Demo')
     expect(tMain(enConfig, 'embeddedApps.hydrologyWorkbenchTitle')).toBe('Hydrology Workbench')
     expect(tMain(zhConfig, 'app.windows.hydrologyWorkbench')).toBe('水文站工作台 - Hydro Desktop')
   })
 
-  it('includes the hydrology workbench in renderer build inputs', () => {
+  it('keeps only the hydrology workbench in renderer build inputs', () => {
     const source = fs.readFileSync(viteConfigPath, 'utf-8')
 
+    expect(source).not.toContain('embeddedAppDemo:')
     expect(source).toContain('hydrologyWorkbench:')
     expect(source).toContain("src/renderer/pages/hydrology-workbench/index.html")
   })
 
-  it('exposes embedded app demo opener in preload', () => {
+  it('does not expose a dedicated embedded app demo opener in preload', () => {
     const source = fs.readFileSync(preloadPath, 'utf-8')
 
     expect(source).toContain("'embedded-app:list': () => ipcRenderer.invoke('embedded-app:list')")
     expect(source).toContain("'embedded-app:open': (menuKey) => ipcRenderer.invoke('embedded-app:open', menuKey)")
-    expect(source).toContain("openEmbeddedAppDemo: () => ipcRenderer.invoke('window:openEmbeddedAppDemo')")
+    expect(source).not.toContain("openEmbeddedAppDemo: () => ipcRenderer.invoke('window:openEmbeddedAppDemo')")
   })
 
   it('adds embedded apps as a first-level settings entry in main mode', () => {

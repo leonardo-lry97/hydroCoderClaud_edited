@@ -622,7 +622,6 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
 - `embedded-app:open`
 - `embedded-app:getPreferences`
 - `embedded-app:updatePreferences`
-- `window:openEmbeddedAppDemo`
 
 当前 embedded agent 相关 IPC：
 
