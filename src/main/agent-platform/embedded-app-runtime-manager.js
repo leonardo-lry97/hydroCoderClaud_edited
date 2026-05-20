@@ -19,7 +19,8 @@ class EmbeddedAppRuntimeManager {
     if (!this.appStates.has(normalizedAppId)) {
       this.appStates.set(normalizedAppId, {
         context: null,
-        commands: new Map()
+        commands: new Map(),
+        currentSessionId: null
       })
     }
     return this.appStates.get(normalizedAppId)
@@ -34,6 +35,18 @@ class EmbeddedAppRuntimeManager {
   getContext(appId) {
     const appState = this.appStates.get(this._normalizeAppId(appId))
     return appState?.context || null
+  }
+
+  setCurrentSession(appId, sessionId = null) {
+    const appState = this._ensureAppState(appId)
+    const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : ''
+    appState.currentSessionId = normalizedSessionId || null
+    return appState.currentSessionId
+  }
+
+  getCurrentSession(appId) {
+    const appState = this.appStates.get(this._normalizeAppId(appId))
+    return appState?.currentSessionId || null
   }
 
   registerCommandClient(appId, clientId, invoke) {
@@ -64,7 +77,7 @@ class EmbeddedAppRuntimeManager {
     const normalizedClientId = this._normalizeClientId(clientId, normalizedAppId)
     const removed = appState.commands.delete(normalizedClientId)
 
-    if (!appState.context && appState.commands.size === 0) {
+    if (!appState.context && appState.commands.size === 0 && !appState.currentSessionId) {
       this.appStates.delete(normalizedAppId)
     }
 

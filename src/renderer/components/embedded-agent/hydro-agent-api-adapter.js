@@ -69,6 +69,7 @@ export function createHydroAgentApiAdapter(hydroAgent) {
     switchAgentApiProfile: ({ sessionId, profileId }) => hydroAgent.switchApiProfile(sessionId, profileId),
     clearAndRecreateAgentSession: ({ sessionId, overrides }) =>
       hydroAgent.clearAndRecreate(sessionId, overrides || {}),
+    setCurrentAgentSession: (sessionId) => hydroAgent.setCurrentSession(sessionId),
     setAgentModel: (sessionId, model) => hydroAgent.setModel(sessionId, model),
     getAgentSupportedCommands: (sessionId) => hydroAgent.getSupportedCommands(sessionId),
     getAgentInitResult: (sessionId) => hydroAgent.getInitResult(sessionId),

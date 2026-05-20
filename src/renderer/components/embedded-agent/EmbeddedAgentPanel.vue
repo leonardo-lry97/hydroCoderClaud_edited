@@ -337,6 +337,7 @@ const applySession = (session) => {
   currentApiProfileId.value = session?.apiProfileId !== undefined ? (session.apiProfileId || null) : currentApiProfileId.value
   currentModelId.value = session?.modelId !== undefined ? (session.modelId || null) : currentModelId.value
   persistSessionId(sessionId.value)
+  void agentApi.value?.setCurrentAgentSession?.(sessionId.value)
 }
 
 const loadApiProfiles = async () => {

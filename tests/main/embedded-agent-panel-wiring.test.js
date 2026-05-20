@@ -73,6 +73,7 @@ describe('embedded agent panel wiring', () => {
     expect(source).toContain('@insert-path="handleInsertPath"')
     expect(source).toContain('chatRef.value?.insertText?.(`${path}\\n`)')
     expect(source).toContain('embeddedFiles.setSessionId(nextSessionId)')
+    expect(source).toContain('setCurrentAgentSession')
   })
 
   it('maps AgentChatTab agent API calls onto the embedded hydroAgent bridge', () => {
@@ -81,6 +82,7 @@ describe('embedded agent panel wiring', () => {
     expect(source).toContain('createAgentSession: (options) => hydroAgent.createSession(options)')
     expect(source).toContain('switchAgentApiProfile: ({ sessionId, profileId }) => hydroAgent.switchApiProfile(sessionId, profileId)')
     expect(source).toContain('clearAndRecreateAgentSession')
+    expect(source).toContain('setCurrentAgentSession: (sessionId) => hydroAgent.setCurrentSession(sessionId)')
     expect(source).toContain('sendAgentMessage: ({ sessionId, message, model, modelTier, maxTurns }) =>')
     expect(source).toContain('hydroAgent.onEvent(null')
     expect(source).toContain("'agent:message': 'onAgentMessage'")
@@ -140,6 +142,7 @@ describe('embedded agent panel wiring', () => {
     expect(source).toContain('payload.options || {}')
     expect(source).toContain('payload.model || payload.modelTier || payload.options?.model')
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:clearAndRecreate'")
+    expect(source).toContain("ipcRenderer.invoke('hydro-agent:setCurrentSession'")
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:createFile'")
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:renameFile'")
     expect(source).toContain("ipcRenderer.invoke('hydro-agent:deleteFile'")

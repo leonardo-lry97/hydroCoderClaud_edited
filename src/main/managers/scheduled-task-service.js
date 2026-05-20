@@ -289,7 +289,10 @@ class ScheduledTaskService {
     const nextRunAt = normalized.enabled && !this._hasReachedRunLimit(created)
       ? this._computeNextRunAt(created, Date.now())
       : null
-    const stateUpdates = { nextRunAt }
+    const stateUpdates = {
+      nextRunAt,
+      runtimeState: this._buildEmbeddedCurrentSessionRuntimeState(input, null)
+    }
     if (boundSessionId) {
       stateUpdates.sessionId = boundSessionId
     }
@@ -326,16 +329,17 @@ class ScheduledTaskService {
       normalizeTimestamp(updated.firstRunAt) !== normalizeTimestamp(current.firstRunAt)
     )
     const stateUpdates = {}
+    const nextEmbeddedRuntimeState = this._buildEmbeddedCurrentSessionRuntimeState({ ...current, ...updates }, current.runtimeState)
 
     if (sessionBindingChanged) {
       if (this.runningTasks.has(taskId)) {
         stateUpdates.runtimeState = this._markSessionResetPending(
-          current.runtimeState,
+          nextEmbeddedRuntimeState,
           'cwd-changed'
         )
       } else {
         stateUpdates.sessionId = null
-        stateUpdates.runtimeState = this._clearSessionResetPending(current.runtimeState)
+        stateUpdates.runtimeState = this._clearSessionResetPending(nextEmbeddedRuntimeState)
         this._detachTaskSession(current)
       }
     }
@@ -353,7 +357,11 @@ class ScheduledTaskService {
       stateUpdates.runCount = 0
       stateUpdates.failureCount = 0
       stateUpdates.lastError = null
-      stateUpdates.runtimeState = this._clearSessionResetPending(stateUpdates.runtimeState ?? current.runtimeState)
+      stateUpdates.runtimeState = this._clearSessionResetPending(stateUpdates.runtimeState ?? nextEmbeddedRuntimeState)
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(stateUpdates, 'runtimeState') && nextEmbeddedRuntimeState !== current.runtimeState) {
+      stateUpdates.runtimeState = nextEmbeddedRuntimeState
     }
 
     const nextRunTask = shouldResetOnEnable || shouldRearmOnceTask
@@ -466,6 +474,39 @@ class ScheduledTaskService {
 
     try {
       const sessionId = this._ensureTaskSession(task)
+      if (!sessionId) {
+        const reason = this._getEmbeddedCurrentSessionMissingReason(task)
+        if (reason) {
+          const skippedAt = Date.now()
+          const intervalAnchorTs = this._resolveIntervalAnchorTs(task, {
+            startedAt: null,
+            scheduledAt,
+            finishedAt: skippedAt,
+            fallbackTs: skippedAt
+          })
+          this.sessionDatabase.createScheduledTaskRun({
+            taskId: task.id,
+            sessionId: null,
+            triggerReason,
+            status: 'skipped',
+            errorMessage: reason,
+            scheduledAt,
+            startedAt: null,
+            finishedAt: skippedAt
+          })
+          const nextRunAt = task.enabled
+            ? this._computeNextRunAt({ ...task, lastRunAt: intervalAnchorTs }, skippedAt, { intervalAnchorTs })
+            : task.nextRunAt
+          this.sessionDatabase.updateScheduledTaskState(task.id, {
+            lastScheduledAt: scheduledAt ?? undefined,
+            lastError: reason,
+            nextRunAt
+          })
+          this._broadcastChange(task.id, 'skipped')
+          this._rearmScheduler()
+          return
+        }
+      }
       activeSessionId = sessionId
       const liveSession = this.agentSessionManager.get(sessionId) || this.agentSessionManager.reopen(sessionId)
       const isBootstrapRun = !this._hasConversationHistory(sessionId)
@@ -595,6 +636,22 @@ class ScheduledTaskService {
   }
 
   _ensureTaskSession(task) {
+    const embeddedCurrentBinding = this._resolveEmbeddedCurrentSessionBinding(task)
+    if (embeddedCurrentBinding) {
+      const currentSessionId = this._resolveEmbeddedCurrentSessionId(embeddedCurrentBinding.appId)
+      if (currentSessionId) {
+        const row = this.sessionDatabase.getAgentConversation(currentSessionId)
+        if (row?.session_id) {
+          if (task.sessionId !== currentSessionId) {
+            this.sessionDatabase.updateScheduledTaskState(task.id, { sessionId: currentSessionId })
+          }
+          this._attachExistingSessionToTask(currentSessionId, task.id)
+          return currentSessionId
+        }
+      }
+      return null
+    }
+
     let sessionId = task.sessionId
 
     if (sessionId) {
@@ -633,6 +690,72 @@ class ScheduledTaskService {
 
     const existing = this.sessionDatabase.getAgentConversation(sessionId)
     return existing?.session_id ? sessionId : null
+  }
+
+  _buildEmbeddedCurrentSessionRuntimeState(input, fallbackRuntimeState) {
+    const base = fallbackRuntimeState && typeof fallbackRuntimeState === 'object'
+      ? { ...fallbackRuntimeState }
+      : {}
+    const baseScheduler = base._scheduler && typeof base._scheduler === 'object'
+      ? { ...base._scheduler }
+      : {}
+    delete baseScheduler.followEmbeddedCurrentSession
+    delete baseScheduler.embeddedAppId
+
+    const binding = this._resolveEmbeddedCurrentSessionBinding({
+      runtimeState: fallbackRuntimeState,
+      sessionBindingMode: input?.sessionBindingMode,
+      boundSessionId: input?.boundSessionId,
+      sessionId: input?.boundSessionId || input?.sessionId
+    })
+    if (binding?.appId) {
+      baseScheduler.followEmbeddedCurrentSession = true
+      baseScheduler.embeddedAppId = binding.appId
+    }
+
+    if (Object.keys(baseScheduler).length > 0) {
+      base._scheduler = baseScheduler
+    } else {
+      delete base._scheduler
+    }
+
+    return Object.keys(base).length > 0 ? base : null
+  }
+
+  _resolveEmbeddedCurrentSessionBinding(taskLike) {
+    if ((taskLike?.sessionBindingMode || 'new') !== 'current') {
+      return null
+    }
+
+    const runtimeState = taskLike?.runtimeState
+    const schedulerState = runtimeState?._scheduler
+    const runtimeAppId = typeof schedulerState?.embeddedAppId === 'string' ? schedulerState.embeddedAppId.trim() : ''
+    if (schedulerState?.followEmbeddedCurrentSession && runtimeAppId) {
+      return { appId: runtimeAppId }
+    }
+
+    const sessionId = typeof taskLike?.boundSessionId === 'string' && taskLike.boundSessionId.trim()
+      ? taskLike.boundSessionId.trim()
+      : (typeof taskLike?.sessionId === 'string' ? taskLike.sessionId.trim() : '')
+    if (!sessionId) return null
+
+    const binding = this._resolveEmbeddedAppBinding(sessionId)
+    return binding?.appId ? { appId: binding.appId } : null
+  }
+
+  _resolveEmbeddedCurrentSessionId(appId) {
+    const runtimeManager = this.agentSessionManager?.embeddedAppRuntimeManager
+    if (!runtimeManager || !appId || typeof runtimeManager.getCurrentSession !== 'function') {
+      return null
+    }
+    const sessionId = runtimeManager.getCurrentSession(appId)
+    return typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : null
+  }
+
+  _getEmbeddedCurrentSessionMissingReason(task) {
+    const binding = this._resolveEmbeddedCurrentSessionBinding(task)
+    if (!binding?.appId) return null
+    return `Embedded app "${binding.appId}" has no current session to follow`
   }
 
   _hasConversationHistory(sessionId) {

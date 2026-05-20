@@ -596,10 +596,10 @@ describe('ScheduledTaskService', () => {
     expect(agentSessionManager.create).not.toHaveBeenCalled()
     expect(created.sessionId).toBe('chat-session-1')
     expect(created.nextRunAt).toBe(firstRunAt)
-    expect(sessionDatabase.updateScheduledTaskState).toHaveBeenCalledWith(taskState.id, {
+    expect(sessionDatabase.updateScheduledTaskState).toHaveBeenCalledWith(taskState.id, expect.objectContaining({
       nextRunAt: firstRunAt,
       sessionId: 'chat-session-1'
-    })
+    }))
     expect(sessionDatabase.updateAgentConversation).toHaveBeenCalledWith('chat-session-1', {
       source: 'scheduled',
       taskId: 41
@@ -698,6 +698,12 @@ describe('ScheduledTaskService', () => {
     expect(liveSession.source).toBe('scheduled')
     expect(liveSession.taskId).toBe(42)
     expect(liveSession.meta.scheduledTaskId).toBe(42)
+    expect(taskState.runtimeState).toEqual({
+      _scheduler: {
+        followEmbeddedCurrentSession: true,
+        embeddedAppId: 'hydrology-workbench'
+      }
+    })
     vi.restoreAllMocks()
   })
 
@@ -990,6 +996,180 @@ describe('ScheduledTaskService', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('follows the current embedded app session instead of reopening the originally bound session', async () => {
+    vi.useFakeTimers()
+
+    try {
+      const startedAt = Date.UTC(2026, 3, 30, 11, 30, 0)
+      vi.setSystemTime(startedAt)
+
+      const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+      const taskState = {
+        id: 179,
+        name: '跟随当前水文工作台会话',
+        prompt: '继续当前工作台任务',
+        enabled: true,
+        scheduleType: 'interval',
+        intervalMinutes: 15,
+        firstRunAt: Date.UTC(2026, 3, 30, 11, 0, 0),
+        sessionBindingMode: 'current',
+        sessionId: 'embedded-session-old',
+        runCount: 0,
+        failureCount: 0,
+        runtimeState: {
+          _scheduler: {
+            followEmbeddedCurrentSession: true,
+            embeddedAppId: 'hydrology-workbench'
+          }
+        }
+      }
+
+      const sessionDatabase = {
+        getScheduledTask: vi.fn(() => ({ ...taskState })),
+        updateScheduledTaskState: vi.fn((_taskId, updates) => {
+          Object.assign(taskState, updates)
+          return { ...taskState }
+        }),
+        createScheduledTaskRun: vi.fn(),
+        updateAgentConversation: vi.fn(),
+        getAgentConversation: vi.fn((sessionId) => {
+          if (sessionId === 'embedded-session-current') {
+            return {
+              id: 301,
+              session_id: sessionId,
+              source: 'manual',
+              client_type: 'embedded',
+              client_meta: JSON.stringify({ appId: 'hydrology-workbench' })
+            }
+          }
+          if (sessionId === 'embedded-session-old') {
+            return {
+              id: 300,
+              session_id: sessionId,
+              status: 'closed',
+              source: 'manual',
+              client_type: 'embedded',
+              client_meta: JSON.stringify({ appId: 'hydrology-workbench' })
+            }
+          }
+          return null
+        })
+      }
+
+      const liveSession = {
+        id: 'embedded-session-current',
+        status: 'idle',
+        source: 'manual',
+        taskId: null,
+        clientType: 'embedded',
+        clientMeta: { appId: 'hydrology-workbench', component: 'EmbeddedAgentPanel' },
+        meta: {}
+      }
+      const agentSessionManager = {
+        on: vi.fn(),
+        create: vi.fn(() => ({ id: 'should-not-create' })),
+        get: vi.fn((sessionId) => sessionId === 'embedded-session-current' ? { ...liveSession } : null),
+        reopen: vi.fn(() => {
+          throw new Error('should not reopen old embedded session')
+        }),
+        sendMessage: vi.fn().mockResolvedValue(),
+        sessions: new Map([['embedded-session-current', liveSession]]),
+        embeddedAppRuntimeManager: {
+          getCurrentSession: vi.fn(() => 'embedded-session-current'),
+          appStates: new Map([['hydrology-workbench', {
+            commands: new Map([['embed:hydrology-workbench', { clientId: 'embed:hydrology-workbench' }]])
+          }]])
+        }
+      }
+
+      const service = new ScheduledTaskService({}, agentSessionManager)
+      service.setSessionDatabase(sessionDatabase)
+      vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+      vi.spyOn(service, '_hasConversationHistory').mockReturnValue(true)
+      vi.spyOn(service, '_rearmScheduler').mockImplementation(() => {})
+
+      await service._executeTask(taskState, 'manual', { allowDisabled: true })
+
+      expect(agentSessionManager.create).not.toHaveBeenCalled()
+      expect(agentSessionManager.reopen).not.toHaveBeenCalled()
+      expect(taskState.sessionId).toBe('embedded-session-current')
+      expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
+        'embedded-session-current',
+        '继续当前工作台任务',
+        { meta: { source: 'scheduled' } }
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('skips embedded current-bound tasks when the embedded app has no current session', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const currentTask = {
+      id: 162,
+      name: '等待工作台当前会话',
+      prompt: '继续读取当前站点',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      firstRunAt: INTERVAL_FIRST_RUN_AT,
+      nextRunAt: 7000,
+      sessionBindingMode: 'current',
+      sessionId: 'agent-session-old',
+      runCount: 0,
+      runtimeState: {
+        _scheduler: {
+          followEmbeddedCurrentSession: true,
+          embeddedAppId: 'hydrology-workbench'
+        }
+      }
+    }
+
+    const sessionDatabase = {
+      getAgentConversation: vi.fn(() => null),
+      createScheduledTaskRun: vi.fn(),
+      updateScheduledTaskState: vi.fn()
+    }
+
+    const agentSessionManager = {
+      on: vi.fn(),
+      create: vi.fn(() => ({ id: 'should-not-create' })),
+      get: vi.fn(() => null),
+      reopen: vi.fn(() => {
+        throw new Error('should not reopen old embedded session')
+      }),
+      embeddedAppRuntimeManager: {
+        getCurrentSession: vi.fn(() => null),
+        appStates: new Map([['hydrology-workbench', {
+          commands: new Map([['embed:hydrology-workbench', { clientId: 'embed:hydrology-workbench' }]])
+        }]])
+      }
+    }
+
+    const service = new ScheduledTaskService({}, agentSessionManager)
+    service.setSessionDatabase(sessionDatabase)
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(service, '_hasConversationHistory').mockReturnValue(true)
+    vi.spyOn(service, '_computeNextRunAt').mockReturnValue(9000)
+    vi.spyOn(service, '_rearmScheduler').mockImplementation(() => {})
+
+    await service._executeTask(currentTask, 'scheduled')
+
+    expect(agentSessionManager.create).not.toHaveBeenCalled()
+    expect(sessionDatabase.updateScheduledTaskState).toHaveBeenCalledWith(currentTask.id, {
+      lastScheduledAt: 7000,
+      lastError: 'Embedded app "hydrology-workbench" has no current session to follow',
+      nextRunAt: 9000
+    })
+    expect(sessionDatabase.createScheduledTaskRun).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: currentTask.id,
+      sessionId: null,
+      triggerReason: 'scheduled',
+      status: 'skipped',
+      errorMessage: 'Embedded app "hydrology-workbench" has no current session to follow'
+    }))
   })
 
   it('keeps a session scheduled when detaching one task but another task is still bound to the same session', async () => {

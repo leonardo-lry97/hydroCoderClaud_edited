@@ -973,6 +973,11 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
       return handler(normalizedClient)
     }
 
+    const syncEmbeddedCurrentSession = (appId, sessionId) => {
+      if (!embeddedAppRuntimeManager || !appId) return
+      embeddedAppRuntimeManager.setCurrentSession(appId, sessionId)
+    }
+
     ipcMain.handle('hydro-agent:connect', async (event, payload = {}) => {
       const client = registerEmbeddedSubscription(payload, event)
       return {
@@ -1035,7 +1040,9 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
             ? requestedOptions.cwd.trim()
             : normalizedClient.defaultCwd
         }
-        return agentSessionBroker.create(sessionOptions, normalizedClient)
+        const session = agentSessionBroker.create(sessionOptions, normalizedClient)
+        syncEmbeddedCurrentSession(normalizedClient.appId, session?.id || null)
+        return session
       })
     })
     ipcMain.handle('hydro-agent:listSessions', async (event, { client } = {}) => {
@@ -1066,13 +1073,28 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
       })
     })
     ipcMain.handle('hydro-agent:reopen', async (event, { client, sessionId } = {}) => {
-      return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.reopen(sessionId, normalizedClient))
+      return withEmbeddedClient(event, client, (normalizedClient) => {
+        const session = agentSessionBroker.reopen(sessionId, normalizedClient)
+        syncEmbeddedCurrentSession(normalizedClient.appId, session?.id || null)
+        return session
+      })
     })
     ipcMain.handle('hydro-agent:switchApiProfile', async (event, { client, sessionId, profileId } = {}) => {
       return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.switchApiProfile(sessionId, profileId, normalizedClient))
     })
     ipcMain.handle('hydro-agent:clearAndRecreate', async (event, { client, sessionId, overrides } = {}) => {
-      return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.clearAndRecreate(sessionId, overrides || {}, normalizedClient))
+      return withEmbeddedClient(event, client, (normalizedClient) => {
+        const session = agentSessionBroker.clearAndRecreate(sessionId, overrides || {}, normalizedClient)
+        syncEmbeddedCurrentSession(normalizedClient.appId, session?.id || null)
+        return session
+      })
+    })
+    ipcMain.handle('hydro-agent:setCurrentSession', async (event, { client, sessionId } = {}) => {
+      return withEmbeddedClient(event, client, (normalizedClient) => {
+        const session = agentSessionBroker.syncEmbeddedCurrentSession(sessionId, normalizedClient)
+        syncEmbeddedCurrentSession(normalizedClient.appId, session?.id || null)
+        return { success: true, sessionId: session?.id || null }
+      })
     })
     ipcMain.handle('hydro-agent:getInitResult', async (event, { client, sessionId } = {}) => {
       return withEmbeddedClient(event, client, (normalizedClient) => agentSessionBroker.getInitResult(sessionId, normalizedClient))

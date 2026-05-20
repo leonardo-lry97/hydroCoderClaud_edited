@@ -207,6 +207,11 @@ class AgentSessionBroker {
     return this.agentSessionManager.clearAndRecreate(sessionId, overrides)
   }
 
+  syncEmbeddedCurrentSession(sessionId, client) {
+    const sessionLike = this._assertOwnsSession(sessionId, client)
+    return this._mergeEmbeddedClientMeta(sessionLike, client)
+  }
+
   setModel(sessionId, model, client) {
     this._assertOwnsSession(sessionId, client)
     return this.agentSessionManager.setModel(sessionId, model)

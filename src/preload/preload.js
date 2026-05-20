@@ -217,6 +217,10 @@ const hydroAgent = {
     sessionId,
     overrides
   }),
+  setCurrentSession: (sessionId) => ipcRenderer.invoke('hydro-agent:setCurrentSession', {
+    client: buildHydroAgentClientPayload(),
+    sessionId
+  }),
   getInitResult: (sessionId) => ipcRenderer.invoke('hydro-agent:getInitResult', {
     client: buildHydroAgentClientPayload(),
     sessionId
