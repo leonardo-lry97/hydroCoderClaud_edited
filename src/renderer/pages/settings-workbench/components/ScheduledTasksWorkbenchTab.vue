@@ -5,10 +5,36 @@
         <div class="title-line">{{ t('rightPanel.tabs.scheduledTasks') }}</div>
         <div class="subtitle">{{ t('rightPanel.scheduledTasks.taskCount', { count: tasks.length }) }}</div>
       </div>
-      <n-button size="small" secondary :loading="loading" @click="loadTasks">
-        <template #icon><Icon name="refresh" :size="14" /></template>
-        {{ t('common.refresh') }}
-      </n-button>
+      <div class="header-actions">
+        <n-button size="small" type="primary" @click="openCreate">
+          <template #icon><Icon name="plus" :size="14" /></template>
+          {{ t('common.create') }}
+        </n-button>
+        <n-button
+          size="small"
+          secondary
+          :disabled="!selectedTaskIds.length"
+          @click="confirmBatchDelete"
+        >
+          <template #icon><Icon name="delete" :size="14" /></template>
+          {{ t('rightPanel.scheduledTasks.batchDelete') }}
+        </n-button>
+        <n-button size="small" secondary :loading="loading" @click="loadTasks">
+          <template #icon><Icon name="refresh" :size="14" /></template>
+          {{ t('common.refresh') }}
+        </n-button>
+      </div>
+    </div>
+
+    <div v-if="tasks.length" class="selection-toolbar">
+      <label class="selection-check">
+        <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+        <span class="checkmark"></span>
+        <span>{{ allSelected ? t('common.cancel') : t('rightPanel.scheduledTasks.selectAll') }}</span>
+      </label>
+      <span class="selection-count" v-if="selectedTaskIds.length">
+        {{ t('rightPanel.scheduledTasks.selectedCount', { count: selectedTaskIds.length }) }}
+      </span>
     </div>
 
     <div v-if="loading && !tasks.length" class="state-box st-empty-box">
@@ -24,6 +50,10 @@
     <div v-else class="task-list st-list-shell">
       <div v-for="task in tasks" :key="task.id" class="task-row">
         <div class="task-main">
+          <label class="selection-check task-select" @click.stop>
+            <input type="checkbox" :checked="selectedTaskIds.includes(task.id)" @change="toggleTaskSelection(task.id)" />
+            <span class="checkmark"></span>
+          </label>
           <span class="status-dot" :class="{ enabled: task.enabled }"></span>
           <div class="task-copy">
             <span class="task-name">{{ task.name || t('rightPanel.scheduledTasks.createTask') }}</span>
@@ -51,11 +81,13 @@
     <n-modal v-model:show="showEditor" @after-leave="editingTaskId = null">
       <div class="scheduled-task-manager-modal">
         <ScheduledTaskDetailPanel
-          v-if="showEditor && editingTaskId"
+          v-if="showEditor"
+          :key="editingTaskId || 'create'"
           :task-id="editingTaskId"
           :current-project="currentProject"
           @close="showEditor = false"
           @updated="handleTaskChanged"
+          @created="handleTaskCreated"
           @deleted="handleTaskDeleted"
         />
       </div>
@@ -71,11 +103,22 @@
       :negative-text="t('common.cancel')"
       @positive-click="handleDelete"
     />
+
+    <n-modal
+      v-model:show="showBatchDeleteConfirm"
+      preset="dialog"
+      type="warning"
+      :title="t('rightPanel.scheduledTasks.batchDeleteConfirmTitle')"
+      :content="t('rightPanel.scheduledTasks.batchDeleteConfirmContent', { count: selectedTaskIds.length })"
+      :positive-text="t('common.delete')"
+      :negative-text="t('common.cancel')"
+      @positive-click="handleBatchDelete"
+    />
   </div>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NButton, NModal, useMessage } from 'naive-ui'
 import { useLocale } from '@composables/useLocale'
 import Icon from '@components/icons/Icon.vue'
@@ -99,8 +142,11 @@ const runningTaskId = ref(null)
 const showEditor = ref(false)
 const editingTaskId = ref(null)
 const showDeleteConfirm = ref(false)
+const showBatchDeleteConfirm = ref(false)
 const deleteTarget = ref(null)
+const selectedTaskIds = ref([])
 let cleanupTaskChanged = null
+const allSelected = computed(() => tasks.value.length > 0 && selectedTaskIds.value.length === tasks.value.length)
 
 const loadTasks = async () => {
   if (!window.electronAPI?.listScheduledTasks) return
@@ -108,6 +154,7 @@ const loadTasks = async () => {
   try {
     const result = await window.electronAPI.listScheduledTasks()
     tasks.value = Array.isArray(result) ? result : []
+    selectedTaskIds.value = selectedTaskIds.value.filter(id => tasks.value.some(task => task.id === id))
   } catch (err) {
     console.error('[ScheduledTasksWorkbenchTab] loadTasks failed:', err)
     message.error(err.message || t('rightPanel.scheduledTasks.runFailed'))
@@ -151,13 +198,43 @@ const openEditor = (task) => {
   showEditor.value = true
 }
 
+const openCreate = () => {
+  editingTaskId.value = null
+  showEditor.value = true
+}
+
 const confirmDelete = (task) => {
   deleteTarget.value = task
   showDeleteConfirm.value = true
 }
 
-const handleTaskChanged = async () => {
+const confirmBatchDelete = () => {
+  if (!selectedTaskIds.value.length) return
+  showBatchDeleteConfirm.value = true
+}
+
+const toggleTaskSelection = (taskId) => {
+  if (selectedTaskIds.value.includes(taskId)) {
+    selectedTaskIds.value = selectedTaskIds.value.filter(id => id !== taskId)
+    return
+  }
+  selectedTaskIds.value = [...selectedTaskIds.value, taskId]
+}
+
+const toggleSelectAll = () => {
+  selectedTaskIds.value = allSelected.value ? [] : tasks.value.map(task => task.id)
+}
+
+const handleTaskChanged = async (taskId = null) => {
   await loadTasks()
+}
+
+const handleTaskCreated = async (taskId) => {
+  showEditor.value = false
+  await loadTasks()
+  if (taskId) {
+    selectedTaskIds.value = []
+  }
 }
 
 const handleTaskDeleted = async () => {
@@ -167,6 +244,7 @@ const handleTaskDeleted = async () => {
 
 const handleDelete = async () => {
   if (!deleteTarget.value) return
+  const deletedTaskId = deleteTarget.value.id
   const result = await window.electronAPI.deleteScheduledTask(deleteTarget.value.id)
   if (result?.error) {
     message.error(result.error)
@@ -178,6 +256,29 @@ const handleDelete = async () => {
   }
   showDeleteConfirm.value = false
   deleteTarget.value = null
+  selectedTaskIds.value = selectedTaskIds.value.filter(id => id !== deletedTaskId)
+  message.success(t('common.deleteSuccess'))
+  await loadTasks()
+}
+
+const handleBatchDelete = async () => {
+  const ids = [...selectedTaskIds.value]
+  if (!ids.length) return
+
+  for (const taskId of ids) {
+    const result = await window.electronAPI.deleteScheduledTask(taskId)
+    if (result?.error) {
+      message.error(result.error)
+      return
+    }
+    if (editingTaskId.value === taskId) {
+      showEditor.value = false
+      editingTaskId.value = null
+    }
+  }
+
+  showBatchDeleteConfirm.value = false
+  selectedTaskIds.value = []
   message.success(t('common.deleteSuccess'))
   await loadTasks()
 }
@@ -220,6 +321,12 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .title-line {
   color: var(--text-color);
   font-size: 16px;
@@ -228,6 +335,18 @@ onUnmounted(() => {
 
 .subtitle {
   margin-top: 2px;
+  color: var(--text-color-muted);
+  font-size: 12px;
+}
+
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.selection-count {
   color: var(--text-color-muted);
   font-size: 12px;
 }
@@ -251,6 +370,50 @@ onUnmounted(() => {
   align-items: center;
   min-width: 0;
   gap: 10px;
+}
+
+.selection-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-color-muted);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.selection-check input {
+  display: none;
+}
+
+.task-select {
+  flex-shrink: 0;
+}
+
+.checkmark {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  position: relative;
+}
+
+.selection-check input:checked + .checkmark {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.selection-check input:checked + .checkmark::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 .task-copy {

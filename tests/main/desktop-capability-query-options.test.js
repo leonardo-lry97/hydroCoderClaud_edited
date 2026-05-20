@@ -50,8 +50,7 @@ describe('desktop capability query options', () => {
       lastError: 'recent failure',
       failureCount: 2,
       runCount: 4,
-      apiProfileId: 'profile-1',
-      modelId: 'glm-5.1',
+      sessionBindingMode: 'current',
       maxRuns: 6,
       resetCountOnEnable: true,
       intervalAnchorMode: 'started_at',
@@ -181,7 +180,7 @@ describe('desktop capability query options', () => {
     expect(options.appendSystemPrompt).toContain('Do not claim there are no tasks')
     expect(options.appendSystemPrompt).toContain('You do have direct access to HydroDesktop scheduled tasks')
     expect(options.appendSystemPrompt).toContain('Do not say you cannot access HydroDesktop scheduled tasks')
-    expect(options.appendSystemPrompt).toContain('modelId')
+    expect(options.appendSystemPrompt).toContain('reuse the currently bound session runtime')
     expect(options.appendSystemPrompt).toContain('default to binding the task to the current session')
     expect(options.appendSystemPrompt).toContain('Only set sessionBindingMode to new when the user explicitly asks for a separate')
   })
@@ -200,7 +199,7 @@ describe('desktop capability query options', () => {
       runCount: 4,
       lastStartedAt: 1709995000000,
       lastScheduledAt: 1709994900000,
-      modelId: 'glm-5.1',
+      sessionBindingMode: 'current',
       maxRuns: 6,
       resetCountOnEnable: true,
       intervalAnchorMode: 'started_at'
@@ -209,7 +208,7 @@ describe('desktop capability query options', () => {
     expect(listPayload.tasks[0]).not.toHaveProperty('modelTier')
     expect(listPayload.tasks[0]).not.toHaveProperty('modelTierLabel')
     expect(listPayload.tasks[0]).not.toHaveProperty('firstRunMode')
-    expect(listPayload.tasks[0].summary).toContain('glm-5.1')
+    expect(listPayload.tasks[0].summary).toContain('session-7')
     expect(listPayload.tasks[0].runtimeState?._scheduler).toBeUndefined()
 
     const getPayload = parseToolPayload(await tools.schedule_get.handler({ taskId: 7 }))
@@ -223,7 +222,7 @@ describe('desktop capability query options', () => {
       runCount: 4,
       lastStartedAt: 1709995000000,
       lastScheduledAt: 1709994900000,
-      modelId: 'glm-5.1',
+      sessionBindingMode: 'current',
       maxRuns: 6,
       resetCountOnEnable: true,
       intervalAnchorMode: 'started_at'
@@ -237,10 +236,6 @@ describe('desktop capability query options', () => {
     const { tools } = await createOptions()
 
     expect(tools.schedule_create.inputSchema.cwd.safeParse('').success).toBe(true)
-    expect(tools.schedule_create.inputSchema.apiProfileId.safeParse('').success).toBe(true)
-    expect(tools.schedule_create.inputSchema.modelId.safeParse('glm-5.1').success).toBe(true)
-    expect(tools.schedule_create.inputSchema.modelId.safeParse('').success).toBe(false)
-    expect(tools.schedule_create.inputSchema.modelId.safeParse(null).success).toBe(false)
     expect(tools.schedule_create.inputSchema.maxRuns.safeParse('6').success).toBe(true)
     expect(tools.schedule_create.inputSchema.intervalMinutes.safeParse('30').success).toBe(true)
     expect(tools.schedule_create.inputSchema.monthlyDay.safeParse('12').success).toBe(true)
@@ -251,9 +246,8 @@ describe('desktop capability query options', () => {
     expect(tools.schedule_create.description).toContain('创建一个新的 Hydro Desktop 定时任务')
 
     expect(tools.schedule_update.inputSchema.cwd.safeParse('').success).toBe(true)
-    expect(tools.schedule_update.inputSchema.apiProfileId.safeParse('').success).toBe(true)
-    expect(tools.schedule_update.inputSchema.modelId.safeParse('glm-5.1').success).toBe(true)
-    expect(tools.schedule_update.inputSchema.modelId.safeParse(null).success).toBe(false)
+    expect(tools.schedule_update.inputSchema.sessionBindingMode.safeParse('current').success).toBe(true)
+    expect(tools.schedule_update.inputSchema.sessionBindingMode.safeParse('new').success).toBe(true)
     expect(tools.schedule_update.inputSchema.firstRunAt.safeParse('2026-05-01T09:30:00+08:00').success).toBe(true)
   })
 
@@ -290,7 +284,6 @@ describe('desktop capability query options', () => {
       name: 'MCP 会话绑定任务',
       prompt: '继续当前会话',
       scheduleType: 'interval',
-      modelId: 'glm-5.1',
       intervalMinutes: 30,
       firstRunAt: '2026-05-01T09:30:00+08:00'
     })
@@ -333,7 +326,6 @@ describe('desktop capability query options', () => {
       name: '工作台当前会话任务',
       prompt: '继续当前水文工作台会话',
       scheduleType: 'interval',
-      modelId: 'glm-5.1',
       intervalMinutes: 20,
       firstRunAt: '2026-05-01T09:30:00+08:00'
     })
@@ -407,7 +399,6 @@ describe('desktop capability query options', () => {
       name: '同会话追加任务',
       prompt: '继续当前定时任务会话',
       scheduleType: 'interval',
-      modelId: 'glm-5.1',
       intervalMinutes: 45,
       firstRunAt: '2026-05-01T10:00:00+08:00'
     })
@@ -441,7 +432,7 @@ describe('desktop capability query options', () => {
     expect(options).toEqual({})
   })
 
-  it('serializes model ids for english locale', async () => {
+  it('serializes linked session metadata for english locale', async () => {
     const { tools } = await createOptions({
       configManager: {
         getConfig: () => ({
@@ -455,9 +446,10 @@ describe('desktop capability query options', () => {
     const payload = parseToolPayload(await tools.schedule_get.handler({ taskId: 7 }))
 
     expect(payload.task).toMatchObject({
-      modelId: 'glm-5.1'
+      sessionId: 'session-7',
+      sessionBindingMode: 'current'
     })
-    expect(payload.task.summary).toContain('glm-5.1')
+    expect(payload.task.summary).toContain('session-7')
   })
 
   it('reads task runs and returns run metadata', async () => {

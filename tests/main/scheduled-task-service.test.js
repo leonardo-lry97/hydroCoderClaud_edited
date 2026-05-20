@@ -9,13 +9,22 @@ vi.mock('electron', () => ({
 const INTERVAL_FIRST_RUN_AT = Date.UTC(2026, 3, 24, 8, 0, 0)
 
 describe('ScheduledTaskService', () => {
-  it('normalizes explicit scheduled-task model ids', async () => {
+  it('normalizes scheduled task runtime ownership to the bound session', async () => {
     const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
     const service = new ScheduledTaskService({}, { on: vi.fn() })
 
-    expect(service._normalizeTaskInput({ name: 'a', prompt: 'b', scheduleType: 'interval', intervalMinutes: 5, firstRunAt: INTERVAL_FIRST_RUN_AT, modelId: ' glm-5.1 ' }).modelId).toBe('glm-5.1')
-    expect(service._normalizeTaskInput({ name: 'a', prompt: 'b', scheduleType: 'interval', intervalMinutes: 5, firstRunAt: INTERVAL_FIRST_RUN_AT, modelId: 'Qwen/Qwen3.6-27B' }).modelId).toBe('Qwen/Qwen3.6-27B')
-    expect(() => service._normalizeTaskInput({ name: 'a', prompt: 'b', scheduleType: 'interval', intervalMinutes: 5, firstRunAt: INTERVAL_FIRST_RUN_AT, modelId: '' })).toThrow('Task modelId is required')
+    expect(service._normalizeTaskInput({
+      name: 'a',
+      prompt: 'b',
+      scheduleType: 'interval',
+      intervalMinutes: 5,
+      firstRunAt: INTERVAL_FIRST_RUN_AT,
+      modelId: ' glm-5.1 ',
+      apiProfileId: 'profile-1'
+    })).toMatchObject({
+      modelId: null,
+      apiProfileId: null
+    })
   })
 
   it('normalizes maxRuns as an optional positive integer', async () => {
@@ -810,9 +819,7 @@ describe('ScheduledTaskService', () => {
       expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
         'chat-session-2',
         '基于当前上下文继续',
-        expect.objectContaining({
-          meta: { source: 'scheduled' }
-        })
+        { meta: { source: 'scheduled' } }
       )
     } finally {
       vi.useRealTimers()
@@ -910,9 +917,75 @@ describe('ScheduledTaskService', () => {
       expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
         'embedded-session-77',
         '基于当前工作台上下文继续巡检',
-        expect.objectContaining({
-          meta: { source: 'scheduled' }
-        })
+        { meta: { source: 'scheduled' } }
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('recreates a default scheduled session when the bound session is missing', async () => {
+    vi.useFakeTimers()
+
+    try {
+      const startedAt = Date.UTC(2026, 3, 30, 11, 0, 0)
+      vi.setSystemTime(startedAt)
+
+      const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+      const taskState = {
+        id: 178,
+        name: '丢失会话后重建',
+        prompt: '继续执行',
+        enabled: true,
+        scheduleType: 'interval',
+        intervalMinutes: 15,
+        firstRunAt: Date.UTC(2026, 3, 30, 10, 45, 0),
+        sessionBindingMode: 'current',
+        sessionId: 'missing-session',
+        runCount: 0,
+        failureCount: 0,
+        runtimeState: null
+      }
+
+      const sessionDatabase = {
+        getScheduledTask: vi.fn(() => ({ ...taskState })),
+        updateScheduledTaskState: vi.fn((_taskId, updates) => {
+          Object.assign(taskState, updates)
+          return { ...taskState }
+        }),
+        createScheduledTaskRun: vi.fn(),
+        updateAgentConversation: vi.fn(),
+        getAgentConversation: vi.fn(() => null)
+      }
+
+      const agentSessionManager = {
+        on: vi.fn(),
+        create: vi.fn(() => ({ id: 'recreated-session-1' })),
+        get: vi.fn(() => ({ status: 'idle' })),
+        reopen: vi.fn(() => ({ status: 'idle' })),
+        sendMessage: vi.fn().mockResolvedValue()
+      }
+
+      const service = new ScheduledTaskService({}, agentSessionManager)
+      service.setSessionDatabase(sessionDatabase)
+      vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+      vi.spyOn(service, '_hasConversationHistory').mockReturnValue(false)
+      vi.spyOn(service, '_rearmScheduler').mockImplementation(() => {})
+
+      await service._executeTask(taskState, 'manual', { allowDisabled: true })
+
+      expect(agentSessionManager.create).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'chat',
+        title: '丢失会话后重建',
+        cwdSubDir: 'scheduled',
+        source: 'scheduled',
+        taskId: 178
+      }))
+      expect(taskState.sessionId).toBe('recreated-session-1')
+      expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
+        'recreated-session-1',
+        '继续执行',
+        { meta: { source: 'scheduled' } }
       )
     } finally {
       vi.useRealTimers()
@@ -1414,7 +1487,7 @@ describe('ScheduledTaskService', () => {
     expect(rename).not.toHaveBeenCalled()
   })
 
-  it('detaches the old bound session when apiProfileId changes outside a running task', async () => {
+  it('keeps the old bound session when legacy apiProfileId changes outside a running task', async () => {
     const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
     const rename = vi.fn()
     const currentTask = {
@@ -1456,17 +1529,14 @@ describe('ScheduledTaskService', () => {
       name: '配置切换任务（新）'
     })
 
-    expect(sessionDatabase.updateAgentConversation).toHaveBeenCalledWith(currentTask.sessionId, {
-      source: 'manual',
-      taskId: null
-    })
+    expect(sessionDatabase.updateAgentConversation).not.toHaveBeenCalled()
     expect(sessionDatabase.updateScheduledTaskState).toHaveBeenCalledWith(currentTask.id, expect.objectContaining({
-      sessionId: null
+      nextRunAt: 1234567890
     }))
-    expect(liveSession.source).toBe('manual')
-    expect(liveSession.taskId).toBeNull()
-    expect(liveSession.meta.scheduledTaskId).toBeUndefined()
-    expect(rename).not.toHaveBeenCalled()
+    expect(liveSession.source).toBe('scheduled')
+    expect(liveSession.taskId).toBe(82)
+    expect(liveSession.meta.scheduledTaskId).toBe(82)
+    expect(rename).toHaveBeenCalledWith(currentTask.sessionId, '配置切换任务（新）')
   })
 
   it('downgrades the linked agent session to manual when deleting a scheduled task', async () => {
@@ -2119,27 +2189,34 @@ describe('ScheduledTaskService', () => {
     vi.restoreAllMocks()
   })
 
-  it('rejects creating a task without an explicit model id', async () => {
+  it('allows creating a task without an explicit model id', async () => {
     const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
     const service = new ScheduledTaskService({}, { on: vi.fn() })
     service.setSessionDatabase({
-      createScheduledTask: vi.fn(),
-      updateScheduledTaskState: vi.fn()
+      createScheduledTask: vi.fn(task => ({ id: 300, ...task })),
+      updateScheduledTaskState: vi.fn((_taskId, updates) => ({ id: 300, ...updates }))
     })
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(service, '_rearmScheduler').mockImplementation(() => {})
 
     await expect(service.createTask({
       name: '缺少模型',
       prompt: '执行任务',
       scheduleType: 'interval',
       intervalMinutes: 30,
-      firstRunAt: Date.UTC(2026, 3, 25, 10, 0, 0),
-      modelId: null
-    })).rejects.toThrow('Task modelId is required')
+      firstRunAt: Date.UTC(2026, 3, 25, 10, 0, 0)
+    })).resolves.toBeTruthy()
   })
 
-  it('rejects running an existing task without an explicit model id', async () => {
+  it('allows running an existing task without an explicit model id', async () => {
     const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
-    const service = new ScheduledTaskService({}, { on: vi.fn() })
+    const service = new ScheduledTaskService({}, {
+      on: vi.fn(),
+      create: vi.fn(() => ({ id: 'scheduled-run-301' })),
+      get: vi.fn(() => ({ status: 'idle' })),
+      reopen: vi.fn(() => ({ status: 'idle' })),
+      sendMessage: vi.fn().mockResolvedValue()
+    })
     service.setSessionDatabase({
       getScheduledTask: vi.fn(() => ({
         id: 301,
@@ -2150,9 +2227,15 @@ describe('ScheduledTaskService', () => {
         scheduleType: 'interval',
         intervalMinutes: 30,
         firstRunAt: Date.UTC(2026, 3, 25, 10, 0, 0)
-      }))
+      })),
+      getAgentConversation: vi.fn(() => null),
+      updateScheduledTaskState: vi.fn((_taskId, updates) => ({ id: 301, ...updates })),
+      createScheduledTaskRun: vi.fn()
     })
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(service, '_hasConversationHistory').mockReturnValue(false)
+    vi.spyOn(service, '_rearmScheduler').mockImplementation(() => {})
 
-    await expect(service.runTaskNow(301)).rejects.toThrow('Scheduled task requires an explicit modelId')
+    await expect(service.runTaskNow(301)).resolves.toBeTruthy()
   })
 })

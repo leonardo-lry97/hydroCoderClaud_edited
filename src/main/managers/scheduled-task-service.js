@@ -25,6 +25,10 @@ function normalizeModelId(modelId) {
   return normalized || null
 }
 
+function normalizeSessionBindingMode(value) {
+  return value === 'current' ? 'current' : 'new'
+}
+
 function normalizePositiveInteger(value) {
   if (value == null || value === '') return null
 
@@ -316,8 +320,7 @@ class ScheduledTaskService {
     const updated = this.sessionDatabase.updateScheduledTask(taskId, normalized)
     const shouldResetOnEnable = !current.enabled && updated.enabled && !!updated.resetCountOnEnable
     const cwdChanged = normalized.cwd !== current.cwd
-    const apiProfileChanged = normalized.apiProfileId !== current.apiProfileId
-    const sessionBindingChanged = cwdChanged || apiProfileChanged
+    const sessionBindingChanged = cwdChanged
     const shouldRearmOnceTask = updated.scheduleType === 'once' && (
       updated.scheduleType !== current.scheduleType ||
       normalizeTimestamp(updated.firstRunAt) !== normalizeTimestamp(current.firstRunAt)
@@ -328,7 +331,7 @@ class ScheduledTaskService {
       if (this.runningTasks.has(taskId)) {
         stateUpdates.runtimeState = this._markSessionResetPending(
           current.runtimeState,
-          cwdChanged ? 'cwd-changed' : 'api-profile-changed'
+          'cwd-changed'
         )
       } else {
         stateUpdates.sessionId = null
@@ -526,10 +529,7 @@ class ScheduledTaskService {
       await this.agentSessionManager.sendMessage(
         sessionId,
         this._buildTaskPrompt(task, triggerReason, startedAt, { bootstrap: isBootstrapRun }),
-        {
-          model: task.modelId || undefined,
-          meta: { source: 'scheduled' }
-        }
+        { meta: { source: 'scheduled' } }
       )
 
       this.sessionDatabase.updateScheduledTaskState(task.id, {
@@ -610,7 +610,6 @@ class ScheduledTaskService {
         title: task.name,
         cwd: task.cwd || undefined,
         cwdSubDir: task.cwd ? undefined : 'scheduled',
-        apiProfileId: task.apiProfileId || undefined,
         source: 'scheduled',
         taskId: task.id,
         meta: { scheduledTaskId: task.id }
@@ -1004,15 +1003,13 @@ class ScheduledTaskService {
       : normalizeMonthlyDay(input.monthlyDay)
     const monthlyDay = monthlyMode === 'last_day' ? null : rawMonthlyDay
     const normalizedFirstRunAt = resolveExecutionAt(input, scheduleType)
+    const sessionBindingMode = normalizeSessionBindingMode(input.sessionBindingMode)
 
     if (!partial || Object.prototype.hasOwnProperty.call(input, 'name')) {
       if (!String(input.name || '').trim()) throw new Error('Task name is required')
     }
     if (!partial || Object.prototype.hasOwnProperty.call(input, 'prompt')) {
       if (!String(input.prompt || '').trim()) throw new Error('Task prompt is required')
-    }
-    if (!partial || Object.prototype.hasOwnProperty.call(input, 'modelId')) {
-      if (!normalizeModelId(input.modelId)) throw new Error('Task modelId is required')
     }
 
     if (Object.prototype.hasOwnProperty.call(input, 'maxRuns') && Number.isNaN(maxRuns)) {
@@ -1055,8 +1052,9 @@ class ScheduledTaskService {
       name: Object.prototype.hasOwnProperty.call(input, 'name') ? String(input.name || '').trim() : undefined,
       prompt: Object.prototype.hasOwnProperty.call(input, 'prompt') ? String(input.prompt || '').trim() : undefined,
       cwd: Object.prototype.hasOwnProperty.call(input, 'cwd') ? (String(input.cwd || '').trim() || null) : undefined,
-      apiProfileId: Object.prototype.hasOwnProperty.call(input, 'apiProfileId') ? (input.apiProfileId || null) : undefined,
-      modelId: Object.prototype.hasOwnProperty.call(input, 'modelId') ? normalizeModelId(input.modelId) : undefined,
+      apiProfileId: null,
+      sessionBindingMode,
+      modelId: null,
       maxRuns,
       resetCountOnEnable: resetCountOnEnable ?? false,
       intervalAnchorMode: Object.prototype.hasOwnProperty.call(input, 'intervalAnchorMode') || !partial
@@ -1076,9 +1074,7 @@ class ScheduledTaskService {
   }
 
   _assertTaskModelId(task) {
-    if (!normalizeModelId(task?.modelId)) {
-      throw new Error('Scheduled task requires an explicit modelId')
-    }
+    return task
   }
 
   _computeNextRunAt(task, nowTs, options = {}) {

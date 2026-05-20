@@ -193,6 +193,8 @@ class SessionDatabaseBase {
       { name: 'api_profile_id', type: 'TEXT' },
       { name: 'api_base_url', type: 'TEXT' },
       { name: 'model_id', type: 'TEXT' },
+      { name: 'last_bootstrapped_runtime', type: 'TEXT' },
+      { name: 'pending_runtime_change', type: "TEXT DEFAULT 'unknown'" },
       { name: 'queued_messages', type: "TEXT DEFAULT '[]'" },  // 存储队列消息（JSON 数组）
       { name: 'staff_id', type: 'TEXT' },         // 钉钉发送者 staffId
       { name: 'conversation_id', type: 'TEXT' },   // 钉钉群/单聊会话 ID
@@ -214,6 +216,7 @@ class SessionDatabaseBase {
     const scheduledTaskColumns = scheduledTaskInfo.map(col => col.name)
 
     const scheduledTaskNewColumns = [
+      { name: 'session_binding_mode', type: "TEXT NOT NULL DEFAULT 'new'" },
       { name: 'model_id', type: 'TEXT' },
       { name: 'max_runs', type: 'INTEGER' },
       { name: 'reset_count_on_enable', type: 'INTEGER NOT NULL DEFAULT 0' },
@@ -245,6 +248,7 @@ class SessionDatabaseBase {
             prompt TEXT NOT NULL DEFAULT '',
             cwd TEXT,
             api_profile_id TEXT,
+            session_binding_mode TEXT NOT NULL DEFAULT 'new',
             model_id TEXT,
             max_runs INTEGER,
             reset_count_on_enable INTEGER NOT NULL DEFAULT 0,
@@ -264,12 +268,12 @@ class SessionDatabaseBase {
 
         this.db.exec(`
           INSERT INTO scheduled_tasks_new (
-            id, name, prompt, cwd, api_profile_id, model_id, max_runs, reset_count_on_enable,
+            id, name, prompt, cwd, api_profile_id, session_binding_mode, model_id, max_runs, reset_count_on_enable,
             interval_anchor_mode, enabled, schedule_type, interval_minutes, daily_time, weekly_days,
             monthly_mode, monthly_day, first_run_at, created_at, updated_at
           )
           SELECT
-            id, name, prompt, cwd, api_profile_id, model_id, max_runs, reset_count_on_enable,
+            id, name, prompt, cwd, api_profile_id, 'new', model_id, max_runs, reset_count_on_enable,
             interval_anchor_mode, enabled, schedule_type, interval_minutes, daily_time, weekly_days,
             monthly_mode, monthly_day, first_run_at, created_at, updated_at
           FROM scheduled_tasks
@@ -623,6 +627,8 @@ class SessionDatabaseBase {
         api_profile_id TEXT,
         api_base_url TEXT,
         model_id TEXT,
+        last_bootstrapped_runtime TEXT,
+        pending_runtime_change TEXT DEFAULT 'unknown',
         queued_messages TEXT DEFAULT '[]',
         source TEXT DEFAULT 'manual',
         task_id INTEGER,
@@ -641,6 +647,7 @@ class SessionDatabaseBase {
         prompt TEXT NOT NULL DEFAULT '',
         cwd TEXT,
         api_profile_id TEXT,
+        session_binding_mode TEXT NOT NULL DEFAULT 'new',
         model_id TEXT,
         max_runs INTEGER,
         reset_count_on_enable INTEGER NOT NULL DEFAULT 0,

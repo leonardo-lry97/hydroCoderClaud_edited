@@ -70,13 +70,11 @@ function getProviderModelIds(serviceProviderDefinitions = [], serviceProvider = 
 }
 
 export function createScheduledTaskFormDefaults(defaultCwd = '') {
-  const modelIds = getScheduledTaskProfileModelIds()
   return {
     name: '',
     prompt: '',
     cwd: defaultCwd,
-    apiProfileId: null,
-    modelId: modelIds[0] || null,
+    sessionBindingMode: 'new',
     maxRuns: null,
     resetCountOnEnable: false,
     intervalAnchorMode: 'started_at',

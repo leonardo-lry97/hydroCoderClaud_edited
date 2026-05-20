@@ -20,6 +20,10 @@ function normalizeModelId(modelId) {
   return normalized || null
 }
 
+function normalizeSessionBindingMode(value) {
+  return value === 'current' ? 'current' : 'new'
+}
+
 function mapScheduledTaskRow(row) {
   if (!row) return null
   return {
@@ -28,6 +32,7 @@ function mapScheduledTaskRow(row) {
     prompt: row.prompt || '',
     cwd: row.cwd || null,
     apiProfileId: row.api_profile_id || null,
+    sessionBindingMode: normalizeSessionBindingMode(row.session_binding_mode),
     modelId: normalizeModelId(row.model_id),
     maxRuns: row.max_runs || null,
     resetCountOnEnable: !!row.reset_count_on_enable,
@@ -118,17 +123,18 @@ function withScheduledTaskOperations(BaseClass) {
       const now = Date.now()
       const result = this.db.prepare(`
         INSERT INTO scheduled_tasks (
-          name, prompt, cwd, api_profile_id, model_id, max_runs, reset_count_on_enable, interval_anchor_mode,
+          name, prompt, cwd, api_profile_id, session_binding_mode, model_id, max_runs, reset_count_on_enable, interval_anchor_mode,
           enabled, schedule_type, interval_minutes, daily_time, weekly_days, first_run_at,
           monthly_mode, monthly_day,
           created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         task.name || '',
         task.prompt || '',
         task.cwd || null,
         task.apiProfileId || null,
+        normalizeSessionBindingMode(task.sessionBindingMode),
         task.modelId || null,
         task.maxRuns || null,
         task.resetCountOnEnable ? 1 : 0,
@@ -158,6 +164,7 @@ function withScheduledTaskOperations(BaseClass) {
         prompt: 'prompt',
         cwd: 'cwd',
         apiProfileId: 'api_profile_id',
+        sessionBindingMode: 'session_binding_mode',
         modelId: 'model_id',
         maxRuns: 'max_runs',
         resetCountOnEnable: 'reset_count_on_enable',

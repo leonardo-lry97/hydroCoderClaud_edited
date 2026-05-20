@@ -45,12 +45,6 @@
       </n-form-item>
 
       <div class="task-grid st-form-grid">
-        <n-form-item :label="t('rightPanel.scheduledTasks.apiProfile')">
-        <n-select v-model:value="form.apiProfileId" :options="apiProfileOptions" clearable />
-        </n-form-item>
-        <n-form-item :label="t('rightPanel.scheduledTasks.modelId')">
-          <n-select v-model:value="form.modelId" :options="modelOptions" :placeholder="t('rightPanel.scheduledTasks.modelIdPlaceholder')" />
-        </n-form-item>
         <n-form-item :label="t('rightPanel.scheduledTasks.maxRuns')">
           <n-input-number v-model:value="form.maxRuns" :min="1" style="width: 100%;" />
         </n-form-item>
@@ -161,19 +155,17 @@
 
 <script setup>
 import { computed, ref, watch, onMounted } from 'vue'
-import { NButton, NDatePicker, NForm, NFormItem, NInput, NInputNumber, NRadio, NRadioGroup, NSelect, NSpace, NSwitch, NTimePicker } from 'naive-ui'
+import { NButton, NDatePicker, NForm, NFormItem, NInput, NInputNumber, NRadio, NRadioGroup, NSpace, NSwitch, NTimePicker } from 'naive-ui'
 import { useLocale } from '@composables/useLocale'
 import Icon from '@components/icons/Icon.vue'
 import {
   buildIntervalAnchorOptions,
   buildMonthlyModeOptions,
-  buildScheduledTaskModelOptions,
   buildScheduleTypeOptions,
   buildWeeklyDayOptions,
   createScheduledTaskFormDefaults,
   isClockOnlyScheduledTaskType,
-  resolveScheduledTaskExecutionAt,
-  resolveScheduledTaskModelId
+  resolveScheduledTaskExecutionAt
 } from '@utils/scheduled-task-meta'
 
 const props = defineProps({
@@ -190,15 +182,11 @@ const props = defineProps({
 const emit = defineEmits(['submit', 'cancel'])
 const { t } = useLocale()
 
-const apiProfiles = ref([])
-const defaultProfileId = ref(null)
-const serviceProviderDefinitions = ref([])
 const form = ref(createDefaultForm())
 
 function createDefaultForm() {
   return {
     ...createScheduledTaskFormDefaults(''),
-    apiProfileId: null,
     sessionBindingMode: 'current'
   }
 }
@@ -257,31 +245,12 @@ const executionTimePlaceholder = computed(() => (
     ? t('rightPanel.scheduledTasks.runTimePlaceholder')
     : t('rightPanel.scheduledTasks.firstRunAtPlaceholder')
 ))
-const baseModelOptions = computed(() => buildScheduledTaskModelOptions({
-  apiProfiles: apiProfiles.value,
-  serviceProviderDefinitions: serviceProviderDefinitions.value,
-  defaultProfileId: defaultProfileId.value,
-  apiProfileId: form.value.apiProfileId || null
-}))
-const modelOptions = computed(() => baseModelOptions.value)
 
 watch(() => form.value.scheduleType, (nextType, previousType) => {
   if (!previousType || nextType === previousType) return
   if (!isClockOnlyScheduledTaskType(previousType) || isClockOnlyScheduledTaskType(nextType)) return
   form.value.firstRunAt = null
 })
-
-const apiProfileOptions = computed(() => [
-  {
-    label: apiProfiles.value.find(profile => profile.id === defaultProfileId.value)?.name
-      ? t('rightPanel.scheduledTasks.defaultProfileResolved', {
-          name: apiProfiles.value.find(profile => profile.id === defaultProfileId.value)?.name
-        })
-      : t('rightPanel.scheduledTasks.defaultProfile'),
-    value: null
-  },
-  ...apiProfiles.value.map(profile => ({ label: profile.name, value: profile.id }))
-])
 
 const nameError = computed(() => form.value.name.trim() ? '' : t('agent.scheduleDraftNameRequired'))
 const promptError = computed(() => form.value.prompt.trim() ? '' : t('agent.scheduleDraftPromptRequired'))
@@ -304,23 +273,9 @@ const canSubmit = computed(() => !nameError.value && !promptError.value && !week
 
 const loadProfiles = async () => {
   try {
-    const config = await window.electronAPI?.getConfig?.()
-    if (config) {
-      apiProfiles.value = Array.isArray(config.apiProfiles) ? config.apiProfiles : []
-      defaultProfileId.value = config.defaultProfileId || null
-      serviceProviderDefinitions.value = Array.isArray(config.serviceProviderDefinitions) ? config.serviceProviderDefinitions : []
-      return
-    }
-
-    const profiles = await window.electronAPI?.listAPIProfiles?.()
-    apiProfiles.value = Array.isArray(profiles) ? profiles : []
-    defaultProfileId.value = null
-    serviceProviderDefinitions.value = []
+    await window.electronAPI?.getConfig?.()
   } catch (err) {
     console.error('[ScheduledTaskDraftCard] Failed to load API profiles:', err)
-    apiProfiles.value = []
-    defaultProfileId.value = null
-    serviceProviderDefinitions.value = []
   }
 }
 
@@ -344,7 +299,6 @@ const handleSubmit = () => {
       name: form.value.name.trim(),
       prompt: form.value.prompt.trim(),
       cwd: form.value.cwd?.trim() || null,
-      modelId: form.value.modelId,
       sessionBindingMode: form.value.sessionBindingMode === 'new' ? 'new' : 'current',
       monthlyMode: form.value.monthlyMode,
       monthlyDay: form.value.monthlyMode === 'last_day' ? null : (form.value.monthlyDay ?? null),
@@ -352,19 +306,6 @@ const handleSubmit = () => {
     }
   })
 }
-
-watch([apiProfiles, serviceProviderDefinitions, defaultProfileId, () => form.value.apiProfileId], () => {
-  const nextModelId = resolveScheduledTaskModelId({
-    apiProfiles: apiProfiles.value,
-    serviceProviderDefinitions: serviceProviderDefinitions.value,
-    defaultProfileId: defaultProfileId.value,
-    apiProfileId: form.value.apiProfileId || null
-  }, form.value.modelId)
-
-  if (form.value.modelId !== nextModelId) {
-    form.value.modelId = nextModelId
-  }
-}, { deep: true })
 </script>
 
 <style src="@/styles/scheduled-task-common.css"></style>

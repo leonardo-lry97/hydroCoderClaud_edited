@@ -74,8 +74,6 @@ export function useAgentLocalCommands({
       name: String(draft.name || '').trim(),
       prompt: String(draft.prompt || '').trim(),
       cwd: typeof draft.cwd === 'string' && draft.cwd.trim() ? draft.cwd.trim() : null,
-      apiProfileId: draft.apiProfileId || null,
-      modelId: normalizeScheduledTaskModelId(draft.modelId),
       sessionBindingMode: normalizeScheduledTaskSessionBindingMode(draft.sessionBindingMode),
       maxRuns,
       resetCountOnEnable: !!draft.resetCountOnEnable,
@@ -99,8 +97,6 @@ export function useAgentLocalCommands({
       name: buildScheduledTaskName(prompt),
       prompt,
       cwd: options.sessionCwd || null,
-      apiProfileId: options.apiProfileId || null,
-      modelId: normalizeScheduledTaskModelId(selectedModel.value),
       sessionBindingMode: 'current',
       maxRuns: null,
       resetCountOnEnable: false,
@@ -149,9 +145,6 @@ export function useAgentLocalCommands({
     }
 
     const payload = normalizeScheduledTaskDraft(draft)
-    if (!payload.modelId) {
-      return { error: t('rightPanel.scheduledTasks.modelIdRequired') }
-    }
 
     try {
       message.input = {

@@ -13,8 +13,8 @@ const DESKTOP_CAPABILITY_SYSTEM_PROMPT = [
   'Before modifying or deleting an existing task, call schedule_list unless the user already provided an explicit task ID.',
   'Do not claim there are no tasks, no history, or a task is disabled without calling the relevant tool first.',
   'After any mutation or inspection, summarize the actual task state returned by the tool, especially enabled, nextRunAt, lastError, and failureCount.',
-  'When presenting model configuration to the user, use the actual modelId returned by the tool.',
-  'If modelId is empty, say the task follows the selected API profile default model instead of inventing tier names.',
+  'Scheduled tasks no longer own an independent model or API profile configuration; they reuse the currently bound session runtime.',
+  'If a bound session is missing, the next run will create a fresh default session and rebind automatically.',
   'When creating a scheduled task from the current chat session, default to binding the task to the current session.',
   'Only set sessionBindingMode to new when the user explicitly asks for a separate, independent, or background session.',
   'If the user does not explicitly request a separate session, omit sessionBindingMode or use current instead of new.'
@@ -72,8 +72,7 @@ const UPDATE_FIELDS = [
   'name',
   'prompt',
   'cwd',
-  'apiProfileId',
-  'modelId',
+  'sessionBindingMode',
   'maxRuns',
   'resetCountOnEnable',
   'intervalAnchorMode',
@@ -101,7 +100,8 @@ const DISPLAY_I18N = {
     scheduleOnce: (time) => `单次 ${time}`,
     scheduleInterval: (minutes) => `每隔 ${minutes} 分钟`,
     summaryNextRun: (time) => `下次执行 ${time}`,
-    summaryModel: (label) => `模型 ${label}`,
+    summarySession: (sessionId) => `会话 ${sessionId}`,
+    summaryDetachedSession: '未绑定会话',
     summaryWorkingDirectory: (cwd) => `工作目录 ${cwd}`
   },
   'en-US': {
@@ -118,7 +118,8 @@ const DISPLAY_I18N = {
     scheduleOnce: (time) => `Once ${time}`,
     scheduleInterval: (minutes) => `Every ${minutes} minutes`,
     summaryNextRun: (time) => `Next run ${time}`,
-    summaryModel: (label) => `Model ${label}`,
+    summarySession: (sessionId) => `Session ${sessionId}`,
+    summaryDetachedSession: 'Detached session',
     summaryWorkingDirectory: (cwd) => `Working Directory ${cwd}`
   }
 }
@@ -144,10 +145,6 @@ function buildRequiredStringSchema(z, description) {
     .transform(value => String(value ?? '').trim())
     .refine(value => value.length > 0, { message: '不能为空' })
     .describe(description)
-}
-
-function normalizeModelId(modelId) {
-  return typeof modelId === 'string' ? modelId.trim() : ''
 }
 
 function parseClockTime(value) {
@@ -232,8 +229,7 @@ function toSerializableTask(task = {}, locale = 'zh-CN') {
     lastError: task.lastError || null,
     failureCount: task.failureCount ?? 0,
     runCount: task.runCount ?? 0,
-    apiProfileId: task.apiProfileId || null,
-    modelId: normalizeModelId(task.modelId) || null,
+    sessionBindingMode: task.sessionBindingMode === 'current' ? 'current' : 'new',
     maxRuns: task.maxRuns ?? null,
     resetCountOnEnable: !!task.resetCountOnEnable,
     intervalAnchorMode: task.intervalAnchorMode || 'started_at',
@@ -315,11 +311,7 @@ function buildTaskSummary(task, locale = 'zh-CN') {
     dict.summaryNextRun(nextRunAt)
   ]
 
-  const modelId = normalizeModelId(task.modelId)
-  if (modelId) {
-    summaryParts.push(dict.summaryModel(modelId))
-  }
-
+  summaryParts.push(task.sessionId ? dict.summarySession(task.sessionId) : dict.summaryDetachedSession)
   summaryParts.push(dict.summaryWorkingDirectory(task.cwd || dict.defaultWorkspace))
 
   return summaryParts.join(' | ')
@@ -517,8 +509,7 @@ async function buildDesktopCapabilityQueryOptions({ scheduledTaskService, weixin
     name: z.string().min(1).optional().describe('任务名称'),
     prompt: z.string().min(1).optional().describe('任务执行时发送给智能体的提示词'),
     cwd: buildClearableStringSchema(z, '执行工作目录；传 null 或空字符串表示清空并回退到默认工作目录'),
-    apiProfileId: buildClearableStringSchema(z, 'API Profile ID；传 null 或空字符串表示清空并回退到默认 API Profile'),
-    modelId: buildRequiredStringSchema(z, '真实模型 ID。必须提供明确的模型 ID，不能留空。'),
+    sessionBindingMode: z.enum(SESSION_BINDING_MODES).optional().describe('会话绑定方式：current=绑定当前聊天会话，new=首次运行时新建独立会话。省略时默认 current；只有用户明确要求独立/后台/新会话时才使用 new'),
     maxRuns: buildPositiveIntegerLikeSchema(z, '任务生命周期内的累计执行次数上限，可为 null；这不是单次会话的 maxTurns', { nullable: true }),
     resetCountOnEnable: z.boolean().optional().describe('从停用重新启用时，是否重置已执行次数和运行态'),
     intervalAnchorMode: z.enum(INTERVAL_ANCHOR_MODES).optional().describe('间隔调度推进基准：按开始时间或结束时间'),
@@ -593,13 +584,11 @@ async function buildDesktopCapabilityQueryOptions({ scheduledTaskService, weixin
         monthlyDay: buildPositiveIntegerLikeSchema(z, '每月执行日，1-31，仅 monthly + day_of_month 使用', { max: 31 }),
         firstRunAt: buildExecutionTimeSchema(z, '执行时间戳（毫秒）或可解析的日期时间字符串。interval 用作固定相位基准；once 为唯一触发时间；daily/weekly/monthly/workdays 仅使用其中的时分秒'),
         cwd: buildClearableStringSchema(z, '执行工作目录；传 null 或空字符串表示清空并回退到默认工作目录'),
-        apiProfileId: buildClearableStringSchema(z, 'API Profile ID；传 null 或空字符串表示清空并回退到默认 API Profile'),
-        modelId: buildRequiredStringSchema(z, '真实模型 ID。必须提供明确的模型 ID，不能留空。'),
         maxRuns: buildPositiveIntegerLikeSchema(z, '任务生命周期内的累计执行次数上限，可为 null；这不是单次会话的 maxTurns', { nullable: true }),
         resetCountOnEnable: z.boolean().optional().describe('从停用重新启用时，是否重置已执行次数和运行态'),
         intervalAnchorMode: z.enum(INTERVAL_ANCHOR_MODES).optional().describe('间隔调度推进基准：按开始时间或结束时间'),
         enabled: z.boolean().optional().describe('是否启用'),
-        sessionBindingMode: z.enum(SESSION_BINDING_MODES).optional().describe('会话绑定方式：current=绑定当前聊天会话，new=运行时新建独立会话。省略时默认 current；只有用户明确要求独立/后台/新会话时才使用 new')
+        sessionBindingMode: z.enum(SESSION_BINDING_MODES).optional().describe('会话绑定方式：current=绑定当前聊天会话，new=首次运行时新建独立会话。省略时默认 current；只有用户明确要求独立/后台/新会话时才使用 new')
       },
       async (args) => {
         const createArgs = { ...args }
