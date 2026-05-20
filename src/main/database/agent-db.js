@@ -15,6 +15,15 @@ function normalizeModelId(modelId) {
   return normalized || null
 }
 
+function serializeJsonObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return null
+  }
+}
+
 function withAgentOperations(BaseClass) {
   return class extends BaseClass {
     // ========================================
@@ -59,7 +68,7 @@ function withAgentOperations(BaseClass) {
         taskId || null,
         ownerClientId || 'host-ui',
         clientType || 'host',
-        clientMeta ? JSON.stringify(clientMeta) : null,
+        serializeJsonObject(clientMeta),
         now,
         now
       )
@@ -137,7 +146,11 @@ function withAgentOperations(BaseClass) {
         // 将 camelCase 转换为 snake_case
         const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase()
         fields.push(`${snakeKey} = ?`)
-        values.push(value)
+        if (key === 'clientMeta' || key === 'lastBootstrappedRuntime') {
+          values.push(serializeJsonObject(value))
+        } else {
+          values.push(value)
+        }
       }
 
       fields.push('updated_at = ?')
