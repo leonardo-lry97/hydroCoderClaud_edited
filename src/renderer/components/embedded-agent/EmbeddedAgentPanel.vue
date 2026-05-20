@@ -45,6 +45,17 @@
                   </div>
                 </div>
                 <button
+                  v-if="boundScheduledTaskId"
+                  type="button"
+                  class="embedded-agent-icon-btn"
+                  :disabled="!sessionId"
+                  title="绑定定时任务"
+                  aria-label="绑定定时任务"
+                  @click="toggleScheduledTaskModal"
+                >
+                  <Icon name="clock" :size="17" :stroke-width="1.8" />
+                </button>
+                <button
                   type="button"
                   class="embedded-agent-icon-btn"
                   :class="{ active: showCapabilityPanel }"
@@ -134,6 +145,20 @@
               @insert-path="handleInsertPath"
             />
           </div>
+          <n-modal
+            v-model:show="showScheduledTaskModal"
+            @after-leave="showScheduledTaskModal = false"
+          >
+            <div class="scheduled-task-manager-modal embedded-scheduled-task-shell">
+              <ScheduledTaskDetailPanel
+                v-if="showScheduledTaskModal && boundScheduledTaskId"
+                :task-id="boundScheduledTaskId"
+                @updated="handleScheduledTaskUpdated"
+                @deleted="handleScheduledTaskDeleted"
+                @close="showScheduledTaskModal = false"
+              />
+            </div>
+          </n-modal>
         </div>
       </n-dialog-provider>
     </n-message-provider>
@@ -142,9 +167,11 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { NModal } from 'naive-ui'
 import { useTheme } from '@composables/useTheme'
 import { useNaiveLocale } from '@composables/useNaiveLocale'
 import AgentChatTab from '@/pages/main/components/AgentChatTab.vue'
+import ScheduledTaskDetailPanel from '@/pages/main/components/agent/ScheduledTaskDetailPanel.vue'
 import WorkspaceFilePanel from '@components/workspace-files/WorkspaceFilePanel.vue'
 import Icon from '@components/icons/Icon.vue'
 import { useEmbeddedAgentFiles } from '@composables/useEmbeddedAgentFiles'
@@ -206,9 +233,12 @@ const currentModelId = ref(props.modelId || null)
 const switchingProfile = ref(false)
 const showCapabilityPanel = ref(false)
 const showContextTip = ref(false)
+const showScheduledTaskModal = ref(false)
 const contextTipPosition = ref({ top: 0, right: 24 })
 const activeTab = ref('chat')
 const capabilityError = ref('')
+const boundScheduledTaskId = ref(null)
+let cleanupScheduledTaskChanged = null
 const capabilitySnapshot = ref({
   toolNames: [],
   mcpNames: [],
@@ -377,6 +407,8 @@ const syncSessionProfileSnapshot = async () => {
   try {
     const latestSession = await agentApi.value.getAgentSession(sessionId.value)
     if (latestSession) {
+      const taskId = Number(latestSession.taskId)
+      boundScheduledTaskId.value = Number.isInteger(taskId) && taskId > 0 ? taskId : null
       currentApiProfileId.value = latestSession.apiProfileId !== undefined
         ? (latestSession.apiProfileId || null)
         : currentApiProfileId.value
@@ -386,6 +418,13 @@ const syncSessionProfileSnapshot = async () => {
     }
   } catch (err) {
     console.warn('[EmbeddedAgentPanel] Failed to sync session profile snapshot:', err)
+  }
+}
+
+const refreshBoundScheduledTask = async () => {
+  await syncSessionProfileSnapshot()
+  if (!boundScheduledTaskId.value) {
+    showScheduledTaskModal.value = false
   }
 }
 
@@ -463,8 +502,19 @@ const refreshCapabilitySnapshot = async () => {
 const toggleCapabilityPanel = async () => {
   showCapabilityPanel.value = !showCapabilityPanel.value
   showContextTip.value = false
+  showScheduledTaskModal.value = false
   if (showCapabilityPanel.value) {
     await refreshCapabilitySnapshot()
+  }
+}
+
+const toggleScheduledTaskModal = async () => {
+  if (!boundScheduledTaskId.value) return
+  showCapabilityPanel.value = false
+  showContextTip.value = false
+  showScheduledTaskModal.value = !showScheduledTaskModal.value
+  if (showScheduledTaskModal.value) {
+    await refreshBoundScheduledTask()
   }
 }
 
@@ -584,6 +634,7 @@ const initializeSession = async () => {
       const activeSession = await reopenSessionIfNeeded(restorableSession)
       if (activeSession) {
         applySession(activeSession)
+        await syncSessionProfileSnapshot()
         await refreshCapabilitySnapshot()
         return
       }
@@ -592,6 +643,7 @@ const initializeSession = async () => {
     const session = await createNewSession()
     if (session) {
       applySession(session)
+      await syncSessionProfileSnapshot()
       await refreshCapabilitySnapshot()
     }
   } catch (err) {
@@ -605,6 +657,7 @@ const handleContextChanged = () => {
 
 const handleReady = () => {
   readContext()
+  void syncSessionProfileSnapshot()
   void refreshCapabilitySnapshot()
 }
 
@@ -626,6 +679,7 @@ const handleClearSession = async () => {
       return
     }
     applySession(session)
+    await syncSessionProfileSnapshot()
     await refreshCapabilitySnapshot()
     await persistAppPreferences({
       apiProfileId: currentApiProfileId.value,
@@ -636,8 +690,22 @@ const handleClearSession = async () => {
   }
 }
 
+const handleScheduledTaskUpdated = async () => {
+  await refreshBoundScheduledTask()
+}
+
+const handleScheduledTaskDeleted = async () => {
+  await refreshBoundScheduledTask()
+}
+
 watch(sessionId, (nextSessionId) => {
   embeddedFiles.setSessionId(nextSessionId)
+  if (!nextSessionId) {
+    boundScheduledTaskId.value = null
+    showScheduledTaskModal.value = false
+    return
+  }
+  void syncSessionProfileSnapshot()
 }, { immediate: true })
 
 onMounted(async () => {
@@ -647,11 +715,17 @@ onMounted(async () => {
   await loadAppPreferences()
   await loadApiProfiles()
   window.addEventListener('embedded-agent:context-changed', handleContextChanged)
+  if (window.electronAPI?.onScheduledTaskChanged) {
+    cleanupScheduledTaskChanged = window.electronAPI.onScheduledTaskChanged(async () => {
+      await refreshBoundScheduledTask()
+    })
+  }
   await initializeSession()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('embedded-agent:context-changed', handleContextChanged)
+  cleanupScheduledTaskChanged?.()
   agentApi.value?.dispose?.()
 })
 </script>
@@ -827,6 +901,18 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-color);
   border-radius: 14px;
   background: var(--bg-color-secondary);
+}
+
+.embedded-scheduled-task-shell {
+  width: min(1180px, calc(100vw - 48px));
+  max-width: min(1180px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  margin: 24px auto;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
 }
 
 .embedded-capability-summary {
