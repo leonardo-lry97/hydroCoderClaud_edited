@@ -460,12 +460,10 @@ const refreshCapabilitySnapshot = async () => {
   try {
     const session = await agentApi.value.getAgentSession?.(sessionId.value)
     let initResult = null
-    let mcpStatus = null
     let hint = ''
 
     try {
       initResult = await agentApi.value.getAgentInitResult?.(sessionId.value)
-      mcpStatus = await agentApi.value.getAgentMcpServerStatus?.(sessionId.value).catch(() => null)
     } catch (err) {
       const message = err?.message || String(err)
       if (message.includes('No active streaming session')) {
@@ -487,7 +485,7 @@ const refreshCapabilitySnapshot = async () => {
 
     capabilitySnapshot.value = {
       toolNames: extractInitToolNames(initResult),
-      mcpNames: extractMcpNames(mcpStatus),
+      mcpNames: [],
       injectedMcpNames: Array.isArray(querySnapshot?.mcpServerNames) ? querySnapshot.mcpServerNames : [],
       injectedToolNames: Array.isArray(querySnapshot?.allowedTools) ? querySnapshot.allowedTools : [],
       contextSummary: contextSnapshot.value?.summary || contextSnapshot.value?.title || '',
@@ -499,12 +497,26 @@ const refreshCapabilitySnapshot = async () => {
   }
 }
 
+const refreshMcpStatus = async () => {
+  if (!sessionId.value || !agentApi.value) return
+  try {
+    const mcpStatus = await agentApi.value.getAgentMcpServerStatus?.(sessionId.value).catch(() => null)
+    const current = capabilitySnapshot.value
+    if (current) {
+      capabilitySnapshot.value = { ...current, mcpNames: extractMcpNames(mcpStatus) }
+    }
+  } catch (_) {
+    // MCP 状态获取失败不影响面板
+  }
+}
+
 const toggleCapabilityPanel = async () => {
   showCapabilityPanel.value = !showCapabilityPanel.value
   showContextTip.value = false
   showScheduledTaskModal.value = false
   if (showCapabilityPanel.value) {
     await refreshCapabilitySnapshot()
+    await refreshMcpStatus()
   }
 }
 
