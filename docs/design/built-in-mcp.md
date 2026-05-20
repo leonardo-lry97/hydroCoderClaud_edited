@@ -11,10 +11,11 @@
 - 当前内置 MCP 不是能力市场里的普通 MCP，也不是写入用户 MCP 配置的外部 server。
 - 它是在 Agent 会话创建 `queryOptions` 时动态注入的 SDK MCP server。
 - 现有 server 名称是 `hydrodesktop`，暴露桌面端定时任务工具和微信通知工具。
-- 定时任务管理工具只注入普通手动聊天会话，不注入 `source === 'scheduled'` 的定时任务执行会话，避免任务执行过程中再递归管理任务。
+- 定时任务管理工具默认会注入普通手动聊天会话；对于 `source === 'scheduled'` 的会话，是否继续注入由全局开关 `settings.agent.allowScheduledSessionScheduleTools` 决定，默认开启。
 - 微信通知工具会注入定时任务执行会话，用于让定时任务主动把结果推送给已绑定的微信目标。
 - 当前通过会话级 `allowedTools` 和 `disallowedTools` 做短期工具路由：允许 `mcp__hydrodesktop__schedule_*`，禁用 Claude Code 内建 `Cron*` 工具，避免用户意图被路由到错误调度系统。
-- 测试时如果是在“由定时任务自动创建/恢复”的会话里继续聊天，该会话仍属于 `source === 'scheduled'`，因此不会注入 `schedule_*` 工具；要验证聊天里创建/管理 Hydro Desktop 定时任务，必须使用普通手动会话。
+- `source === 'scheduled'` 当前不再单独屏蔽普通身份 prompt；它只影响定时任务工具是否继续注入。
+- 测试时如果是在“由定时任务自动创建/恢复”的会话里继续聊天，是否能看到 `schedule_*` 工具取决于上述全局开关。
 
 ---
 
@@ -66,7 +67,7 @@ AgentSessionManager.sendMessage()
 | `schedule_run_now` | 立即执行一次定时任务 |
 | `schedule_delete` | 删除已有定时任务 |
 
-工具返回值统一包装为 MCP text content，文本内容是格式化后的 JSON。任务序列化结果包含 `id`、`name`、`prompt`、`enabled`、调度配置、`nextRunAt`、`lastRunAt`、`lastError`、`failureCount`、`modelId`、`cwd` 和本地化 `summary` 等字段。
+工具返回值统一包装为 MCP text content，文本内容是格式化后的 JSON。任务序列化结果包含 `id`、`name`、`prompt`、`enabled`、调度配置、`nextRunAt`、`lastRunAt`、`lastError`、`failureCount`、`runtimeState`、`sessionBindingMode`、`cwd` 和本地化 `summary` 等字段。
 
 MCP 公共输入中的调度时间统一使用 `firstRunAt`。`dailyTime` 仍只保留在服务层 / 存储层作为历史兼容字段，不属于对外 schema，也不建议由外部调用方传入。
 
@@ -78,6 +79,10 @@ MCP 公共输入中的调度时间统一使用 `firstRunAt`。`dailyTime` 仍只
 - Hydro Desktop 当前刻意不在定时任务 UI、MCP schema、任务草案里暴露 `maxTurns`，避免把“执行次数”和“单次轮次”混为一谈。
 - 如果后续需要防止单次任务运行过长，应优先用系统级兜底或会话级底层限制处理，而不是重新把 `maxTurns` 暴露为定时任务配置项。
 - `interval` 类型的下次触发时间以 `firstRunAt + N * intervalMinutes` 的固定槽位推进；启用、恢复或重置计数后，仍回到同一相位基准重新计算最近槽位，而不是以“重新启用时刻”作为新起点。
+- 定时任务不再维护独立 `apiProfileId` / `modelId`；执行时统一复用绑定会话的当前 runtime。
+- 普通聊天创建的 `sessionBindingMode=current` 任务仍静态绑定创建时的具体会话。
+- embedded app 创建的 `sessionBindingMode=current` 任务是“跟随该 app 当前会话”，不是静态回用旧会话。
+- embedded current 绑定任务在目标 app 当前没有会话时会记一次 `skipped`，不会回落到新建普通 scheduled session。
 
 `hydrodesktop` 还暴露 2 个微信通知工具：
 
@@ -116,14 +121,14 @@ MCP 公共输入中的调度时间统一使用 `firstRunAt`。`dailyTime` 仍只
 
 - 查询任务前必须实际调用相关工具，不能凭空声称没有任务或没有历史。
 - 修改或删除任务前，如果用户没有提供明确 `taskId`，应先 `schedule_list` 定位目标。
-- 展示模型配置时使用工具返回的真实 `modelId`；如果为空，说明任务跟随 API Profile 默认模型。
+- 不要把定时任务描述成“自带独立模型配置”；当前真实语义是跟随绑定会话运行。
 
 ---
 
 ## 当前边界
 
 - 这套机制目前不是通用内置 MCP registry，逻辑集中在 `desktop-capability-query-options.js`。
-- 手动会话的 `allowedTools` 会合并定时任务工具和微信通知工具；定时任务会话只注入微信通知工具且不设置 `allowedTools`，避免限制定时任务原本可用工具。
+- 手动会话的 `allowedTools` 会合并定时任务工具和微信通知工具；定时任务会话在开关开启时也可继续注入定时任务工具，关闭时则只保留微信通知能力。
 - `disallowedTools` 对 Claude Code 内建 `Cron*` 是硬编码短期策略。远期需要更细粒度地区分目标域，而不是一刀切禁用。
 - 内置 MCP 工具与 UI IPC 共享底层 `ScheduledTaskService`，但不是同一入口；行为一致性主要靠服务层和测试保障。
 - GitNexus 当前没有识别出这些工具为标准 MCP tool nodes，理解链路时需要直接看源码和测试。
@@ -198,10 +203,14 @@ MCP 公共输入中的调度时间统一使用 `firstRunAt`。`dailyTime` 仍只
 - `tests/main/desktop-capability-query-options.test.js`
   - 验证 `hydrodesktop` server 和 9 个工具被暴露
   - 验证工具 payload 序列化、任务定位、运行记录、立即执行和删除委托
-  - 验证 `allowedTools` 名称与系统提示关键内容
+  - 验证 `allowedTools` 名称、当前会话默认绑定语义、embedded current-session 跟随语义，以及 scheduled 会话开关控制
 - `tests/main/agent-interactions.test.js`
   - 验证普通手动会话会注入定时任务 MCP 工具
-  - 验证 `source === 'scheduled'` 的会话不会注入这些工具
+  - 验证普通身份 prompt 注入与会话级 queryOptions 合并
+- `tests/main/scheduled-task-service.test.js`
+  - 验证任务不再持有独立模型/API 配置
+  - 验证 embedded current-session 任务在 `/clear` / 新建会话后跟随新的当前会话
+  - 验证 embedded app 无当前会话时任务会 `skipped`
 
 ---
 

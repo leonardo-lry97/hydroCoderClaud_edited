@@ -207,6 +207,12 @@ Agent / 工具调用链路在 Windows 文件路径上仍有历史兼容问题，
 
 当前聊天态已通过会话级 `disallowedTools` 避免 Claude Code 内建 `Cron*` 工具与 `hydrodesktop` 自身定时任务管理能力冲突，但这只是短期隔离策略。
 
+当前现状补充：
+
+- `hydrodesktop` 定时任务本身已改为跟随绑定会话 runtime，不再维护任务级模型配置
+- 对 `source === 'scheduled'` 会话，定时任务工具是否继续注入由 `allowScheduledSessionScheduleTools` 控制，默认开启
+- 普通身份 prompt 不再因为 `scheduled` 来源被单独屏蔽
+
 远期需要补上更细粒度的能力路由与冲突消解，避免“一刀切”禁用内建 Cron 对其他潜在场景造成副作用：
 
 - 区分 Claude Code 内建 `/loop` / `Cron*` 与 `hydrodesktop` 本地定时任务的目标域与数据域

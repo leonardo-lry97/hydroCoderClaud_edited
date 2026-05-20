@@ -389,7 +389,15 @@ agent
 
 - 上下文快照保存在主进程 `EmbeddedAppRuntimeManager`
 - 命令回调也注册在 `EmbeddedAppRuntimeManager`
+- 当前 embedded 会话指针 `currentSessionId` 也保存在同一个主进程运行态对象中
 - Agent 实际看到的是会话级内置 MCP 工具，不直接接触 renderer 对象
+
+这里要区分两层职责：
+
+- `embeddedapp` MCP 负责暴露当前 app 的上下文与受控动作
+- “哪个 session 算这个 app 的当前会话”由宿主运行态维护，不是 `embeddedapp` MCP 自己的协议语义
+
+因此 embedded 定时任务的 current 绑定跟随，属于宿主运行态行为，不属于 `context_get` / `command_execute` 的工具契约本身。
 
 ## 9. 扩展约定
 

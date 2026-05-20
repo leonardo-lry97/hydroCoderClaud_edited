@@ -285,11 +285,20 @@ embedded BrowserWindow
 
 - embedded client 通过 `window.hydroAgent.connect()` 建立 client 身份
 - 主进程为每个 app 分配独立工作目录：`{userData}/embedded-apps/{appId}/workspace`
-- `EmbeddedAppRuntimeManager` 按 `appId` 保存当前上下文快照与命令执行桥
+- `EmbeddedAppRuntimeManager` 按 `appId` 保存当前上下文快照、命令执行桥，以及当前 embedded 会话指针 `currentSessionId`
 - `buildEmbeddedAppCapabilityQueryOptions()` 会在 embedded 会话发送消息前注入：
   - 通用 `embeddedapp` MCP 工具：`context_get`、`command_execute`
   - 针对 `hydrology-workbench` 的专属工具与 prompt 约束
 - 会话 owner 优先路由回当前 embedded client，避免多个同 app 窗口串命令
+- `hydro-agent:createSession`、`reopen`、`clearAndRecreate`、`setCurrentSession` 都会同步刷新该 app 的 `currentSessionId`
+
+这条 `currentSessionId` 运行态指针现在也是定时任务与 embedded app 联动的关键状态：
+
+- 普通聊天里创建、且 `sessionBindingMode=current` 的定时任务，仍然是静态绑定具体 `sessionId`
+- embedded app 里创建、且 `sessionBindingMode=current` 的定时任务，不再等价于“永远绑定创建当时那个 sessionId”
+- 真实语义是“后续运行时跟随该 app 当前会话”
+- 因此 `/clear` 或 embedded 面板里的“新建会话”会让后续任务执行自动跟到新会话
+- 如果该 app 当前没有可跟随的会话，任务会记一次 `skipped`，而不是偷偷回落到普通后台 scheduled session
 
 ### 水文工作台专属能力注入
 
@@ -359,6 +368,16 @@ new ScheduledTaskService(configManager, agentSessionManager)
   → _executeTask() // 复用 AgentSessionManager 执行
 ```
 
+当前执行绑定语义已经和早期版本不同：
+
+- 定时任务不再持有独立 `apiProfileId` / `modelId`
+- 任务执行统一复用“绑定会话当前 runtime”
+- `sessionBindingMode=new` 仍表示使用独立 scheduled 会话
+- 普通聊天创建的 `sessionBindingMode=current` 任务，仍静态绑定具体 `sessionId`
+- embedded app 创建的 `sessionBindingMode=current` 任务，运行时通过 `runtimeState` 里的 embedded 元信息回查 `appId -> currentSessionId`
+- 如果普通/current 绑定会话丢失，执行时会按旧路径重建一个新的默认 scheduled 会话
+- 只有 embedded current 绑定任务在“app 当前无会话”时会 `skip`，这是刻意保留的差异语义
+
 ### 支持的调度类型
 
 - `interval`
@@ -386,6 +405,12 @@ new ScheduledTaskService(configManager, agentSessionManager)
 - `scheduled-task:listRuns`
 
 状态变更后主进程会推送 `scheduled-task:changed`，供主窗口和设置工作台刷新。
+
+当前还会维护以下运行态一致性：
+
+- 删除某个共用 session 的任务时，只会清理该任务自己的 active run，不会把同 session 的其他任务运行态一并清掉
+- embedded app current 绑定任务在 `/clear`、新建会话后不会继续回用旧 session 快照
+- 任务运行历史会明确记录 `success` / `failed` / `skipped`
 
 ### 系统恢复处理
 
@@ -630,6 +655,8 @@ function setupAgentHandlers(ipcMain, agentSessionManager) {
   }
 }
 ```
+
+这里保存的是“内嵌 app 默认偏好”，不是定时任务自己的模型快照。当前 embedded 定时任务已经不再单独维护任务级 `apiProfileId` / `modelId`。
 
 ---
 

@@ -251,6 +251,9 @@ Notebook 的 `ChatPanel` 已复用 Agent 聊天核心能力：
 - `AgentChatTab` 继续复用聊天输入、工具栏、微信通知、模型切换、交互请求处理
 - `WorkspaceFilePanel` 继续复用文件树、预览、保存、插入路径等能力
 - 内嵌 app 只负责提供 `contextProvider` 与 `commandHandler`，不重写共享聊天 UI
+- embedded 面板负责把“当前会话”持续同步回主进程；这个 current 指针不是只在首次创建时写一次
+- `/clear` 在 embedded 语义里不是“清空消息列表”，而是“清空并重建会话”，因此后续 current 绑定定时任务会自动跟到新会话
+- 顶部 `+` 按钮与 `AgentChatTab` 内部 clear/recreate 路径都属于“切到新的当前会话”
 
 ### 水文工作台内嵌实现
 
@@ -262,6 +265,10 @@ Notebook 的 `ChatPanel` 已复用 Agent 聊天核心能力：
 4. `createEmbeddedAppRuntimeBridge(window.hydroAgent, { appId, getContext, commandHandler })` 负责：
    - 把当前业务上下文同步到主进程
    - 接收 Agent 发起的受控命令并回调页面逻辑
+5. `EmbeddedAgentPanel.vue` 负责：
+   - 复用最近 session 或创建新 session
+   - 在 `create/reopen/clear/new session` 后调用 `setCurrentAgentSession`
+   - 把该 app 的当前 session 指针持续同步给主进程运行态
 
 这套结构是后续内嵌 app 的推荐基线，不再建议为单个 app 单独复制聊天组件或文件树组件。
 
