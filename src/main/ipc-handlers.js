@@ -953,6 +953,7 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
           agentEventRouter.unregisterClient(currentId)
           embeddedSubscriptions.delete(sender.id)
         }
+        clearEmbeddedCurrentSessionIfMatches(normalizedClient.appId, normalizedClient.sessionId)
         if (embeddedAppRuntimeManager) {
           embeddedAppRuntimeManager.unregisterCommandClient(normalizedClient.appId, normalizedClient.clientId)
         }
@@ -978,6 +979,13 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
       embeddedAppRuntimeManager.setCurrentSession(appId, sessionId)
     }
 
+    const clearEmbeddedCurrentSessionIfMatches = (appId, sessionId) => {
+      if (!embeddedAppRuntimeManager || !appId) return
+      if (typeof embeddedAppRuntimeManager.clearCurrentSessionIfMatches === 'function') {
+        embeddedAppRuntimeManager.clearCurrentSessionIfMatches(appId, sessionId)
+      }
+    }
+
     ipcMain.handle('hydro-agent:connect', async (event, payload = {}) => {
       const client = registerEmbeddedSubscription(payload, event)
       return {
@@ -989,10 +997,15 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     })
 
     ipcMain.handle('hydro-agent:disconnect', async (event) => {
+      const normalizedClient = normalizeEmbeddedClient(null, event.sender)
       const subscriptionId = embeddedSubscriptions.get(event.sender.id)
       if (subscriptionId) {
         agentEventRouter.unregisterClient(subscriptionId)
         embeddedSubscriptions.delete(event.sender.id)
+      }
+      clearEmbeddedCurrentSessionIfMatches(normalizedClient.appId, normalizedClient.sessionId)
+      if (embeddedAppRuntimeManager) {
+        embeddedAppRuntimeManager.unregisterCommandClient(normalizedClient.appId, normalizedClient.clientId)
       }
       trustedWeixinWebContents.delete(event.sender)
       return { success: true }

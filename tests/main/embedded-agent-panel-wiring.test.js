@@ -74,6 +74,7 @@ describe('embedded agent panel wiring', () => {
     expect(source).toContain('chatRef.value?.insertText?.(`${path}\\n`)')
     expect(source).toContain('embeddedFiles.setSessionId(nextSessionId)')
     expect(source).toContain('setCurrentAgentSession')
+    expect(source).toContain('agentApi.value?.dispose?.()')
   })
 
   it('maps AgentChatTab agent API calls onto the embedded hydroAgent bridge', () => {
@@ -94,6 +95,7 @@ describe('embedded agent panel wiring', () => {
     expect(source).toContain('searchAgentFiles: ({ sessionId, keyword, showHidden }) =>')
     expect(source).toContain('openAgentFile: ({ sessionId, relativePath }) =>')
     expect(source).toContain('openAgentOutputDir: (sessionId) =>')
+    expect(source).toContain('hydroAgent.disconnect?.()')
   })
 
   it('reuses the shared workspace file panel through the embedded adapter', () => {

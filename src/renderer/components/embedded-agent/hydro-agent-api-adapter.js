@@ -111,6 +111,9 @@ export function createHydroAgentApiAdapter(hydroAgent) {
     dispose: () => {
       disposeHydroEvents?.()
       disposeHydroEvents = null
+      try {
+        hydroAgent.disconnect?.()
+      } catch {}
       callbacksByChannel.clear()
     }
   }

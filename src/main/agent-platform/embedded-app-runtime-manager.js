@@ -84,6 +84,24 @@ class EmbeddedAppRuntimeManager {
     return removed
   }
 
+  clearCurrentSessionIfMatches(appId, sessionId = null) {
+    const normalizedAppId = this._normalizeAppId(appId)
+    const appState = this.appStates.get(normalizedAppId)
+    if (!appState) return false
+
+    const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : ''
+    if (!normalizedSessionId) return false
+    if (appState.currentSessionId !== normalizedSessionId) return false
+
+    appState.currentSessionId = null
+
+    if (!appState.context && appState.commands.size === 0) {
+      this.appStates.delete(normalizedAppId)
+    }
+
+    return true
+  }
+
   async executeCommand(appId, command = null, payload = null, preferredClientId = null) {
     const normalizedAppId = this._normalizeAppId(appId)
     const appState = this.appStates.get(normalizedAppId)

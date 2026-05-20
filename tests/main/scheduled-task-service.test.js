@@ -1172,6 +1172,82 @@ describe('ScheduledTaskService', () => {
     }))
   })
 
+  it('does not keep following a stale embedded session after the current-session pointer is cleared', async () => {
+    const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
+    const currentTask = {
+      id: 163,
+      name: '跟随当前工作台会话',
+      prompt: '继续读取当前站点',
+      enabled: true,
+      scheduleType: 'interval',
+      intervalMinutes: 30,
+      firstRunAt: INTERVAL_FIRST_RUN_AT,
+      nextRunAt: 7100,
+      sessionBindingMode: 'current',
+      sessionId: 'embedded-session-old',
+      runCount: 0,
+      runtimeState: {
+        _scheduler: {
+          followEmbeddedCurrentSession: true,
+          embeddedAppId: 'hydrology-workbench'
+        }
+      }
+    }
+
+    const sessionDatabase = {
+      getAgentConversation: vi.fn((sessionId) => {
+        if (sessionId === 'embedded-session-old') {
+          return {
+            id: 1,
+            session_id: 'embedded-session-old',
+            client_type: 'embedded',
+            client_meta: JSON.stringify({ appId: 'hydrology-workbench' })
+          }
+        }
+        return null
+      }),
+      createScheduledTaskRun: vi.fn(),
+      updateScheduledTaskState: vi.fn()
+    }
+
+    const agentSessionManager = {
+      on: vi.fn(),
+      create: vi.fn(() => ({ id: 'should-not-create' })),
+      get: vi.fn(() => null),
+      reopen: vi.fn(() => {
+        throw new Error('should not reopen stale embedded session')
+      }),
+      embeddedAppRuntimeManager: {
+        getCurrentSession: vi.fn(() => null),
+        appStates: new Map()
+      }
+    }
+
+    const service = new ScheduledTaskService({}, agentSessionManager)
+    service.setSessionDatabase(sessionDatabase)
+    vi.spyOn(service, '_broadcastChange').mockImplementation(() => {})
+    vi.spyOn(service, '_hasConversationHistory').mockReturnValue(true)
+    vi.spyOn(service, '_computeNextRunAt').mockReturnValue(9100)
+    vi.spyOn(service, '_rearmScheduler').mockImplementation(() => {})
+
+    await service._executeTask(currentTask, 'scheduled')
+
+    expect(agentSessionManager.create).not.toHaveBeenCalled()
+    expect(agentSessionManager.reopen).not.toHaveBeenCalled()
+    expect(sessionDatabase.updateScheduledTaskState).toHaveBeenCalledWith(currentTask.id, {
+      lastScheduledAt: 7100,
+      lastError: 'Embedded app "hydrology-workbench" has no current session to follow',
+      nextRunAt: 9100
+    })
+    expect(sessionDatabase.createScheduledTaskRun).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: currentTask.id,
+      sessionId: null,
+      triggerReason: 'scheduled',
+      status: 'skipped',
+      errorMessage: 'Embedded app "hydrology-workbench" has no current session to follow'
+    }))
+  })
+
   it('keeps a session scheduled when detaching one task but another task is still bound to the same session', async () => {
     const { ScheduledTaskService } = await import('../../src/main/managers/scheduled-task-service.js')
     const liveSession = {

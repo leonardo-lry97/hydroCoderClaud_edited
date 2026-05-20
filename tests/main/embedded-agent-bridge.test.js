@@ -49,6 +49,7 @@ describe('embedded hydro agent bridge wiring', () => {
     expect(source).toContain('trustedWeixinWebContents.add(sender)')
     expect(source).toContain('trustedWeixinWebContents.delete(sender)')
     expect(source).toContain('trustedWeixinWebContents.delete(event.sender)')
+    expect(source).toContain('clearEmbeddedCurrentSessionIfMatches(normalizedClient.appId, normalizedClient.sessionId)')
     expect(source).toContain('isTrustedSender: (sender) => trustedWeixinWebContents.has(sender)')
     expect(source).toContain("ipcMain.handle('hydro-agent:listDir'")
     expect(source).toContain("ipcMain.handle('hydro-agent:searchFiles'")
@@ -59,6 +60,7 @@ describe('embedded hydro agent bridge wiring', () => {
     expect(source).toContain("path.join(app.getPath('userData'), 'embedded-apps', safeAppId, 'workspace')")
     expect(source).toContain('defaultCwd: client.defaultCwd')
     expect(source).toContain(': normalizedClient.defaultCwd')
+    expect(source).toContain('embeddedAppRuntimeManager.clearCurrentSessionIfMatches(appId, sessionId)')
   })
 
   it('prioritizes embedded hydrology workflow semantics over scheduled-task semantics in prompt guidance', () => {
