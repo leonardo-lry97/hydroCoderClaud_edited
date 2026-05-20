@@ -12,8 +12,8 @@
 > - `src/renderer/pages/hydrology-workbench/`
 > 关联文档：
 > - [内嵌 App 开发 SOP](./embedded-app-development-sop.md)
-> - [主进程设计](./main-process.md)
-> - [渲染进程设计](./renderer.md)
+> - [主进程设计](../main-process.md)
+> - [渲染进程设计](../renderer.md)
 
 ## 1. 文档目标
 

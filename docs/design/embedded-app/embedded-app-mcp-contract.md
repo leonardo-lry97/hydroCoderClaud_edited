@@ -456,4 +456,4 @@ agent
 
 `hydrology` server 的工具清单与实现详见：
 - `src/main/managers/hydrology-capability-query-options.js`
-- `docs/design/hydrology-embedded-agent-closure-refactor-plan.md`
+- `docs/design/hydrology-workbench/hydrology-embedded-agent-closure-refactor-plan.md`

@@ -1,9 +1,9 @@
 # Hydro Agent Platform 实施任务拆解
 
-> 状态：执行规划  
+> 状态：执行规划
 > 关联文档：  
-> - `docs/design/agent-platform-technical-design.md`  
-> - `docs/design/hydro-agent-app-dev-skill-design.md`
+> - `docs/design/standalone-app/agent-platform-technical-design.md`
+> - `docs/design/standalone-app/hydro-agent-app-dev-skill-design.md`
 
 ## 1. 文档目标
 
@@ -576,7 +576,7 @@
 
 基于：
 
-- `docs/design/hydro-agent-app-dev-skill-design.md`
+- `docs/design/standalone-app/hydro-agent-app-dev-skill-design.md`
 
 产出位置建议：
 
@@ -722,4 +722,3 @@
 5. 最后落 skill 和用户文档
 
 这是对现有代码侵入最小、可验证性最强、回滚最简单的路线。
-

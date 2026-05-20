@@ -117,6 +117,7 @@ npm run rebuild:sqlite
 - `docs/INSTALL.md` / `docs/INSTALL_EN.md`：安装指南
 - `docs/design/main-process.md`：主进程设计
 - `docs/design/renderer.md`：渲染层设计
+- `docs/design/README.md`：设计文档分类索引
 - `docs/design/integrations.md`：集成能力与钉钉说明
 
 ## GitNexus 工作流（强约束）
@@ -141,7 +142,7 @@ npm run rebuild:sqlite
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **cc-desktop** (4207 symbols, 10777 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **cc-desktop** (4862 symbols, 12412 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

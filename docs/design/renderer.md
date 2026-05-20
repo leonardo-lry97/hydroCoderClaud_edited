@@ -46,7 +46,7 @@
 | embedded-app-demo | 内嵌 app / embedded agent 宿主能力演示 | `embedded-app:list` / `embedded-app:open` / `window:openEmbeddedAppDemo` |
 | hydrology-workbench | 水文站工作台，内嵌右侧 Agent 与工作目录 | `embedded-app:list` / `embedded-app:open` |
 
-内嵌 app 也运行在独立 `BrowserWindow` 中，但与 notebook、settings 这一类管理窗口不同，它们遵循统一的内嵌 app 注册表、运行态桥接和 Agent 能力注入约定。详细标准见 [内嵌 App 设计与实现标准](./embedded-app-development-standard.md)。
+内嵌 app 也运行在独立 `BrowserWindow` 中，但与 notebook、settings 这一类管理窗口不同，它们遵循统一的内嵌 app 注册表、运行态桥接和 Agent 能力注入约定。详细标准见 [内嵌 App 设计与实现标准](./embedded-app/embedded-app-development-standard.md)。
 
 > 完整组件列表与行数统计见 → [code-index/renderer.md](../code-index/renderer.md)
 

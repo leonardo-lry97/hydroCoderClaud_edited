@@ -1,9 +1,9 @@
 # 水文站点数据检查工作台数据模型与后端分层设计
 
-> 状态：设计草案  
-> 关联需求：`docs/design/hydrology-station-data-workbench-requirements.md`  
-> 关联主设计：`docs/design/hydrology-station-data-workbench-design.md`  
-> 关联平台设计：`docs/design/agent-platform-technical-design.md`
+> 状态：设计草案
+> 关联需求：`docs/design/hydrology-workbench/hydrology-station-data-workbench-requirements.md`
+> 关联主设计：`docs/design/hydrology-workbench/hydrology-station-data-workbench-design.md`
+> 关联平台设计：`docs/design/standalone-app/agent-platform-technical-design.md`
 
 ## 1. 文档目标
 

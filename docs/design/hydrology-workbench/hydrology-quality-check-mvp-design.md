@@ -3,9 +3,9 @@
 > 状态：待实现  
 > 适用范围：水文站工作台首版“每小时质量检查”闭环  
 > 关联文档：
-> - `docs/design/hydrology-station-data-workbench-design.md`
-> - `docs/design/hydrology-station-data-workbench-rule-engine-and-algorithm-boundary-design.md`
-> - `docs/design/hydrology-governance-data-model-field-spec.md`
+> - `docs/design/hydrology-workbench/hydrology-station-data-workbench-design.md`
+> - `docs/design/hydrology-workbench/hydrology-station-data-workbench-rule-engine-and-algorithm-boundary-design.md`
+> - `docs/design/hydrology-workbench/hydrology-governance-data-model-field-spec.md`
 
 ## 1. 目标
 

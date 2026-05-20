@@ -4,11 +4,11 @@
 > 适用范围：Hydro Desktop Agent Platform  
 > 关联阶段：平台路线中的“开放接口层”，不是水文工作台业务分期  
 > 关联文档：
-> - `docs/design/agent-platform-technical-design.md`
-> - `docs/design/agent-platform-implementation-breakdown.md`
-> - `docs/design/hydro-agent-app-dev-skill-design.md`
+> - `docs/design/standalone-app/agent-platform-technical-design.md`
+> - `docs/design/standalone-app/agent-platform-implementation-breakdown.md`
+> - `docs/design/standalone-app/hydro-agent-app-dev-skill-design.md`
 > - `docs/code-index/agent-platform-baseline.md`
-> - `docs/design/phase0-baseline-checklist-and-report.md`
+> - `docs/design/standalone-app/phase0-baseline-checklist-and-report.md`
 
 ## 1. 文档目标
 

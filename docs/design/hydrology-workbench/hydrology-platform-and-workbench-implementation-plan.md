@@ -1,16 +1,16 @@
 # Hydro Agent Platform 与水文工作台正式实施计划
 
-> 状态：实施规划草案  
-> 适用范围：Hydro Desktop 平台升级 + 水文站点数据检查工作台试点落地  
+> 状态：实施规划草案
+> 适用范围：Hydro Desktop 平台升级 + 水文站点数据检查工作台试点落地
 > 关联文档：  
-> - `docs/design/agent-platform-technical-design.md`  
-> - `docs/design/agent-platform-implementation-breakdown.md`  
-> - `docs/design/agent-platform-phase2-open-interface-implementation-plan.md`
-> - `docs/design/desktop-app-extension-platform-design.md`  
-> - `docs/design/hydrology-station-data-workbench-design.md`  
-> - `docs/design/hydrology-station-data-workbench-data-model-and-backend-design.md`  
-> - `docs/design/hydrology-station-data-workbench-rule-engine-and-algorithm-boundary-design.md`  
-> - `docs/design/hydrology-station-data-workbench-page-and-interaction-design.md`
+> - `docs/design/standalone-app/agent-platform-technical-design.md`
+> - `docs/design/standalone-app/agent-platform-implementation-breakdown.md`
+> - `docs/design/standalone-app/agent-platform-phase2-open-interface-implementation-plan.md`
+> - `docs/design/standalone-app/desktop-app-extension-platform-design.md`
+> - `docs/design/hydrology-workbench/hydrology-station-data-workbench-design.md`
+> - `docs/design/hydrology-workbench/hydrology-station-data-workbench-data-model-and-backend-design.md`
+> - `docs/design/hydrology-workbench/hydrology-station-data-workbench-rule-engine-and-algorithm-boundary-design.md`
+> - `docs/design/hydrology-workbench/hydrology-station-data-workbench-page-and-interaction-design.md`
 
 ## 1. 文档目标
 

@@ -1,8 +1,8 @@
 # 水文站点数据检查工作台设计文档
 
-> 状态：设计草案  
-> 关联需求：`docs/design/hydrology-station-data-workbench-requirements.md`  
-> 关联平台设计：`docs/design/agent-platform-technical-design.md`  
+> 状态：设计草案
+> 关联需求：`docs/design/hydrology-workbench/hydrology-station-data-workbench-requirements.md`
+> 关联平台设计：`docs/design/standalone-app/agent-platform-technical-design.md`
 > 产品形态：Hydro Desktop 内嵌独立业务应用
 
 ## 1. 文档目标

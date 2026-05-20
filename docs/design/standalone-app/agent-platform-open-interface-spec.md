@@ -593,4 +593,4 @@ x-hydro-client-meta: {"entry":"cli","version":"0.1.0"}
 
 鉴权与权限模型见：
 
-- `docs/design/agent-platform-auth-permission-model.md`
+- `docs/design/standalone-app/agent-platform-auth-permission-model.md`

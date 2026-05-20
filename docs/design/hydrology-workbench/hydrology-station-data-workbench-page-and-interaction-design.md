@@ -1,10 +1,10 @@
 # 水文站点数据检查工作台页面信息架构与交互设计
 
 > 状态：设计草案  
-> 关联需求：`docs/design/hydrology-station-data-workbench-requirements.md`  
-> 关联主设计：`docs/design/hydrology-station-data-workbench-design.md`  
-> 关联后端设计：`docs/design/hydrology-station-data-workbench-data-model-and-backend-design.md`  
-> 关联规则设计：`docs/design/hydrology-station-data-workbench-rule-engine-and-algorithm-boundary-design.md`
+> 关联需求：`docs/design/hydrology-workbench/hydrology-station-data-workbench-requirements.md`
+> 关联主设计：`docs/design/hydrology-workbench/hydrology-station-data-workbench-design.md`
+> 关联后端设计：`docs/design/hydrology-workbench/hydrology-station-data-workbench-data-model-and-backend-design.md`
+> 关联规则设计：`docs/design/hydrology-workbench/hydrology-station-data-workbench-rule-engine-and-algorithm-boundary-design.md`
 
 ## 1. 文档目标
 

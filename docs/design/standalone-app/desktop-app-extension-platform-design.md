@@ -1,9 +1,9 @@
 # Desktop 扩展应用平台与插入式安装设计
 
-> 状态：设计草案  
-> 关联平台设计：`docs/design/agent-platform-technical-design.md`  
-> 关联实施拆解：`docs/design/agent-platform-implementation-breakdown.md`  
-> 关联业务试点：`docs/design/hydrology-station-data-workbench-design.md`
+> 状态：设计草案
+> 关联平台设计：`docs/design/standalone-app/agent-platform-technical-design.md`
+> 关联实施拆解：`docs/design/standalone-app/agent-platform-implementation-breakdown.md`
+> 关联业务试点：`docs/design/hydrology-workbench/hydrology-station-data-workbench-design.md`
 
 ## 1. 文档目标
 

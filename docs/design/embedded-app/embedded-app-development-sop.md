@@ -4,8 +4,8 @@
 > 适用范围：Hydro Desktop 新增一个内嵌 app，从立项到提交的标准操作流程  
 > 配套文档：
 > - [内嵌 App 设计与实现标准](./embedded-app-development-standard.md)
-> - [主进程设计](./main-process.md)
-> - [渲染进程设计](./renderer.md)
+> - [主进程设计](../main-process.md)
+> - [渲染进程设计](../renderer.md)
 
 ## 1. 目的
 

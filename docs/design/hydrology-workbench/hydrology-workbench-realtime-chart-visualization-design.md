@@ -2,8 +2,8 @@
 
 > 状态：专项设计草案  
 > 适用范围：`实时数据列表` 页面中的 `过程图` 区域  
-> 关联页面设计：`docs/design/hydrology-station-data-workbench-page-and-interaction-design.md`  
-> 关联主设计：`docs/design/hydrology-station-data-workbench-design.md`
+> 关联页面设计：`docs/design/hydrology-workbench/hydrology-station-data-workbench-page-and-interaction-design.md`
+> 关联主设计：`docs/design/hydrology-workbench/hydrology-station-data-workbench-design.md`
 
 ## 1. 文档目标
 
