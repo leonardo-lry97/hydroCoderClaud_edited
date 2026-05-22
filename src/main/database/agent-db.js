@@ -258,6 +258,18 @@ function withAgentOperations(BaseClass) {
     }
 
     /**
+     * 查询指定 IM 渠道特定用户+会话的历史对话列表
+     * 复用 staff_id / conversation_id 字段存储外部 IM 身份，但按 type 隔离渠道。
+     */
+    getImSessionsByType(type, staffId, conversationId, limit = 5) {
+      return this.db.prepare(`
+        SELECT * FROM agent_conversations
+        WHERE type = ? AND staff_id = ? AND conversation_id = ?
+        ORDER BY updated_at DESC LIMIT ?
+      `).all(type, staffId, conversationId, limit)
+    }
+
+    /**
      * 更新钉钉元数据（staffId、conversationId）到对话记录
      */
     updateDingTalkMetadata(sessionId, staffId, conversationId) {

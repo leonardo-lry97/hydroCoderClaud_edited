@@ -118,7 +118,7 @@ class FeishuEventClient extends EventEmitter {
         chatType: msg.chat_type,
         senderId,
         text: this._extractText(msg),
-        images: this._extractImages(msg),
+        images: this._extractImages(msg, msg.message_id),
         content: msg.content,
         raw: data,
       }
@@ -181,12 +181,18 @@ class FeishuEventClient extends EventEmitter {
     return ''
   }
 
-  _extractImages(msg) {
+  _extractImages(msg, messageId) {
     const images = []
     const msgType = msg.message_type || msg.msg_type
     try {
       if (msgType === 'image') {
-        images.push({ imageKey: msg.image_key || msg.content })
+        const parsed = typeof msg.content === 'string'
+          ? JSON.parse(msg.content || '{}')
+          : (msg.content || {})
+        const imageKey = msg.image_key || parsed?.image_key || parsed?.file_key || null
+        if (imageKey) {
+          images.push({ imageKey, messageId })
+        }
       } else if (msgType === 'post') {
         const parsed = JSON.parse(msg.content || '{}')
         for (const lang of ['zh_cn', 'en_us']) {
@@ -195,7 +201,7 @@ class FeishuEventClient extends EventEmitter {
             if (Array.isArray(block)) {
               for (const elem of block) {
                 if (elem?.tag === 'img' && elem?.image_key) {
-                  images.push({ imageKey: elem.image_key })
+                  images.push({ imageKey: elem.image_key, messageId })
                 }
               }
             }

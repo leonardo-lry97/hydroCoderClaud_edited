@@ -201,6 +201,9 @@ function rebindMainWindowReferences({ notifyAgentSessionsClosed = false, restart
       })
     }
   }
+  if (feishuBridge) {
+    feishuBridge.setMainWindow(mainWindow)
+  }
   if (weixinBridge) {
     weixinBridge.mainWindow = mainWindow;
   }

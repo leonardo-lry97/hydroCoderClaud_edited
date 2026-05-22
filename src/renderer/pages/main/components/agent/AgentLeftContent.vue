@@ -163,7 +163,8 @@ const sourceOptions = computed(() => ([
   { label: t('agent.sourceManual'), value: 'manual' },
   { label: t('agent.sourceScheduled'), value: 'scheduled' },
   { label: t('agent.sourceDingtalk'), value: 'dingtalk' },
-  { label: t('agent.sourceWeixin'), value: 'weixin' }
+  { label: t('agent.sourceWeixin'), value: 'weixin' },
+  { label: t('agent.sourceFeishu'), value: 'feishu' }
 ]))
 
 // 渲染选项 label，非"全部"选项加 title 显示完整路径
@@ -284,6 +285,8 @@ let cleanupAgentResult = null
 let cleanupDingtalkSession = null
 let cleanupDingtalkSessionClosed = null
 let cleanupWeixinSession = null
+let cleanupFeishuSession = null
+let cleanupFeishuSessionClosed = null
 let cleanupAgentStatus = null
 let cleanupScheduledTask = null
 // 窗口获得焦点时刷新 API profiles（profile 在独立窗口编辑，切回时需同步）
@@ -337,8 +340,18 @@ onMounted(() => {
       loadConversations()
     })
   }
+  if (window.electronAPI?.onFeishuSessionCreated) {
+    cleanupFeishuSession = window.electronAPI.onFeishuSessionCreated(() => {
+      loadConversations()
+    })
+  }
   if (window.electronAPI?.onDingTalkSessionClosed) {
     cleanupDingtalkSessionClosed = window.electronAPI.onDingTalkSessionClosed(() => {
+      loadConversations()
+    })
+  }
+  if (window.electronAPI?.onFeishuSessionClosed) {
+    cleanupFeishuSessionClosed = window.electronAPI.onFeishuSessionClosed(() => {
       loadConversations()
     })
   }
@@ -358,6 +371,8 @@ onUnmounted(() => {
   if (cleanupDingtalkSession) cleanupDingtalkSession()
   if (cleanupDingtalkSessionClosed) cleanupDingtalkSessionClosed()
   if (cleanupWeixinSession) cleanupWeixinSession()
+  if (cleanupFeishuSession) cleanupFeishuSession()
+  if (cleanupFeishuSessionClosed) cleanupFeishuSessionClosed()
   if (cleanupScheduledTask) cleanupScheduledTask()
 })
 

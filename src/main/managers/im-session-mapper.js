@@ -114,6 +114,20 @@ class ImSessionMapper {
 
   /** @private */
   async _queryHistorySessions(identity) {
+    if (this._sessionDatabase?.getImSessionsByType) {
+      try {
+        const staffId = identity.staffId || identity.userId
+        const conversationId = identity.conversationId || identity.chatId
+        return await this._sessionDatabase.getImSessionsByType(
+          this._imType,
+          staffId,
+          conversationId,
+          this._maxHistorySessions
+        )
+      } catch {
+        return []
+      }
+    }
     if (!this._sessionDatabase?.getDingTalkSessions) {
       // 不同 IM 类型有不同的 DB 查询方法
       // 尝试通用查询方式：按 type 和 identity 字段查
@@ -159,6 +173,17 @@ class ImSessionMapper {
           identityKey: this.buildKey(identity),
         },
       })
+      if (session?.id && this._sessionDatabase?.updateDingTalkMetadata) {
+        // 复用钉钉的 staff_id/conversation_id 列存储 IM 身份
+        // userId → staff_id, chatId → conversation_id
+        const staffId = identity.staffId || identity.userId || ''
+        const conversationId = identity.conversationId || identity.chatId || ''
+        try {
+          this._sessionDatabase.updateDingTalkMetadata(session.id, staffId, conversationId)
+        } catch (e) {
+          console.warn(`[ImSessionMapper] Failed to save IM identity metadata:`, e.message)
+        }
+      }
       return session?.id || null
     } catch (err) {
       console.error(`[ImSessionMapper] createSession failed for ${this._imType}:`, err)
@@ -251,7 +276,7 @@ class ImSessionMapper {
     if (choice >= 1 && choice <= sessions.length) {
       // 恢复历史会话
       const selected = sessions[choice - 1]
-      const sessionId = selected.session_id || selected.sessionId || selected.id
+      let sessionId = selected.session_id || selected.sessionId || selected.id
       if (sessionId) {
         try {
           await this._agentSessionManager.reopen(sessionId)

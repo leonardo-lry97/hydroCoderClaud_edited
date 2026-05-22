@@ -173,6 +173,33 @@ class FeishuMessageAPI {
   }
 
   /**
+   * 下载消息中的图片（获取 base64 数据）
+   * GET /open-apis/im/v1/messages/{message_id}/resources/{file_key}?type=image
+   * @param {string} imageKey - file_key
+   * @param {string} messageId - 消息 ID
+   * @returns {Promise<{base64: string, mediaType: string}>}
+   */
+  async downloadImage(imageKey, messageId) {
+    const token = await this.getAccessToken()
+    const url = `${this._apiBase}/im/v1/messages/${encodeURIComponent(messageId)}/resources/${encodeURIComponent(imageKey)}?type=image`
+    console.log('[FeishuMessageAPI] Downloading image from:', url)
+
+    const resp = await globalThis.fetch(url, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '')
+      throw new Error(`Feishu image download failed: HTTP ${resp.status} - ${body.substring(0, 200)}`)
+    }
+
+    const contentType = resp.headers.get('content-type') || 'image/jpeg'
+    const mediaType = contentType.split(';')[0].trim() || 'image/jpeg'
+    const buffer = Buffer.from(await resp.arrayBuffer())
+    return { base64: buffer.toString('base64'), mediaType }
+  }
+
+  /**
    * 发送图片消息
    * @param {'open_id'|'chat_id'} receiveIdType
    * @param {string} receiveId

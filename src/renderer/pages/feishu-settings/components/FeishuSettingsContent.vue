@@ -1,66 +1,98 @@
 <template>
-  <div class="settings-content">
-    <n-card title="飞书桥接设置" size="small" :bordered="false">
-      <!-- 描述 -->
-      <n-alert type="info" :bordered="false" style="margin-bottom: 16px;">
-        通过飞书机器人桥接，可在手机飞书上与 Agent 对话，并支持桌面主动推送消息到飞书。
-        需要在飞书开放平台创建企业自建应用并启用机器人能力。
-      </n-alert>
-
-      <!-- 基本配置 -->
-      <n-divider title-placement="left">基本配置</n-divider>
-
-      <n-form label-placement="top" :model="formData" style="margin-top: 12px;">
-        <n-form-item label="启用飞书桥接">
-          <n-switch v-model:value="formData.enabled" />
-          <span style="margin-left: 8px; font-size: 12px; color: var(--text-color-secondary);">
-            开启后，应用启动时自动连接飞书
-          </span>
-        </n-form-item>
-
-        <n-form-item label="App ID">
-          <n-input v-model:value="formData.appId" placeholder="请输入飞书应用的 App ID" />
-          <span style="font-size: 11px; color: var(--text-color-tertiary);">在飞书开放平台 → 应用信息中获取</span>
-        </n-form-item>
-
-        <n-form-item label="App Secret">
-          <n-input v-model:value="formData.appSecret" type="password" placeholder="请输入飞书应用的 App Secret" />
-          <span style="font-size: 11px; color: var(--text-color-tertiary);">在飞书开放平台 → 应用信息中获取</span>
-        </n-form-item>
-      </n-form>
-
-      <!-- 连接控制 -->
-      <n-divider title-placement="left">连接控制</n-divider>
-
-      <n-space align="center" style="margin-bottom: 12px;">
-        <n-button @click="handleStart" :disabled="!formData.appId || !formData.appSecret">
-          {{ connected ? '重新连接' : '连接' }}
-        </n-button>
-        <n-button @click="handleStop" :disabled="!connected" secondary>
-          断开
-        </n-button>
-        <n-tag :type="connected ? 'success' : 'default'">
-          {{ connected ? '已连接' : '未连接' }}
+  <div class="settings-page">
+    <div v-if="!embedded" class="settings-header">
+      <h1>飞书桥接设置</h1>
+      <n-space>
+        <n-tag :type="statusType" size="small" round>
+          {{ statusText }}
         </n-tag>
-        <span v-if="activeSessions > 0" style="font-size: 12px; color: var(--text-color-secondary);">
-          当前活跃会话: {{ activeSessions }} 个
-        </span>
       </n-space>
+    </div>
+    <div v-else class="embedded-header">
+      <div>
+        <div class="embedded-title">飞书桥接设置</div>
+        <div class="embedded-subtitle">管理飞书桥接、连接状态和会话工作目录策略。</div>
+      </div>
+      <n-tag :type="statusType" size="small" round>
+        {{ statusText }}
+      </n-tag>
+    </div>
 
-      <!-- 高级设置 -->
-      <n-divider title-placement="left">高级设置</n-divider>
+    <n-alert type="info" :show-icon="true" style="margin-bottom: 16px;">
+      通过飞书机器人桥接，可在手机飞书上与 Agent 对话，并支持桌面主动推送消息到飞书。
+      需要在飞书开放平台创建企业自建应用并启用机器人能力。
+    </n-alert>
 
-      <n-form label-placement="top" :model="formData">
-        <n-form-item label="历史会话数量">
-          <n-input-number v-model:value="formData.maxHistorySessions" :min="1" :max="20" style="max-width: 120px;" />
-          <span style="margin-left: 8px; font-size: 12px; color: var(--text-color-secondary);">
-            飞书用户选择历史会话时显示的最大数量（1-20）
-          </span>
-        </n-form-item>
-      </n-form>
+    <n-card title="基本配置" class="settings-section">
+      <n-form-item label="启用飞书桥接">
+        <n-switch v-model:value="formData.enabled" />
+        <template #feedback>开启后，应用启动时自动连接飞书</template>
+      </n-form-item>
+
+      <n-form-item label="App ID">
+        <n-input
+          v-model:value="formData.appId"
+          placeholder="请输入飞书应用的 App ID"
+          :disabled="!formData.enabled"
+        />
+        <template #feedback>在飞书开放平台 → 应用信息中获取</template>
+      </n-form-item>
+
+      <n-form-item label="App Secret">
+        <n-input
+          v-model:value="formData.appSecret"
+          type="password"
+          show-password-on="click"
+          placeholder="请输入飞书应用的 App Secret"
+          :disabled="!formData.enabled"
+        />
+        <template #feedback>在飞书开放平台 → 应用信息中获取</template>
+      </n-form-item>
+
+      <n-form-item label="默认工作目录">
+        <n-input
+          v-model:value="formData.defaultCwd"
+          placeholder="飞书会话的默认工作目录（留空则使用用户目录）"
+          :disabled="!formData.enabled"
+        />
+        <template #feedback>飞书消息创建的 Agent 会话将在此目录下工作</template>
+      </n-form-item>
     </n-card>
 
-    <!-- Footer Buttons -->
+    <n-card title="连接控制" class="settings-section">
+      <n-space>
+        <n-button
+          type="primary"
+          :disabled="!canConnect"
+          :loading="connecting"
+          @click="handleConnect"
+        >
+          {{ connected ? '重新连接' : '连接' }}
+        </n-button>
+        <n-button
+          :disabled="!connected"
+          @click="handleDisconnect"
+        >
+          断开
+        </n-button>
+      </n-space>
+      <div v-if="activeSessions > 0" class="session-info">
+        当前活跃会话: {{ activeSessions }} 个
+      </div>
+    </n-card>
+
+    <n-card title="高级设置" class="settings-section">
+      <n-form-item label="历史会话数量">
+        <n-input-number
+          v-model:value="formData.maxHistorySessions"
+          :min="1"
+          :max="20"
+          :disabled="!formData.enabled"
+        />
+        <template #feedback>飞书用户选择历史会话时显示的最大数量（1-20）</template>
+      </n-form-item>
+    </n-card>
+
     <div class="settings-footer">
       <n-space>
         <n-button v-if="!embedded" @click="handleClose">{{ t('common.close') }}</n-button>
@@ -73,6 +105,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMessage } from 'naive-ui'
+import { useIPC } from '@composables/useIPC'
 import { useLocale } from '@composables/useLocale'
 
 const props = defineProps({
@@ -80,26 +113,31 @@ const props = defineProps({
 })
 
 const message = useMessage()
+const { invoke } = useIPC()
 const { t } = useLocale()
 
 const formData = ref({
   enabled: false,
   appId: '',
   appSecret: '',
+  defaultCwd: '',
   maxHistorySessions: 5,
 })
 const connected = ref(false)
 const activeSessions = ref(0)
+const connecting = ref(false)
 
 let cleanupFns = []
 
+const statusType = computed(() => connected.value ? 'success' : 'default')
+const statusText = computed(() => connected.value ? '已连接' : '未连接')
+const canConnect = computed(() =>
+  formData.value.enabled && formData.value.appId && formData.value.appSecret
+)
+
 const loadConfig = async () => {
   try {
-    if (!window.electronAPI?.getConfig) {
-      console.warn('[FeishuSettings] getConfig API not available')
-      return
-    }
-    const config = await window.electronAPI.getConfig()
+    const config = await invoke('getConfig')
     console.log('[FeishuSettings] Loaded config:', { ...config?.feishu, appSecret: config?.feishu?.appSecret ? '***' : '' })
     if (config?.feishu) {
       formData.value = { ...formData.value, ...config.feishu }
@@ -111,7 +149,7 @@ const loadConfig = async () => {
 
 const refreshStatus = async () => {
   try {
-    const status = await window.electronAPI.getFeishuStatus()
+    const status = await invoke('getFeishuStatus')
     if (status) {
       connected.value = status.connected
       activeSessions.value = status.activeSessions || 0
@@ -121,43 +159,48 @@ const refreshStatus = async () => {
 
 const handleSave = async () => {
   console.log('[FeishuSettings] Saving config:', { ...formData.value, appSecret: '***' })
-  if (!window.electronAPI) {
-    message.error('electronAPI 不可用')
-    return
-  }
-  if (typeof window.electronAPI.updateFeishuConfig !== 'function') {
-    message.error('updateFeishuConfig API 不可用')
-    console.log('[FeishuSettings] Available APIs:', Object.keys(window.electronAPI).filter(k => k.includes('feishu') || k.includes('Feishu')))
-    return
-  }
   try {
-    await window.electronAPI.updateFeishuConfig({
+    await invoke('updateFeishuConfig', {
       appId: formData.value.appId,
       appSecret: formData.value.appSecret,
       enabled: formData.value.enabled,
+      defaultCwd: formData.value.defaultCwd,
       maxHistorySessions: formData.value.maxHistorySessions,
     })
     message.success('飞书配置已保存')
-    refreshStatus()
+    await refreshStatus()
   } catch (err) {
     console.error('[FeishuSettings] Save error:', err)
     message.error('保存失败: ' + (err.message || err))
   }
 }
 
-const handleStart = async () => {
+const handleConnect = async () => {
+  connecting.value = true
   try {
-    await window.electronAPI.startFeishu()
-    refreshStatus()
+    await invoke('updateFeishuConfig', {
+      appId: formData.value.appId,
+      appSecret: formData.value.appSecret,
+      enabled: true,
+      defaultCwd: formData.value.defaultCwd,
+      maxHistorySessions: formData.value.maxHistorySessions,
+    })
+    formData.value.enabled = true
+    await invoke('startFeishu')
+    await refreshStatus()
+    message.success('飞书桥接已连接')
   } catch (err) {
     message.error('连接失败: ' + (err.message || err))
+  } finally {
+    connecting.value = false
   }
 }
 
-const handleStop = async () => {
+const handleDisconnect = async () => {
   try {
-    await window.electronAPI.stopFeishu()
-    refreshStatus()
+    await invoke('stopFeishu')
+    await refreshStatus()
+    message.success('飞书桥接已断开')
   } catch (err) {
     message.error('断开失败: ' + (err.message || err))
   }
@@ -178,6 +221,13 @@ onMounted(async () => {
       })
     )
   }
+  if (window.electronAPI?.onFeishuError) {
+    cleanupFns.push(
+      window.electronAPI.onFeishuError((data) => {
+        message.error(data?.error || 'Feishu error')
+      })
+    )
+  }
 })
 
 onUnmounted(() => {
@@ -187,15 +237,30 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.settings-content {
-  padding: 20px;
-  max-width: 600px;
+.embedded-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
-.settings-footer {
-  margin-top: 20px;
-  padding: 0 20px;
-  display: flex;
-  justify-content: flex-end;
+.embedded-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.embedded-subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-color-2);
+}
+
+.session-info {
+  margin-top: 12px;
+  font-size: 13px;
+  opacity: 0.7;
 }
 </style>
