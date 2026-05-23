@@ -1318,6 +1318,32 @@ describe('FeishuBridge', () => {
     clearTimeout(bridge._sessionMapper._pendingChoices.get('ou_original:oc_shared')?.timer)
   })
 
+  it('rebinds the current Feishu command mapKey to the active session in the same chat before rename', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
+    const rename = vi.spyOn(manager, 'rename').mockImplementation(() => {})
+
+    const created = manager.create({ type: 'feishu', source: 'feishu', title: '旧标题', cwd: tempDir })
+    const session = manager.sessions.get(created.id)
+    bridge._sessionMapper.sessionMap.set('ou_old:oc_xxx', session.id)
+    bridge._sessionIdentities.set(session.id, {
+      senderId: 'ou_old',
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
+    })
+
+    await bridge._handleCommand('/rename 飞书4', {
+      senderId: 'ou_new',
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
+    })
+
+    expect(rename).toHaveBeenCalledWith(session.id, '飞书4')
+    expect(bridge._sessionMapper.sessionMap.get('ou_new:oc_xxx')).toBe(session.id)
+    expect(sendTextMessage).toHaveBeenCalledWith('open_id', 'ou_new', '会话已重命名为：飞书4')
+  })
+
   it('builds a DingTalk-style Feishu history choice menu with markers and metadata', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)

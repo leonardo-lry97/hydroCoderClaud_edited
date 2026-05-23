@@ -329,7 +329,7 @@ class FeishuBridge {
       this._pendingMessages.delete(mapKey)
     }
 
-    let sessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
+    let sessionId = await this._resolveCommandSessionId(mapKey, context)
     const rememberedIdentity = this._sessionIdentities.get(sessionId)
     const identity = rememberedIdentity
       ? {
@@ -648,6 +648,53 @@ class FeishuBridge {
     for (const [key, sid] of this._sessionMapper.sessionMap) {
       if (sid === sessionId) return key
     }
+    return null
+  }
+
+  async _resolveCommandSessionId(mapKey, context) {
+    let sessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
+    if (sessionId) {
+      return sessionId
+    }
+
+    const reboundSessionId = await this._findBoundSessionIdByChat(context.chatId, mapKey)
+    if (!reboundSessionId) {
+      return null
+    }
+
+    this._sessionMapper.sessionMap.set(mapKey, reboundSessionId)
+    this._sessionIdentities.set(reboundSessionId, {
+      senderId: context.senderId,
+      chatId: context.chatId,
+      chatType: context.chatType || 'p2p',
+    })
+    return reboundSessionId
+  }
+
+  async _findBoundSessionIdByChat(chatId, excludeMapKey = null) {
+    if (!chatId) return null
+
+    for (const [key, sid] of this._sessionMapper.sessionMap.entries()) {
+      if (key === excludeMapKey || sid == null) continue
+      if (!key.endsWith(`:${chatId}`)) continue
+      const activeSessionId = await this._sessionMapper.resolveActiveSessionId(key)
+      if (activeSessionId) {
+        return activeSessionId
+      }
+    }
+
+    for (const [sessionId, identity] of this._sessionIdentities.entries()) {
+      if (!identity || identity.chatId !== chatId) continue
+      const liveSession = this._agentSessionManager.sessions.get(sessionId)
+      if (liveSession) {
+        return sessionId
+      }
+      const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
+      if (row && row.status !== 'closed') {
+        return sessionId
+      }
+    }
+
     return null
   }
 
