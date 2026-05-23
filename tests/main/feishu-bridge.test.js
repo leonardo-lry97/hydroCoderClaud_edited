@@ -634,7 +634,7 @@ describe('FeishuBridge', () => {
     )).toBe(true)
   })
 
-  it('strips Feishu @_user_N placeholder tokens after confirming the robot mention', async () => {
+  it('strips only the robot mention.key token from group-chat text', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -645,8 +645,11 @@ describe('FeishuBridge', () => {
       senderId: 'ou_group',
       chatId: 'oc_group',
       chatType: 'chat',
-      text: '@_user_7你好',
-      mentions: [{ key: '@机器人', name: '机器人', id: 'app-id', idType: 'app_id' }],
+      text: '@_user_7 你好 @_user_9',
+      mentions: [
+        { key: '@_user_7', name: 'Hydro Desktop', id: { open_id: 'ou_robot_open' }, idType: null },
+        { key: '@_user_9', name: '张三', id: 'ou_user_zhangsan', idType: 'open_id' }
+      ],
       images: []
     })
 
@@ -654,7 +657,7 @@ describe('FeishuBridge', () => {
     expect(session).toBeTruthy()
     expect(enqueueMessage).toHaveBeenCalledWith(
       session.id,
-      { text: '你好', images: undefined },
+      { text: '你好 @_user_9', images: undefined },
       'ou_group',
       'oc_group',
       'chat'
@@ -662,7 +665,7 @@ describe('FeishuBridge', () => {
     expect(sent.some(item =>
       item.channel === 'feishu:messageReceived' &&
       item.data.sessionId === session.id &&
-      item.data.text === '你好'
+      item.data.text === '你好 @_user_9'
     )).toBe(true)
   })
 

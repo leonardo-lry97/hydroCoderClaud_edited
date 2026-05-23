@@ -652,7 +652,8 @@ class FeishuBridge {
       chatType: context?.chatType,
       mentions: options?.mentions
     })
-    const parts = normalizedSourceText.trim().split(/\s+/).filter(Boolean)
+    const commandText = this._stripRobotMentionArtifactsForCommandText(normalizedSourceText, options?.mentions)
+    const parts = commandText.trim().split(/\s+/).filter(Boolean)
     if (parts.length === 0) return ''
     const [cmd, ...args] = parts
     return [cmd, ...args].join(' ').trim()
@@ -670,7 +671,6 @@ class FeishuBridge {
       if (!mention) continue
       normalized = normalized.split(mention).join('')
     }
-    normalized = normalized.replace(/@_user_\d+/g, '')
 
     return normalized.replace(/\s+/g, ' ').trim()
   }
@@ -681,11 +681,41 @@ class FeishuBridge {
     for (const mention of mentions) {
       if (!this._isRobotMention(mention)) continue
       const key = typeof mention?.key === 'string' ? mention.key.trim() : ''
-      const name = typeof mention?.name === 'string' ? mention.name.trim() : ''
       if (key) result.add(key.startsWith('@') ? key : `@${key}`)
-      if (name) result.add(name.startsWith('@') ? name : `@${name}`)
     }
     return Array.from(result)
+  }
+
+  _stripRobotMentionArtifactsForCommandText(text, mentions) {
+    if (typeof text !== 'string') return ''
+    let normalized = text
+    const robotMentionNames = this._buildRobotMentionNames(mentions)
+    for (const token of robotMentionNames) {
+      if (!token) continue
+      normalized = normalized.replace(new RegExp(`\\s*${this._escapeRegex(token)}\\s*`, 'g'), ' ')
+    }
+    return normalized.replace(/\s+/g, ' ').trim()
+  }
+
+  _buildRobotMentionNames(mentions) {
+    const result = new Set()
+    if (!Array.isArray(mentions)) return []
+    for (const mention of mentions) {
+      if (!this._isRobotMention(mention)) continue
+      const key = typeof mention?.key === 'string' ? mention.key.trim() : ''
+      const name = typeof mention?.name === 'string' ? mention.name.trim() : ''
+      if (key && !key.startsWith('@_user_')) {
+        result.add(key.startsWith('@') ? key : `@${key}`)
+      }
+      if (name) {
+        result.add(name.startsWith('@') ? name : `@${name}`)
+      }
+    }
+    return Array.from(result)
+  }
+
+  _escapeRegex(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 
   _isRobotMention(mention) {
@@ -701,7 +731,7 @@ class FeishuBridge {
     if (!id) return false
     if (idType === 'app_id') return true
     if (!!this.config?.appId && id === this.config.appId) return true
-    return key.startsWith('@_user_') || /hydro\s*desktop/i.test(name)
+    return /hydro\s*desktop/i.test(name)
   }
 
   // ─── 会话管理 ───
