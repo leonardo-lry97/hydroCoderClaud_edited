@@ -60,11 +60,20 @@ class FeishuBridge {
 
   // ─── 生命周期 ───
 
+  _syncSessionDatabase() {
+    const db = this._agentSessionManager?.sessionDatabase || null
+    this._sessionDatabase = db
+    if (this._sessionMapper) {
+      this._sessionMapper._sessionDatabase = db
+    }
+  }
+
   get config() {
     try { return this._config.getConfig()?.feishu || {} } catch { return {} }
   }
 
   async start() {
+    this._syncSessionDatabase()
     const cfg = this.config
     if (!cfg.enabled || !cfg.appId || !cfg.appSecret) {
       console.log('[FeishuBridge] Not enabled or missing credentials')
@@ -185,9 +194,13 @@ class FeishuBridge {
 
     // 历史会话选择
     const mapKey = this._sessionMapper.buildKey({ userId: senderId, chatId })
-    if (text && /^\d+$/.test(text.trim())) {
-      const pendingChoice = this._sessionMapper._pendingChoices?.get(mapKey)
-      if (pendingChoice) {
+    const pendingChoice = this._sessionMapper._pendingChoices?.get(mapKey)
+    if (pendingChoice) {
+      const activeSessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
+      if (activeSessionId) {
+        this._sessionMapper.clearPendingChoice(mapKey)
+        this._pendingMessages.delete(mapKey)
+      } else if (typeof text === 'string' && text.trim()) {
         this._handleChoiceReply(mapKey, text, { userId: senderId, chatId, chatType }, senderId, chatId, chatType)
         return
       }
@@ -233,18 +246,50 @@ class FeishuBridge {
   }
 
   async _handleChoiceReply(mapKey, inputText, identity, senderId, chatId, chatType) {
+    const currentSessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
     const result = await this._sessionMapper.handleChoice(mapKey, inputText, identity)
     const receiveId = chatType === 'p2p' ? senderId : chatId
     const receiveIdType = chatType === 'p2p' ? 'open_id' : 'chat_id'
 
+    if (result.invalidChoice) {
+      await this._api.sendTextMessage(receiveIdType, receiveId, result.menuText || '无效选择，请重新回复数字')
+      return
+    }
+
     if (result.sessionId) {
       this._sessionIdentities.set(result.sessionId, { senderId, chatId, chatType })
-      await this._api.sendTextMessage(receiveIdType, receiveId, '已恢复会话')
       this._notifier.notifySessionCreated({ sessionId: result.sessionId, nickname: senderId })
       const pending = this._pendingMessages.get(mapKey)
+      if (result.action === 'resume') {
+        if (currentSessionId && currentSessionId === result.sessionId && result.wasActivated && !pending) {
+          await this._api.sendTextMessage(
+            receiveIdType,
+            receiveId,
+            this._buildAlreadyConnectedText(result.selectedSession?.title || result.sessionId)
+          )
+        } else if (result.wasActivated) {
+          await this._api.sendTextMessage(
+            receiveIdType,
+            receiveId,
+            `已切换到目标对话：${result.selectedSession?.title || result.sessionId}`
+          )
+        } else {
+          await this._api.sendTextMessage(receiveIdType, receiveId, '会话恢复中')
+        }
+      } else {
+        await this._api.sendTextMessage(receiveIdType, receiveId, '会话创建中')
+      }
       if (pending) {
         this._pendingMessages.delete(mapKey)
+        this._notifyPendingMessageReceived(result.sessionId, senderId, pending.message)
         this._enqueueMessage(result.sessionId, pending.message, pending.senderId, pending.chatId, pending.chatType)
+      } else if (!result.wasActivated) {
+        this._notifier.notifyMessageReceived({
+          sessionId: result.sessionId,
+          senderNick: senderId,
+          text: 'hello',
+        })
+        this._enqueueMessage(result.sessionId, { text: 'hello', images: undefined }, senderId, chatId, chatType)
       }
     } else {
       await this._api.sendTextMessage(receiveIdType, receiveId, '无效选择，请重新回复数字')
@@ -252,52 +297,77 @@ class FeishuBridge {
   }
 
   async _handleCardAction(event) {
-    const { actionType, actionValue, userId, chatId } = event
+    const { actionType, actionValue, userId, chatId, chatType } = event
     console.log('[FeishuBridge] Card action:', actionType, JSON.stringify(actionValue))
     const commandText = this._resolveCardCommand(actionType, actionValue)
     if (!commandText) return
+    const resolvedContext = this._resolveHistoryChoiceContext({ userId, chatId, chatType, actionValue })
+    if (actionValue?.source === 'history-choice' && resolvedContext.senderId && resolvedContext.chatId) {
+      const mapKey = this._sessionMapper.buildKey({ userId: resolvedContext.senderId, chatId: resolvedContext.chatId })
+      this._sessionMapper.clearPendingChoice(mapKey)
+    }
     await this._handleCommand(commandText, {
-      senderId: userId,
-      chatId,
-      chatType: 'p2p',
+      senderId: resolvedContext.senderId,
+      chatId: resolvedContext.chatId,
+      chatType: resolvedContext.chatType,
+    }, {
+      cardValue: actionValue,
     })
   }
 
-  async _handleCommand(text, context) {
+  async _handleCommand(text, context, options = {}) {
+    this._syncSessionDatabase()
     const parts = text.trim().split(/\s+/)
     const cmd = parts[0].toLowerCase()
     const args = parts.slice(1)
 
     const mapKey = this._sessionMapper.buildKey({ userId: context.senderId, chatId: context.chatId })
-    this._sessionMapper.clearPendingChoice(mapKey)
-    this._pendingMessages.delete(mapKey)
+    const preservePendingSelection = ['history-choice', 'session-entry'].includes(options?.cardValue?.source) &&
+      (cmd === '/resume' || cmd === '/new')
+    if (!preservePendingSelection) {
+      this._sessionMapper.clearPendingChoice(mapKey)
+      this._pendingMessages.delete(mapKey)
+    }
 
     let sessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
-    const identity = this._sessionIdentities.get(sessionId) || context
+    const rememberedIdentity = this._sessionIdentities.get(sessionId)
+    const identity = rememberedIdentity
+      ? {
+          ...rememberedIdentity,
+          chatId: context.chatId || rememberedIdentity.chatId,
+          chatType: context.chatType || rememberedIdentity.chatType,
+          senderId: context.senderId || rememberedIdentity.senderId,
+        }
+      : context
+    if (sessionId) {
+      this._sessionIdentities.set(sessionId, identity)
+    }
     const receiveId = identity.chatType === 'p2p' ? identity.senderId : identity.chatId
     const receiveIdType = identity.chatType === 'p2p' ? 'open_id' : 'chat_id'
 
     switch (cmd) {
       case '/help':
-        await this._api.sendTextMessage(receiveIdType, receiveId, this._getHelpText())
+        await this._sendHelpMenu(receiveIdType, receiveId)
         break
       case '/status': {
-        const s = this.getStatus()
-        const currentSession = sessionId ? this._agentSessionManager.sessions.get(sessionId) : null
-        const currentTitle = currentSession?.title || '无'
-        await this._api.sendTextMessage(receiveIdType, receiveId,
-          `连接状态: ${s.connected ? '已连接' : '未连接'}\n活跃会话: ${s.activeSessions} 个\n当前会话: ${currentTitle}`)
+        await this._sendStatusMenu(receiveIdType, receiveId, {
+          mapKey,
+          chatId: context.chatId,
+        })
         break
       }
       case '/sessions':
-        await this._api.sendTextMessage(receiveIdType, receiveId, this._buildActiveSessionsText({ sessionId, chatId: context.chatId }))
+        await this._sendSessionsMenu(receiveIdType, receiveId, {
+          sessionId,
+          chatId: context.chatId,
+        })
         break
       case '/close': {
         const targetSessionId = await this._resolveCloseTargetSessionId(args, { chatId: context.chatId, mapKey })
         if (!targetSessionId) {
           await this._api.sendTextMessage(receiveIdType, receiveId, args.length > 0
-            ? `编号错误：请输入 1-${this._getActiveSessionsByChat(context.chatId).length} 之间的数字`
-            : '当前没有连接会话，无需关闭')
+            ? `编号错误：请输入 1-${this._getActiveSessionsByChat(context.chatId).length} 之间的数字\n\n使用 /sessions 查看会话列表`
+            : '当前没有连接会话，无需关闭\n\n发送任意消息可开始新会话')
           break
         }
         const targetSession = this._agentSessionManager.sessions.get(targetSessionId)
@@ -309,9 +379,14 @@ class FeishuBridge {
         this._clearSessionIdentity(targetSessionId)
         this._notifier.notifySessionClosed({ sessionId: targetSessionId })
         sessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
-        await this._api.sendTextMessage(receiveIdType, receiveId, args.length > 0
-          ? `会话已关闭\n\n${this._buildActiveSessionsText({ sessionId, chatId: context.chatId })}`
-          : `会话已关闭\n\n${this._buildActiveSessionsText({ sessionId, chatId: context.chatId })}`)
+        const closeText = args.length > 0
+          ? `会话 ${args[0]} 已关闭：${targetSession?.title || targetSessionId.substring(0, 8)}`
+          : '会话已关闭'
+        await this._sendCloseResult(receiveIdType, receiveId, {
+          sessionId,
+          chatId: context.chatId,
+          closeText,
+        })
         break
       }
       case '/new': {
@@ -332,7 +407,27 @@ class FeishuBridge {
           this._sessionIdentities.set(newId, { senderId: context.senderId, chatId: context.chatId, chatType: context.chatType })
           this._notifier.notifySessionCreated({ sessionId: newId, nickname: context.senderId })
         }
-        await this._api.sendTextMessage(receiveIdType, receiveId, newId ? '已创建新会话' : '创建新会话失败')
+        if (!newId) {
+          await this._api.sendTextMessage(receiveIdType, receiveId, '创建新会话失败')
+          break
+        }
+        if (preservePendingSelection) {
+          this._sessionMapper.clearPendingChoice(mapKey)
+        }
+        await this._api.sendTextMessage(receiveIdType, receiveId, '会话创建中')
+        const pending = preservePendingSelection ? this._pendingMessages.get(mapKey) : null
+        if (pending) {
+          this._pendingMessages.delete(mapKey)
+          this._notifyPendingMessageReceived(newId, context.senderId, pending.message)
+          this._enqueueMessage(newId, pending.message, pending.senderId, pending.chatId, pending.chatType)
+        } else {
+          this._notifier.notifyMessageReceived({
+            sessionId: newId,
+            senderNick: context.senderId,
+            text: 'hello',
+          })
+          this._enqueueMessage(newId, { text: 'hello', images: undefined }, context.senderId, context.chatId, context.chatType)
+        }
         break
       }
       case '/resume': {
@@ -356,11 +451,26 @@ class FeishuBridge {
             await this._api.sendTextMessage(receiveIdType, receiveId, `编号错误：请输入 1-${history.length} 之间的数字`)
             break
           }
+          const pending = preservePendingSelection ? this._pendingMessages.get(mapKey) : null
           const selected = history[selectedIndex - 1]
           const restoredSessionId = selected?.session_id || selected?.sessionId || selected?.id || null
           let resolvedSessionId = restoredSessionId
+          let isActivated = false
+          if (sessionId && restoredSessionId === sessionId) {
+            const liveCurrentSession = this._agentSessionManager.sessions.get(sessionId)
+            if (liveCurrentSession?.queryGenerator && !pending) {
+              await this._api.sendTextMessage(
+                receiveIdType,
+                receiveId,
+                this._buildAlreadyConnectedText(selected?.title || liveCurrentSession?.title || sessionId)
+              )
+              break
+            }
+          }
           if (resolvedSessionId) {
             try {
+              const existingSession = this._agentSessionManager.sessions.get(resolvedSessionId)
+              isActivated = !!existingSession?.queryGenerator
               await this._agentSessionManager.reopen(resolvedSessionId)
               this._sessionMapper.sessionMap.set(mapKey, resolvedSessionId)
             } catch (err) {
@@ -369,20 +479,41 @@ class FeishuBridge {
             }
           }
           if (resolvedSessionId) {
+            if (preservePendingSelection) {
+              this._sessionMapper.clearPendingChoice(mapKey)
+            }
             this._sessionIdentities.set(resolvedSessionId, {
               senderId: context.senderId,
               chatId: context.chatId,
               chatType: context.chatType,
             })
             this._notifier.notifySessionCreated({ sessionId: resolvedSessionId, nickname: context.senderId })
-            await this._api.sendTextMessage(receiveIdType, receiveId, '已恢复会话')
+            if (isActivated) {
+              await this._api.sendTextMessage(receiveIdType, receiveId, `已切换到目标对话：${selected?.title || resolvedSessionId}`)
+            } else {
+              await this._api.sendTextMessage(receiveIdType, receiveId, '会话恢复中')
+            }
+            if (pending) {
+              this._pendingMessages.delete(mapKey)
+              this._notifyPendingMessageReceived(resolvedSessionId, context.senderId, pending.message)
+              this._enqueueMessage(resolvedSessionId, pending.message, pending.senderId, pending.chatId, pending.chatType)
+            } else if (!isActivated) {
+              this._notifier.notifyMessageReceived({
+                sessionId: resolvedSessionId,
+                senderNick: context.senderId,
+                text: 'hello',
+              })
+              this._enqueueMessage(resolvedSessionId, { text: 'hello', images: undefined }, context.senderId, context.chatId, context.chatType)
+            }
           } else {
-            await this._api.sendTextMessage(receiveIdType, receiveId, '恢复会话失败')
+            await this._api.sendTextMessage(receiveIdType, receiveId, '无法恢复该会话，可能已被删除\n\n发送任意消息可开始新会话')
           }
           break
         }
         await this._sessionMapper.initPendingChoice(mapKey, history, async (menuText) => {
-          await this._api.sendTextMessage(receiveIdType, receiveId, menuText)
+          await this._sendHistoryChoiceMenu(receiveIdType, receiveId, history, sessionId, menuText)
+        }, {
+          menuBuilder: (sessions) => this._buildHistoryChoiceMenuText(sessions, sessionId)
         })
         break
       }
@@ -408,26 +539,50 @@ class FeishuBridge {
   // ─── 会话管理 ───
 
   async _ensureSession(identity, message, senderId, chatId, chatType) {
+    this._syncSessionDatabase()
     const mapKey = this._sessionMapper.buildKey(identity)
-    const result = await this._sessionMapper.ensureSession(identity)
+    let sessionId = this._sessionMapper.sessionMap.get(mapKey)
+    if (sessionId) {
+      const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
+      if (!row || row.status === 'closed') {
+        this._clearSessionIdentity(sessionId)
+        sessionId = null
+      } else {
+        const reopened = this._agentSessionManager.reopen(sessionId)
+        if (reopened) {
+          return sessionId
+        }
+        this._clearSessionIdentity(sessionId)
+        sessionId = null
+      }
+    }
 
-    if (result.needsChoice) {
+    const historySessions = await this._sessionMapper._queryHistorySessions(identity)
+    if (historySessions && historySessions.length > 0) {
       this._pendingMessages.set(mapKey, { message, senderId, chatId, chatType })
-      await this._sessionMapper.initPendingChoice(mapKey, result.sessions, async (menuText) => {
-        await this._api.sendTextMessage(
+      await this._sessionMapper.initPendingChoice(mapKey, historySessions, async (menuText) => {
+        await this._sendHistoryChoiceMenu(
           chatType === 'p2p' ? 'open_id' : 'chat_id',
-          chatType === 'p2p' ? senderId : chatId, menuText)
+          chatType === 'p2p' ? senderId : chatId,
+          historySessions,
+          sessionId,
+          menuText
+        )
+      }, {
+        menuBuilder: (sessions) => this._buildHistoryChoiceMenuText(sessions, sessionId)
       })
       return null
     }
 
-    if (result.sessionId) {
+    sessionId = await this._sessionMapper.createSession(identity)
+    if (sessionId) {
+      this._sessionMapper.sessionMap.set(mapKey, sessionId)
       this._notifier.notifySessionCreated({
-        sessionId: result.sessionId,
+        sessionId,
         nickname: identity.nickname || identity.userId?.substring(0, 8),
       })
     }
-    return result.sessionId
+    return sessionId
   }
 
   // ─── 消息队列 ───
@@ -492,6 +647,46 @@ class FeishuBridge {
   _resolveMapKeyForSession(sessionId) {
     for (const [key, sid] of this._sessionMapper.sessionMap) {
       if (sid === sessionId) return key
+    }
+    return null
+  }
+
+  _resolveHistoryChoiceContext({ userId, chatId, chatType, actionValue }) {
+    const fallback = {
+      senderId: userId,
+      chatId,
+      chatType: chatType || 'p2p',
+    }
+    if (actionValue?.source !== 'history-choice' || !chatId) {
+      return fallback
+    }
+
+    const exactKey = userId ? this._sessionMapper.buildKey({ userId, chatId }) : null
+    if (exactKey && this._sessionMapper._pendingChoices?.has(exactKey)) {
+      return fallback
+    }
+
+    const matchedKey = this._findPendingMapKeyByChat(chatId)
+    if (!matchedKey) {
+      return fallback
+    }
+
+    const separatorIndex = matchedKey.indexOf(':')
+    if (separatorIndex === -1) {
+      return fallback
+    }
+
+    return {
+      senderId: matchedKey.substring(0, separatorIndex),
+      chatId: matchedKey.substring(separatorIndex + 1),
+      chatType: chatType || 'p2p',
+    }
+  }
+
+  _findPendingMapKeyByChat(chatId) {
+    if (!chatId || !this._sessionMapper?._pendingChoices) return null
+    for (const key of this._sessionMapper._pendingChoices.keys()) {
+      if (key.endsWith(`:${chatId}`)) return key
     }
     return null
   }
@@ -602,10 +797,14 @@ class FeishuBridge {
     return sessions.filter((session) => {
       if (session.type !== 'feishu' || !session.queryGenerator) return false
       const identity = this._sessionIdentities.get(session.id)
-      if (identity?.chatId) return identity.chatId === chatId
+      if (identity?.chatId === chatId) return true
       const row = this._sessionDatabase?.getAgentConversation?.(session.id)
       return row?.conversation_id === chatId
     })
+  }
+
+  _buildAlreadyConnectedText(title) {
+    return `✅ 当前已连接该会话：${title || '当前会话'}`
   }
 
   _buildActiveSessionsText({ sessionId, chatId }) {
@@ -616,9 +815,397 @@ class FeishuBridge {
     activeSessions.forEach((session, index) => {
       const marker = session.id === sessionId ? '✅ ' : ''
       const dir = session.cwd ? this._basename(session.cwd) : '-'
-      lines.push(`${index + 1}. ${marker}${session.title || session.id.substring(0, 8)} (${dir})`)
+      const profileName = session.apiProfileId
+        ? (this._config?.getAPIProfile?.(session.apiProfileId)?.name || '未知配置')
+        : '默认配置'
+      lines.push(`${index + 1}. ${marker}${session.title || session.id.substring(0, 8)} (${dir}) ${profileName}`)
     })
+    lines.push('', '使用 /close 关闭当前会话')
     return lines.join('\n')
+  }
+
+  _buildStatusText({ mapKey, chatId }) {
+    const activeSessions = this._getActiveSessionsByChat(chatId)
+    const streaming = activeSessions.filter(session => session.status === 'streaming').length
+    const idle = activeSessions.filter(session => session.status === 'idle').length
+    const lines = ['系统状态', `├─ 飞书桥接: ${this._eventClient.connected ? '已连接' : '未连接'}`]
+
+    if (mapKey) {
+      const currentSessionId = this._sessionMapper.sessionMap.get(mapKey)
+      if (currentSessionId) {
+        const session = this._agentSessionManager.sessions.get(currentSessionId)
+        if (session?.queryGenerator) {
+          const profileName = session.apiProfileId
+            ? (this._config?.getAPIProfile?.(session.apiProfileId)?.name || '未知配置')
+            : '默认配置'
+          lines.push(`├─ 当前会话: ${session.title} (${profileName})`)
+        }
+      }
+    }
+
+    lines.push(`├─ 执行中: ${streaming} 个 / 空闲: ${idle} 个`)
+    lines.push(`└─ 总会话数: ${activeSessions.length} 个`)
+    return lines.join('\n')
+  }
+
+  async _sendSessionsMenu(receiveIdType, receiveId, { sessionId, chatId }) {
+    const activeSessions = this._getActiveSessionsByChat(chatId)
+    const text = this._buildActiveSessionsText({ sessionId, chatId })
+    if (activeSessions.length === 0) {
+      await this._api.sendTextMessage(receiveIdType, receiveId, text)
+      return
+    }
+
+    const card = this._buildSessionsCard(activeSessions, sessionId)
+    try {
+      await this._api.sendCardMessage(receiveIdType, receiveId, card)
+    } catch (err) {
+      console.error('[FeishuBridge] Send sessions card failed:', err.message)
+      await this._api.sendTextMessage(receiveIdType, receiveId, text)
+    }
+  }
+
+  async _sendHelpMenu(receiveIdType, receiveId) {
+    const text = this._getHelpText()
+    try {
+      await this._api.sendCardMessage(receiveIdType, receiveId, this._buildHelpCard())
+    } catch (err) {
+      console.error('[FeishuBridge] Send help card failed:', err.message)
+      await this._api.sendTextMessage(receiveIdType, receiveId, text)
+    }
+  }
+
+  async _sendStatusMenu(receiveIdType, receiveId, { mapKey, chatId }) {
+    const statusText = this._buildStatusText({ mapKey, chatId })
+    try {
+      await this._api.sendCardMessage(receiveIdType, receiveId, this._buildStatusCard(statusText))
+    } catch (err) {
+      console.error('[FeishuBridge] Send status card failed:', err.message)
+      await this._api.sendTextMessage(receiveIdType, receiveId, statusText)
+    }
+  }
+
+  async _sendCloseResult(receiveIdType, receiveId, { sessionId, chatId, closeText }) {
+    const activeSessions = this._getActiveSessionsByChat(chatId)
+    const fallbackText = `${closeText}\n\n${this._buildActiveSessionsText({ sessionId, chatId })}`
+
+    try {
+      if (activeSessions.length > 0) {
+        await this._api.sendCardMessage(
+          receiveIdType,
+          receiveId,
+          this._buildSessionsCard(activeSessions, sessionId, {
+            title: '会话已关闭',
+            summary: closeText
+          })
+        )
+        return
+      }
+
+      await this._api.sendCardMessage(
+        receiveIdType,
+        receiveId,
+        this._buildResultCard({
+          title: '会话已关闭',
+          summary: `${closeText}\n\n暂无活跃会话`,
+          actions: [
+            this._buildCommandButton('新建会话', { intent: 'new' }, 'primary'),
+            this._buildCommandButton('查看状态', { intent: 'status' }),
+            this._buildCommandButton('查看帮助', { intent: 'help' })
+          ]
+        })
+      )
+    } catch (err) {
+      console.error('[FeishuBridge] Send close result card failed:', err.message)
+      await this._api.sendTextMessage(receiveIdType, receiveId, fallbackText)
+    }
+  }
+
+  async _sendHistoryChoiceMenu(receiveIdType, receiveId, sessions, currentSessionId, fallbackText) {
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      await this._api.sendTextMessage(receiveIdType, receiveId, fallbackText || '没有历史会话记录')
+      return
+    }
+
+    const card = this._buildHistoryChoiceCard(sessions, currentSessionId)
+    try {
+      await this._api.sendCardMessage(receiveIdType, receiveId, card)
+    } catch (err) {
+      console.error('[FeishuBridge] Send history choice card failed:', err.message)
+      await this._api.sendTextMessage(receiveIdType, receiveId, fallbackText || this._buildHistoryChoiceMenuText(sessions, currentSessionId))
+    }
+  }
+
+  _notifyPendingMessageReceived(sessionId, senderNick, message) {
+    const text = typeof message === 'string'
+      ? message
+      : (message?.text || (Array.isArray(message?.images) && message.images.length > 0 ? '[图片]' : ''))
+    const payload = {
+      sessionId,
+      senderNick,
+      text,
+    }
+    if (message && typeof message === 'object' && Array.isArray(message.images) && message.images.length > 0) {
+      payload.images = message.images
+    }
+    this._notifier.notifyMessageReceived(payload)
+  }
+
+  _buildHistoryChoiceMenuText(sessions, currentSessionId = null) {
+    const displaySessions = sessions.slice(0, 10)
+    const lines = ['您有以下历史会话，请回复数字选择：', '']
+
+    displaySessions.forEach((row, index) => {
+      const timeStr = this._formatRelativeTime(row.updated_at)
+      const dir = row.cwd ? this._basename(row.cwd) : '-'
+      const profileName = row.api_profile_id
+        ? (this._config?.getAPIProfile?.(row.api_profile_id)?.name || '未知配置')
+        : '默认配置'
+      const liveSession = this._agentSessionManager.sessions.get(row.session_id)
+      const marker = currentSessionId && row.session_id === currentSessionId
+        ? '✅ '
+        : (liveSession?.queryGenerator ? '🔵 ' : '⭕ ')
+      lines.push(`${index + 1}. ${marker}[${timeStr}] ${row.title || '(无标题)'} (${dir}) ${profileName}`)
+    })
+
+    if (sessions.length > displaySessions.length) {
+      lines.push('', `（仅显示最近 ${displaySessions.length} 条，共 ${sessions.length} 条）`)
+    }
+
+    lines.push('', '回复 0 开始全新会话')
+    return lines.join('\n')
+  }
+
+  _buildHistoryChoiceCard(sessions, currentSessionId = null) {
+    const displaySessions = sessions.slice(0, 5)
+    const elements = [
+      {
+        tag: 'markdown',
+        content: displaySessions.map((row, index) => {
+          const timeStr = this._formatRelativeTime(row.updated_at)
+          const dir = row.cwd ? this._basename(row.cwd) : '-'
+          const profileName = row.api_profile_id
+            ? (this._config?.getAPIProfile?.(row.api_profile_id)?.name || '未知配置')
+            : '默认配置'
+          const liveSession = this._agentSessionManager.sessions.get(row.session_id)
+          const marker = currentSessionId && row.session_id === currentSessionId
+            ? '✅'
+            : (liveSession?.queryGenerator ? '🔵' : '⭕')
+          return `${index + 1}. ${marker} [${timeStr}] ${row.title || '(无标题)'} (${dir}) ${profileName}`
+        }).join('\n')
+      },
+      {
+        tag: 'action',
+        actions: displaySessions.map((row, index) => ({
+          tag: 'button',
+          type: currentSessionId && row.session_id === currentSessionId ? 'primary' : 'default',
+          text: {
+            tag: 'plain_text',
+            content: `恢复 ${index + 1}`
+          },
+          value: {
+            intent: 'resume',
+            index: index + 1,
+            title: row.title || '',
+            source: 'history-choice'
+          }
+        }))
+      },
+      {
+        tag: 'action',
+        actions: [
+          {
+            tag: 'button',
+            type: 'primary',
+            text: {
+              tag: 'plain_text',
+              content: '新建会话'
+            },
+            value: {
+              intent: 'new',
+              source: 'history-choice'
+            }
+          },
+          {
+            tag: 'button',
+            type: 'default',
+            text: {
+              tag: 'plain_text',
+              content: '查看活跃会话'
+            },
+            value: {
+              intent: 'sessions'
+            }
+          }
+        ]
+      }
+    ]
+
+    if (sessions.length > displaySessions.length) {
+      elements.splice(1, 0, {
+        tag: 'note',
+        elements: [
+          {
+            tag: 'plain_text',
+            content: `仅显示最近 ${displaySessions.length} 条，共 ${sessions.length} 条`
+          }
+        ]
+      })
+    }
+
+    return {
+      config: { wide_screen_mode: true },
+      header: {
+        title: {
+          tag: 'plain_text',
+          content: '历史会话'
+        }
+      },
+      elements
+    }
+  }
+
+  _buildSessionsCard(activeSessions, currentSessionId = null, options = {}) {
+    const displaySessions = activeSessions.slice(0, 5)
+    const elements = []
+
+    if (options.summary) {
+      elements.push({
+        tag: 'markdown',
+        content: options.summary
+      })
+    }
+
+    elements.push(
+      {
+        tag: 'markdown',
+        content: displaySessions.map((session, index) => {
+          const dir = session.cwd ? this._basename(session.cwd) : '-'
+          const profileName = session.apiProfileId
+            ? (this._config?.getAPIProfile?.(session.apiProfileId)?.name || '未知配置')
+            : '默认配置'
+          const marker = session.id === currentSessionId ? '✅' : '🔵'
+          return `${index + 1}. ${marker} ${session.title || session.id.substring(0, 8)} (${dir}) ${profileName}`
+        }).join('\n')
+      },
+      {
+        tag: 'action',
+        actions: displaySessions.map((session, index) => this._buildCommandButton(
+          `关闭 ${index + 1}`,
+          {
+            intent: 'close',
+            index: index + 1,
+            title: session.title || ''
+          },
+          session.id === currentSessionId ? 'primary' : 'default'
+        ))
+      },
+      {
+        tag: 'action',
+        actions: [
+          this._buildCommandButton('新建会话', { intent: 'new' }, 'primary'),
+          this._buildCommandButton('查看状态', { intent: 'status' }),
+          this._buildCommandButton('查看帮助', { intent: 'help' })
+        ]
+      }
+    )
+
+    if (activeSessions.length > displaySessions.length) {
+      elements.splice(1, 0, {
+        tag: 'note',
+        elements: [
+          {
+            tag: 'plain_text',
+            content: `仅显示最近 ${displaySessions.length} 条，共 ${activeSessions.length} 条`
+          }
+        ]
+      })
+    }
+
+    return {
+      config: { wide_screen_mode: true },
+      header: {
+        title: {
+          tag: 'plain_text',
+          content: options.title || '活跃会话'
+        }
+      },
+      elements
+    }
+  }
+
+  _buildHelpCard() {
+    return this._buildResultCard({
+      title: '飞书命令帮助',
+      summary: this._getHelpText(),
+      actions: [
+        this._buildCommandButton('新建会话', { intent: 'new' }, 'primary'),
+        this._buildCommandButton('活跃会话', { intent: 'sessions' }),
+        this._buildCommandButton('查看状态', { intent: 'status' }),
+        this._buildCommandButton('恢复历史会话', { command: 'resume' })
+      ]
+    })
+  }
+
+  _buildStatusCard(statusText) {
+    return this._buildResultCard({
+      title: '系统状态',
+      summary: statusText,
+      actions: [
+        this._buildCommandButton('活跃会话', { intent: 'sessions' }, 'primary'),
+        this._buildCommandButton('新建会话', { intent: 'new' }),
+        this._buildCommandButton('查看帮助', { intent: 'help' })
+      ]
+    })
+  }
+
+  _buildResultCard({ title, summary, actions = [] }) {
+    return {
+      config: { wide_screen_mode: true },
+      header: {
+        title: {
+          tag: 'plain_text',
+          content: title
+        }
+      },
+      elements: [
+        {
+          tag: 'markdown',
+          content: summary
+        },
+        {
+          tag: 'action',
+          actions
+        }
+      ]
+    }
+  }
+
+  _buildCommandButton(label, value, type = 'default') {
+    return {
+      tag: 'button',
+      type,
+      text: {
+        tag: 'plain_text',
+        content: label
+      },
+      value
+    }
+  }
+
+  _formatRelativeTime(timestamp) {
+    const value = Number(timestamp)
+    if (!Number.isFinite(value) || value <= 0) return '未知时间'
+
+    const diff = Date.now() - value
+    const min = 60 * 1000
+    const hour = 60 * min
+    const day = 24 * hour
+    if (diff < hour) return `${Math.max(1, Math.floor(diff / min))}分钟前`
+    if (diff < day) return `${Math.floor(diff / hour)}小时前`
+    if (diff < 7 * day) return `${Math.floor(diff / day)}天前`
+    if (diff < 30 * day) return `${Math.floor(diff / (7 * day))}周前`
+    return `${Math.floor(diff / (30 * day))}个月前`
   }
 
   async _resolveCloseTargetSessionId(args, { chatId, mapKey }) {

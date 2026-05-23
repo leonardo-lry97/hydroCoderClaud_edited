@@ -103,8 +103,8 @@ class ImSessionMapper {
     try {
       const sessions = this._agentSessionManager.sessions
       if (sessions?.has(sessionId)) return true
-      // 不在内存中，检查 DB
-      const session = await this._sessionDatabase?.getSession?.(sessionId)
+      // 不在内存中，检查 agent_conversations
+      const session = await this._sessionDatabase?.getAgentConversation?.(sessionId)
       if (!session || session.status === 'closed') return false
       return true
     } catch {
@@ -118,12 +118,37 @@ class ImSessionMapper {
       try {
         const staffId = identity.staffId || identity.userId
         const conversationId = identity.conversationId || identity.chatId
-        return await this._sessionDatabase.getImSessionsByType(
+        const exact = await this._sessionDatabase.getImSessionsByType(
           this._imType,
           staffId,
           conversationId,
           this._maxHistorySessions
         )
+        if (Array.isArray(exact) && exact.length > 0) {
+          return exact
+        }
+        if (typeof this._sessionDatabase.listAllAgentConversations === 'function') {
+          const allRows = await this._sessionDatabase.listAllAgentConversations({
+            limit: Math.max(this._maxHistorySessions * 5, 50)
+          })
+          if (Array.isArray(allRows) && allRows.length > 0) {
+            const shortConversationId = typeof conversationId === 'string' ? conversationId.substring(0, 8) : ''
+            const shortStaffId = typeof staffId === 'string' ? staffId.substring(0, 8) : ''
+            return allRows
+              .filter(row => row?.type === this._imType)
+              .filter((row) => {
+                if (row?.staff_id === staffId && row?.conversation_id === conversationId) return true
+                if (conversationId && row?.conversation_id === conversationId) return true
+                const title = typeof row?.title === 'string' ? row.title : ''
+                const hasConversation = shortConversationId ? title.includes(shortConversationId) : false
+                const hasStaff = shortStaffId ? title.includes(shortStaffId) : false
+                return hasConversation && (!shortStaffId || hasStaff || !row?.staff_id)
+              })
+              .sort((a, b) => (b?.updated_at || 0) - (a?.updated_at || 0))
+              .slice(0, this._maxHistorySessions)
+          }
+        }
+        return []
       } catch {
         return []
       }
@@ -213,8 +238,15 @@ class ImSessionMapper {
    * @param {number} [timeoutMs] - 超时时间（默认 10 分钟）
    * @returns {Promise<{ sessionId: string|null }>} 用户选择后 resolve
    */
-  initPendingChoice(mapKey, sessions, onSendChoiceMenu, timeoutMs = 10 * 60 * 1000) {
+  initPendingChoice(mapKey, sessions, onSendChoiceMenu, optionsOrTimeout = 10 * 60 * 1000) {
     this.clearPendingChoice(mapKey)
+
+    const options = typeof optionsOrTimeout === 'object' && optionsOrTimeout !== null
+      ? optionsOrTimeout
+      : {}
+    const timeoutMs = typeof optionsOrTimeout === 'number'
+      ? optionsOrTimeout
+      : (typeof options.timeoutMs === 'number' ? options.timeoutMs : 10 * 60 * 1000)
 
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -222,10 +254,10 @@ class ImSessionMapper {
         resolve({ sessionId: null })
       }, timeoutMs)
 
-      this._pendingChoices.set(mapKey, { sessions, resolve, timer })
+      this._pendingChoices.set(mapKey, { sessions, resolve, timer, options })
 
       // 发送选择菜单
-      const menuText = this._buildChoiceMenuText(sessions)
+      const menuText = this._buildChoiceMenuText(sessions, options)
       onSendChoiceMenu(menuText).catch(() => {
         clearTimeout(timer)
         this._pendingChoices.delete(mapKey)
@@ -235,7 +267,10 @@ class ImSessionMapper {
   }
 
   /** @private */
-  _buildChoiceMenuText(sessions) {
+  _buildChoiceMenuText(sessions, options = {}) {
+    if (typeof options.menuBuilder === 'function') {
+      return options.menuBuilder(sessions)
+    }
     const lines = [
       `检测到 ${sessions.length} 个历史会话，请回复数字选择：`,
       '0 — 创建新会话',
@@ -257,37 +292,54 @@ class ImSessionMapper {
     const pending = this._pendingChoices.get(mapKey)
     if (!pending) return { sessionId: null }
 
-    const { sessions, resolve, timer } = pending
+    const { sessions, resolve, timer, options } = pending
+    const choice = parseInt(inputText, 10)
+
+    if (isNaN(choice) || choice < 0 || choice > sessions.length) {
+      return {
+        sessionId: null,
+        invalidChoice: true,
+        menuText: this._buildChoiceMenuText(sessions, options)
+      }
+    }
+
     clearTimeout(timer)
     this._pendingChoices.delete(mapKey)
 
-    const choice = parseInt(inputText, 10)
-
-    if (choice === 0 || isNaN(choice)) {
+    if (choice === 0) {
       // 创建新会话
       const sessionId = await this.createSession(identity)
       if (sessionId) {
         this.sessionMap.set(mapKey, sessionId)
       }
-      resolve({ sessionId })
-      return { sessionId }
+      const result = { sessionId, action: 'new', wasActivated: false }
+      resolve(result)
+      return result
     }
 
     if (choice >= 1 && choice <= sessions.length) {
       // 恢复历史会话
       const selected = sessions[choice - 1]
       let sessionId = selected.session_id || selected.sessionId || selected.id
+      const existingSession = sessionId ? this._agentSessionManager.sessions?.get?.(sessionId) : null
+      const wasActivated = !!existingSession?.queryGenerator
       if (sessionId) {
         try {
           await this._agentSessionManager.reopen(sessionId)
           this.sessionMap.set(mapKey, sessionId)
+          if (this._sessionDatabase?.updateDingTalkMetadata) {
+            const staffId = identity.staffId || identity.userId || ''
+            const conversationId = identity.conversationId || identity.chatId || ''
+            this._sessionDatabase.updateDingTalkMetadata(sessionId, staffId, conversationId)
+          }
         } catch (err) {
           console.error(`[ImSessionMapper] reopen failed:`, err)
           sessionId = null
         }
       }
-      resolve({ sessionId })
-      return { sessionId }
+      const result = { sessionId, action: 'resume', selectedSession: selected, wasActivated }
+      resolve(result)
+      return result
     }
 
     // 无效选择
@@ -311,7 +363,7 @@ class ImSessionMapper {
       const sessions = this._agentSessionManager.sessions
       if (sessions?.has(sessionId)) return sessionId
 
-      const session = await this._sessionDatabase?.getSession?.(sessionId)
+      const session = await this._sessionDatabase?.getAgentConversation?.(sessionId)
       if (!session || session.status === 'closed') {
         this.sessionMap.delete(mapKey)
         return null

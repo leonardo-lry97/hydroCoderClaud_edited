@@ -135,11 +135,18 @@ class FeishuEventClient extends EventEmitter {
     try {
       const event = data?.event || data
       const action = event?.action || {}
+      const context = event?.context || {}
+      const operatorId = event?.operator?.operator_id || event?.operator_id || {}
+      const userId = operatorId?.open_id || operatorId?.user_id || event?.open_id || event?.user_id || null
+      const chatId = context?.open_chat_id || context?.chat_id || context?.chat?.chat_id || null
+      const chatType = context?.chat_type || (chatId ? 'chat' : 'p2p')
       this.emit('cardAction', {
         actionType: action.tag,
         actionValue: action.value,
-        userId: event?.operator?.operator_id?.open_id,
-        chatId: event?.context?.chat_id,
+        userId,
+        chatId,
+        chatType,
+        messageId: context?.open_message_id || null,
         raw: event,
       })
     } catch (err) {
