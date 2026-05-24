@@ -41,9 +41,8 @@ class FeishuBridge {
       maxHistorySessions: 5,
       buildIdentityKey: (identity) => `${identity.userId}:${identity.chatId}`,
       buildSessionTitle: (identity) => {
-        const chatName = identity.chatName || identity.chatId?.substring(0, 8) || ''
         const nickname = identity.nickname || identity.userId?.substring(0, 8) || ''
-        return `飞书 · ${chatName} · ${nickname}`
+        return `飞书 · ${nickname}`
       },
     })
 
@@ -193,9 +192,8 @@ class FeishuBridge {
       defaultCwd: cfg.defaultCwd || null,
       buildIdentityKey: (identity) => `${identity.userId}:${identity.chatId}`,
       buildSessionTitle: (identity) => {
-        const chatName = identity.chatName || identity.chatId?.substring(0, 8) || ''
         const nickname = identity.nickname || identity.userId?.substring(0, 8) || ''
-        return `飞书 · ${chatName} · ${nickname}`
+        return `飞书 · ${nickname}`
       },
     })
   }
@@ -218,7 +216,14 @@ class FeishuBridge {
 
   async _handleFeishuMessage(event) {
     const hydratedEvent = await this._hydrateInboundEvent(event)
-    const { msgId, senderId, chatId, chatType, text, images, unsupported, msgType, mentions } = hydratedEvent
+    const { msgId, senderId, senderName, chatId, chatType, chatName, text, images, unsupported, msgType, mentions } = hydratedEvent
+    const resolvedNames = await this._resolveFeishuDisplayNames({
+      senderId,
+      senderName,
+      chatId,
+      chatType,
+      chatName,
+    })
 
     if (this._processedMsgIds.has(msgId)) return
     this._processedMsgIds.set(msgId, Date.now())
@@ -254,7 +259,13 @@ class FeishuBridge {
         await this._handleChoiceReply(
           mapKey,
           normalizedText,
-          { userId: senderId, chatId, chatType },
+          {
+            userId: senderId,
+            chatId,
+            chatType,
+            nickname: resolvedNames.senderName || senderId,
+            chatName: resolvedNames.chatName || chatId,
+          },
           senderId,
           chatId,
           chatType
@@ -285,13 +296,23 @@ class FeishuBridge {
     const message = { text: normalizedText, images: downloadedImages }
 
     const sessionId = await this._ensureSession({
-      userId: senderId, chatId, chatType,
+      userId: senderId,
+      chatId,
+      chatType,
+      nickname: resolvedNames.senderName || senderId,
+      chatName: resolvedNames.chatName || chatId,
     }, message, senderId, chatId, chatType)
 
     if (!sessionId) return
 
     // 存储飞书身份（用于桌面端介入和图片发送）
-    this._sessionIdentities.set(sessionId, { senderId, chatId, chatType })
+    this._sessionIdentities.set(sessionId, {
+      senderId,
+      senderName: resolvedNames.senderName || senderId,
+      chatId,
+      chatType,
+      chatName: resolvedNames.chatName || chatId || null,
+    })
 
     console.log('[FeishuBridge] notify frontend messageReceived:', JSON.stringify({
       sessionId,
@@ -301,11 +322,75 @@ class FeishuBridge {
     }))
     this._notifier.notifyMessageReceived({
       sessionId, text: normalizedText,
-      senderNick: senderId,
+      senderNick: resolvedNames.senderName || senderId,
       images: downloadedImages,
     })
 
-    this._enqueueMessage(sessionId, message, senderId, chatId, chatType)
+    this._enqueueMessage(sessionId, message, resolvedNames.senderName || senderId, chatId, chatType)
+  }
+
+  async _resolveFeishuDisplayNames({ senderId, senderName, chatId, chatType, chatName }) {
+    let resolvedSenderName = this._normalizeFeishuDisplayName(senderName, senderId)
+    let resolvedChatName = this._normalizeFeishuDisplayName(chatName, chatId)
+    const hasFeishuCredentials = !!(this._api?._appId && this._api?._appSecret)
+
+    if (!resolvedSenderName && senderId && hasFeishuCredentials && typeof this._api?.getUserInfo === 'function') {
+      try {
+        const user = await this._api.getUserInfo(senderId)
+        resolvedSenderName = this._pickFeishuDisplayName(user)
+      } catch (err) {
+        console.warn('[FeishuBridge] Failed to resolve Feishu sender name:', JSON.stringify({
+          senderId,
+          error: err.message,
+        }))
+      }
+    } else if (!resolvedSenderName && senderId) {
+    }
+
+    if (!resolvedChatName && chatId && hasFeishuCredentials && typeof this._api?.getChatInfo === 'function') {
+      try {
+        const chat = await this._api.getChatInfo(chatId)
+        resolvedChatName = this._pickFeishuDisplayName(chat)
+      } catch (err) {
+        console.warn('[FeishuBridge] Failed to resolve Feishu chat name:', JSON.stringify({
+          chatId,
+          error: err.message,
+        }))
+      }
+    } else if (!resolvedChatName && chatId) {
+    }
+
+    if (chatType === 'p2p') {
+      if (!resolvedChatName) resolvedChatName = resolvedSenderName || senderId || ''
+      if (!resolvedSenderName) resolvedSenderName = resolvedChatName || senderId || ''
+    }
+
+    return {
+      senderName: resolvedSenderName || senderId || '',
+      chatName: resolvedChatName || chatId || '',
+    }
+  }
+
+  _normalizeFeishuDisplayName(value, fallbackId = null) {
+    const text = typeof value === 'string' ? value.trim() : ''
+    if (!text) return ''
+    if (fallbackId && text === fallbackId) return ''
+    if (/^(ou|oc|chat|msg)_[A-Za-z0-9_-]+$/.test(text)) return ''
+    return text
+  }
+
+  _pickFeishuDisplayName(value) {
+    if (!value || typeof value !== 'object') return ''
+    return value.name
+      || value.display_name
+      || value.displayName
+      || value.nickname
+      || value.user_name
+      || value.real_name
+      || value.title
+      || value.chat_name
+      || value.chatName
+      || ''
   }
 
   async _hydrateInboundEvent(event) {
@@ -360,6 +445,7 @@ class FeishuBridge {
     const result = await this._sessionMapper.handleChoice(mapKey, inputText, identity)
     const receiveId = chatType === 'p2p' ? senderId : chatId
     const receiveIdType = chatType === 'p2p' ? 'open_id' : 'chat_id'
+    const displayName = identity?.nickname || senderId
 
     if (result.invalidChoice) {
       await this._api.sendTextMessage(receiveIdType, receiveId, result.menuText || '无效选择，请重新回复数字')
@@ -367,8 +453,14 @@ class FeishuBridge {
     }
 
     if (result.sessionId) {
-      this._sessionIdentities.set(result.sessionId, { senderId, chatId, chatType })
-      this._notifier.notifySessionCreated({ sessionId: result.sessionId, nickname: senderId })
+      this._sessionIdentities.set(result.sessionId, {
+        senderId,
+        senderName: displayName,
+        chatId,
+        chatType,
+        chatName: identity?.chatName || null,
+      })
+      this._notifier.notifySessionCreated({ sessionId: result.sessionId, nickname: displayName })
       const pending = this._pendingMessages.get(mapKey)
       if (result.action === 'resume') {
         if (currentSessionId && currentSessionId === result.sessionId && result.wasActivated && !pending) {
@@ -391,15 +483,15 @@ class FeishuBridge {
       }
       if (pending) {
         this._pendingMessages.delete(mapKey)
-        this._notifyPendingMessageReceived(result.sessionId, senderId, pending.message)
+        this._notifyPendingMessageReceived(result.sessionId, displayName, pending.message)
         this._enqueueMessage(result.sessionId, pending.message, pending.senderId, pending.chatId, pending.chatType)
       } else if (!result.wasActivated) {
         this._notifier.notifyMessageReceived({
           sessionId: result.sessionId,
-          senderNick: senderId,
+          senderNick: displayName,
           text: 'hello',
         })
-        this._enqueueMessage(result.sessionId, { text: 'hello', images: undefined }, senderId, chatId, chatType)
+        this._enqueueMessage(result.sessionId, { text: 'hello', images: undefined }, displayName, chatId, chatType)
       }
     } else {
       await this._api.sendTextMessage(receiveIdType, receiveId, '无效选择，请重新回复数字')
@@ -418,8 +510,10 @@ class FeishuBridge {
     }
     await this._handleCommand(commandText, {
       senderId: resolvedContext.senderId,
+      senderName: resolvedContext.senderName,
       chatId: resolvedContext.chatId,
       chatType: resolvedContext.chatType,
+      chatName: resolvedContext.chatName,
     }, {
       cardValue: actionValue,
     })
@@ -427,6 +521,12 @@ class FeishuBridge {
 
   async _handleCommand(text, context, options = {}) {
     this._syncSessionDatabase()
+    const resolvedNames = await this._resolveFeishuDisplayNames(context)
+    context = {
+      ...context,
+      senderName: context.senderName || resolvedNames.senderName,
+      chatName: context.chatName || resolvedNames.chatName,
+    }
     const normalizedText = this._normalizeCommandText(text, context, options)
     const parts = normalizedText.trim().split(/\s+/).filter(Boolean)
     if (parts.length === 0) return
@@ -449,6 +549,8 @@ class FeishuBridge {
           chatId: context.chatId || rememberedIdentity.chatId,
           chatType: context.chatType || rememberedIdentity.chatType,
           senderId: context.senderId || rememberedIdentity.senderId,
+          senderName: context.senderName || rememberedIdentity.senderName,
+          chatName: context.chatName || rememberedIdentity.chatName,
         }
       : context
     if (sessionId) {
@@ -519,12 +621,18 @@ class FeishuBridge {
         }
         const newId = await this._sessionMapper.createSession({
           userId: context.senderId, chatId: context.chatId,
-          chatType: context.chatType, nickname: context.senderId,
+          chatType: context.chatType, nickname: context.senderName || context.senderId, chatName: context.chatName,
         }, { cwd })
         if (newId) {
           this._sessionMapper.sessionMap.set(mapKey, newId)
-          this._sessionIdentities.set(newId, { senderId: context.senderId, chatId: context.chatId, chatType: context.chatType })
-          this._notifier.notifySessionCreated({ sessionId: newId, nickname: context.senderId })
+          this._sessionIdentities.set(newId, {
+            senderId: context.senderId,
+            senderName: context.senderName || context.senderId,
+            chatId: context.chatId,
+            chatType: context.chatType,
+            chatName: context.chatName || null,
+          })
+          this._notifier.notifySessionCreated({ sessionId: newId, nickname: context.senderName || context.senderId })
         }
         if (!newId) {
           await this._api.sendTextMessage(receiveIdType, receiveId, '创建新会话失败')
@@ -537,15 +645,15 @@ class FeishuBridge {
         const pending = preservePendingSelection ? this._pendingMessages.get(mapKey) : null
         if (pending) {
           this._pendingMessages.delete(mapKey)
-          this._notifyPendingMessageReceived(newId, context.senderId, pending.message)
+          this._notifyPendingMessageReceived(newId, context.senderName || context.senderId, pending.message)
           this._enqueueMessage(newId, pending.message, pending.senderId, pending.chatId, pending.chatType)
         } else {
           this._notifier.notifyMessageReceived({
             sessionId: newId,
-            senderNick: context.senderId,
+            senderNick: context.senderName || context.senderId,
             text: 'hello',
           })
-          this._enqueueMessage(newId, { text: 'hello', images: undefined }, context.senderId, context.chatId, context.chatType)
+          this._enqueueMessage(newId, { text: 'hello', images: undefined }, context.senderName || context.senderId, context.chatId, context.chatType)
         }
         break
       }
@@ -603,10 +711,12 @@ class FeishuBridge {
             }
             this._sessionIdentities.set(resolvedSessionId, {
               senderId: context.senderId,
+              senderName: context.senderName || context.senderId,
               chatId: context.chatId,
               chatType: context.chatType,
+              chatName: context.chatName || null,
             })
-            this._notifier.notifySessionCreated({ sessionId: resolvedSessionId, nickname: context.senderId })
+            this._notifier.notifySessionCreated({ sessionId: resolvedSessionId, nickname: context.senderName || context.senderId })
             if (isActivated) {
               await this._api.sendTextMessage(receiveIdType, receiveId, this._buildSessionSwitchedText(selected?.title || resolvedSessionId))
             } else {
@@ -614,15 +724,15 @@ class FeishuBridge {
             }
             if (pending) {
               this._pendingMessages.delete(mapKey)
-              this._notifyPendingMessageReceived(resolvedSessionId, context.senderId, pending.message)
+              this._notifyPendingMessageReceived(resolvedSessionId, context.senderName || context.senderId, pending.message)
               this._enqueueMessage(resolvedSessionId, pending.message, pending.senderId, pending.chatId, pending.chatType)
             } else if (!isActivated) {
               this._notifier.notifyMessageReceived({
                 sessionId: resolvedSessionId,
-                senderNick: context.senderId,
+                senderNick: context.senderName || context.senderId,
                 text: 'hello',
               })
-              this._enqueueMessage(resolvedSessionId, { text: 'hello', images: undefined }, context.senderId, context.chatId, context.chatType)
+              this._enqueueMessage(resolvedSessionId, { text: 'hello', images: undefined }, context.senderName || context.senderId, context.chatId, context.chatType)
             }
           } else {
             await this._api.sendTextMessage(receiveIdType, receiveId, '无法恢复该会话，可能已被删除\n\n发送任意消息可开始新会话')
@@ -630,7 +740,7 @@ class FeishuBridge {
           break
         }
         await this._sessionMapper.initPendingChoice(mapKey, history, async (menuText) => {
-          await this._sendHistoryChoiceMenu(receiveIdType, receiveId, history, sessionId, menuText)
+          await this._sendHistoryChoiceMenu(receiveIdType, receiveId, history, sessionId, menuText, context)
         }, {
           menuBuilder: (sessions) => this._buildHistoryChoiceMenuText(sessions, sessionId)
         })
@@ -787,7 +897,14 @@ class FeishuBridge {
           chatType === 'p2p' ? senderId : chatId,
           historySessions,
           sessionId,
-          menuText
+          menuText,
+          {
+            senderId,
+            senderName: identity.nickname || senderId,
+            chatId,
+            chatType,
+            chatName: identity.chatName || null,
+          }
         )
       }, {
         menuBuilder: (sessions) => this._buildHistoryChoiceMenuText(sessions, sessionId)
@@ -833,7 +950,7 @@ class FeishuBridge {
 
     try {
       await this._agentSessionManager.sendMessage(sessionId, message, {
-        meta: { source: 'feishu', senderNick: senderId, feishuChatId: chatId },
+        meta: { source: 'feishu', senderNick: identity.senderName || senderId, feishuChatId: chatId },
       })
       await donePromise
     } catch (err) {
@@ -890,8 +1007,10 @@ class FeishuBridge {
     this._sessionMapper.sessionMap.set(mapKey, reboundSessionId)
     this._sessionIdentities.set(reboundSessionId, {
       senderId: context.senderId,
+      senderName: context.senderName || context.senderId,
       chatId: context.chatId,
       chatType: context.chatType || 'p2p',
+      chatName: context.chatName || null,
     })
     return reboundSessionId
   }
@@ -926,10 +1045,26 @@ class FeishuBridge {
   _resolveHistoryChoiceContext({ userId, chatId, chatType, actionValue }) {
     const fallback = {
       senderId: userId,
+      senderName: actionValue?.senderName || actionValue?.nickname || null,
       chatId,
       chatType: chatType || 'p2p',
+      chatName: actionValue?.chatName || null,
     }
-    if (actionValue?.source !== 'history-choice' || !chatId) {
+    if (actionValue?.senderId || actionValue?.chatId) {
+      return {
+        senderId: actionValue.senderId || userId || null,
+        senderName: actionValue.senderName || actionValue.nickname || null,
+        chatId: actionValue.chatId || chatId || null,
+        chatType: actionValue.chatType || chatType || 'p2p',
+        chatName: actionValue.chatName || null,
+      }
+    }
+
+    if (actionValue?.source !== 'history-choice') {
+      return fallback
+    }
+
+    if (!chatId) {
       return fallback
     }
 
@@ -950,8 +1085,10 @@ class FeishuBridge {
 
     return {
       senderId: matchedKey.substring(0, separatorIndex),
+      senderName: actionValue?.senderName || actionValue?.nickname || userId || null,
       chatId: matchedKey.substring(separatorIndex + 1),
       chatType: chatType || 'p2p',
+      chatName: actionValue?.chatName || null,
     }
   }
 
@@ -1138,7 +1275,7 @@ class FeishuBridge {
     return lines.join('\n')
   }
 
-  async _sendSessionsMenu(receiveIdType, receiveId, { sessionId, chatId }) {
+  async _sendSessionsMenu(receiveIdType, receiveId, { sessionId, chatId, context = null }) {
     const activeSessions = this._getActiveSessionsByChat(chatId)
     const text = this._buildActiveSessionsText({ sessionId, chatId })
     if (activeSessions.length === 0) {
@@ -1146,7 +1283,7 @@ class FeishuBridge {
       return
     }
 
-    const card = this._buildSessionsCard(activeSessions, sessionId)
+    const card = this._buildSessionsCard(activeSessions, sessionId, { context })
     try {
       await this._api.sendCardMessage(receiveIdType, receiveId, card)
     } catch (err) {
@@ -1155,27 +1292,27 @@ class FeishuBridge {
     }
   }
 
-  async _sendHelpMenu(receiveIdType, receiveId) {
+  async _sendHelpMenu(receiveIdType, receiveId, context = null) {
     const text = this._getHelpText()
     try {
-      await this._api.sendCardMessage(receiveIdType, receiveId, this._buildHelpCard())
+      await this._api.sendCardMessage(receiveIdType, receiveId, this._buildHelpCard(context))
     } catch (err) {
       console.error('[FeishuBridge] Send help card failed:', err.message)
       await this._api.sendTextMessage(receiveIdType, receiveId, text)
     }
   }
 
-  async _sendStatusMenu(receiveIdType, receiveId, { mapKey, chatId }) {
+  async _sendStatusMenu(receiveIdType, receiveId, { mapKey, chatId, context = null }) {
     const statusText = this._buildStatusText({ mapKey, chatId })
     try {
-      await this._api.sendCardMessage(receiveIdType, receiveId, this._buildStatusCard(statusText))
+      await this._api.sendCardMessage(receiveIdType, receiveId, this._buildStatusCard(statusText, context))
     } catch (err) {
       console.error('[FeishuBridge] Send status card failed:', err.message)
       await this._api.sendTextMessage(receiveIdType, receiveId, statusText)
     }
   }
 
-  async _sendCloseResult(receiveIdType, receiveId, { sessionId, chatId, closeText }) {
+  async _sendCloseResult(receiveIdType, receiveId, { sessionId, chatId, closeText, context = null }) {
     const activeSessions = this._getActiveSessionsByChat(chatId)
     const fallbackText = `${closeText}\n\n${this._buildActiveSessionsText({ sessionId, chatId })}`
 
@@ -1186,7 +1323,8 @@ class FeishuBridge {
           receiveId,
           this._buildSessionsCard(activeSessions, sessionId, {
             title: '会话已关闭',
-            summary: closeText
+            summary: closeText,
+            context
           })
         )
         return
@@ -1195,10 +1333,11 @@ class FeishuBridge {
       await this._api.sendCardMessage(
         receiveIdType,
         receiveId,
-        this._buildResultCard({
-          title: '会话已关闭',
-          summary: `${closeText}\n\n暂无活跃会话`,
-          actions: [
+          this._buildResultCard({
+            title: '会话已关闭',
+            summary: `${closeText}\n\n暂无活跃会话`,
+            context,
+            actions: [
             this._buildCommandButton('新建会话', { intent: 'new' }, 'primary'),
             this._buildCommandButton('查看状态', { intent: 'status' }),
             this._buildCommandButton('查看帮助', { intent: 'help' })
@@ -1211,13 +1350,13 @@ class FeishuBridge {
     }
   }
 
-  async _sendHistoryChoiceMenu(receiveIdType, receiveId, sessions, currentSessionId, fallbackText) {
+  async _sendHistoryChoiceMenu(receiveIdType, receiveId, sessions, currentSessionId, fallbackText, context = null) {
     if (!Array.isArray(sessions) || sessions.length === 0) {
       await this._api.sendTextMessage(receiveIdType, receiveId, fallbackText || '没有历史会话记录')
       return
     }
 
-    const card = this._buildHistoryChoiceCard(sessions, currentSessionId)
+    const card = this._buildHistoryChoiceCard(sessions, currentSessionId, context)
     try {
       await this._api.sendCardMessage(receiveIdType, receiveId, card)
     } catch (err) {
@@ -1266,8 +1405,15 @@ class FeishuBridge {
     return lines.join('\n')
   }
 
-  _buildHistoryChoiceCard(sessions, currentSessionId = null) {
+  _buildHistoryChoiceCard(sessions, currentSessionId = null, context = null) {
     const displaySessions = sessions.slice(0, FEISHU_CARD_SESSION_LIMIT)
+    const actionContext = context ? {
+      senderId: context.senderId || context.userId || null,
+      senderName: context.senderName || context.nickname || null,
+      chatId: context.chatId || null,
+      chatType: context.chatType || 'p2p',
+      chatName: context.chatName || null,
+    } : null
     const elements = [
       {
         tag: 'markdown',
@@ -1296,7 +1442,8 @@ class FeishuBridge {
             },
             value: {
               intent: 'new',
-              source: 'history-choice'
+              source: 'history-choice',
+              ...(actionContext || {})
             }
           },
           {
@@ -1325,7 +1472,8 @@ class FeishuBridge {
         intent: 'resume',
         index: index + 1,
         title: row.title || '',
-        source: 'history-choice'
+        source: 'history-choice',
+        ...(actionContext || {})
       }
     }))
     elements.splice(1, 0, ...this._chunkCardActions(resumeActions))
@@ -1356,6 +1504,7 @@ class FeishuBridge {
 
   _buildSessionsCard(activeSessions, currentSessionId = null, options = {}) {
     const displaySessions = activeSessions.slice(0, FEISHU_CARD_SESSION_LIMIT)
+    const context = options.context || null
     const elements = []
 
     if (options.summary) {
@@ -1380,7 +1529,7 @@ class FeishuBridge {
       {
         tag: 'action',
         actions: [
-          this._buildCommandButton('新建会话', { intent: 'new' }, 'primary'),
+          this._buildCommandButton('新建会话', { intent: 'new', ...(context || {}) }, 'primary'),
           this._buildCommandButton('查看状态', { intent: 'status' }),
           this._buildCommandButton('查看帮助', { intent: 'help' })
         ]
@@ -1422,12 +1571,13 @@ class FeishuBridge {
     }
   }
 
-  _buildHelpCard() {
+  _buildHelpCard(context = null) {
     return this._buildResultCard({
       title: '飞书命令帮助',
       summary: this._getHelpText(),
+      context,
       actions: [
-        this._buildCommandButton('新建会话', { intent: 'new' }, 'primary'),
+        this._buildCommandButton('新建会话', { intent: 'new', ...(context || {}) }, 'primary'),
         this._buildCommandButton('活跃会话', { intent: 'sessions' }),
         this._buildCommandButton('查看状态', { intent: 'status' }),
         this._buildCommandButton('恢复历史会话', { command: 'resume' })
@@ -1435,19 +1585,21 @@ class FeishuBridge {
     })
   }
 
-  _buildStatusCard(statusText) {
+  _buildStatusCard(statusText, context = null) {
     return this._buildResultCard({
       title: '系统状态',
       summary: statusText,
+      context,
       actions: [
         this._buildCommandButton('活跃会话', { intent: 'sessions' }, 'primary'),
-        this._buildCommandButton('新建会话', { intent: 'new' }),
+        this._buildCommandButton('新建会话', { intent: 'new', ...(context || {}) }),
         this._buildCommandButton('查看帮助', { intent: 'help' })
       ]
     })
   }
 
-  _buildResultCard({ title, summary, actions = [] }) {
+  _buildResultCard({ title, summary, actions = [], context = null }) {
+    const actionsWithContext = actions.map(action => this._attachCardContext(action, context))
     return {
       config: { wide_screen_mode: true },
       header: {
@@ -1463,9 +1615,33 @@ class FeishuBridge {
         },
         {
           tag: 'action',
-          actions
+          actions: actionsWithContext
         }
       ]
+    }
+  }
+
+  _attachCardContext(action, context = null) {
+    if (!context || !action || typeof action !== 'object') return action
+    const value = action.value && typeof action.value === 'object'
+      ? { ...action.value, ...this._buildCardContextValue(context) }
+      : action.value
+    return {
+      ...action,
+      value,
+    }
+  }
+
+  _buildCardContextValue(context = null) {
+    if (!context || typeof context !== 'object') return {}
+    const senderName = this._normalizeFeishuDisplayName(context.senderName || context.nickname || null, context.senderId || context.userId || null)
+    const chatName = this._normalizeFeishuDisplayName(context.chatName || null, context.chatId || null)
+    return {
+      senderId: context.senderId || context.userId || null,
+      senderName: senderName || null,
+      chatId: context.chatId || null,
+      chatType: context.chatType || 'p2p',
+      chatName: chatName || null,
     }
   }
 

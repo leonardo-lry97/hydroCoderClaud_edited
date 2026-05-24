@@ -6,6 +6,7 @@ import path from 'path'
 const { AgentSessionManager } = await import('../../src/main/agent-session-manager.js')
 const { FeishuBridge } = await import('../../src/main/managers/feishu-bridge.js')
 const { FeishuEventClient } = await import('../../src/main/managers/feishu-event-client.js')
+const { FeishuMessageAPI } = await import('../../src/main/managers/feishu-message-api.js')
 const { ImSessionMapper } = await import('../../src/main/managers/im-session-mapper.js')
 
 describe('FeishuBridge', () => {
@@ -81,11 +82,13 @@ describe('FeishuBridge', () => {
       chatId: 'oc_xxx'
     })
 
-    expect(commandSpy).toHaveBeenCalledWith('/resume 2', {
+    expect(commandSpy).toHaveBeenCalledWith('/resume 2', expect.objectContaining({
       senderId: 'ou_xxx',
+      senderName: null,
       chatId: 'oc_xxx',
+      chatName: null,
       chatType: 'p2p'
-    }, {
+    }), {
       cardValue: { intent: 'resume', index: 2 }
     })
   })
@@ -222,6 +225,59 @@ describe('FeishuBridge', () => {
     ])
   })
 
+  it('uses readable sender and chat names for default Feishu session titles', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
+    bridge._api.setCredentials('app-id', 'app-secret')
+    vi.spyOn(bridge._api, 'getUserInfo').mockResolvedValue({ name: '张三' })
+    vi.spyOn(bridge._api, 'getChatInfo').mockResolvedValue({ name: '张三' })
+    manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
+
+    await bridge._handleFeishuMessage({
+      msgId: 'om_named_1',
+      senderId: 'ou_xxx',
+      chatId: 'oc_xxx',
+      chatType: 'p2p',
+      text: '你好',
+      images: []
+    })
+
+    const session = Array.from(manager.sessions.values())[0]
+    expect(session).toBeTruthy()
+    expect(session.title).toBe('飞书 · 张三')
+    expect(enqueueMessage).toHaveBeenCalledWith(
+      session.id,
+      { text: '你好', images: undefined },
+      '张三',
+      'oc_xxx',
+      'p2p'
+    )
+  })
+
+  it('ignores placeholder Feishu ids when resolving display names', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    bridge._api.setCredentials('app-id', 'app-secret')
+    const getUserInfo = vi.spyOn(bridge._api, 'getUserInfo').mockResolvedValue({ name: '张三' })
+    const getChatInfo = vi.spyOn(bridge._api, 'getChatInfo').mockResolvedValue({ name: '项目群' })
+
+    const resolved = await bridge._resolveFeishuDisplayNames({
+      senderId: 'ou_xxx',
+      senderName: 'ou_xxx',
+      chatId: 'oc_xxx',
+      chatName: 'oc_xxx',
+      chatType: 'p2p'
+    })
+
+    expect(getUserInfo).toHaveBeenCalledWith('ou_xxx')
+    expect(getChatInfo).toHaveBeenCalledWith('oc_xxx')
+    expect(resolved).toEqual({
+      senderName: '张三',
+      chatName: '项目群'
+    })
+  })
+
   it('forwards inbound Feishu post text and images instead of treating them as empty', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
@@ -338,7 +394,13 @@ describe('FeishuBridge', () => {
     expect(handleChoiceReply).toHaveBeenCalledWith(
       'ou_xxx:oc_xxx',
       '不是数字',
-      { userId: 'ou_xxx', chatId: 'oc_xxx', chatType: 'p2p' },
+      expect.objectContaining({
+        userId: 'ou_xxx',
+        chatId: 'oc_xxx',
+        chatType: 'p2p',
+        nickname: 'ou_xxx',
+        chatName: 'ou_xxx'
+      }),
       'ou_xxx',
       'oc_xxx',
       'p2p'
@@ -974,6 +1036,35 @@ describe('FeishuBridge', () => {
     expect(sent.find(item => item.channel === 'feishu:sessionCreated')?.data.sessionId).toBe(session.id)
   })
 
+  it('uses readable sender and chat names when creating a new Feishu session with /new', async () => {
+    const { configManager, manager, mainWindow, sent } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
+    const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
+    bridge._api.setCredentials('app-id', 'app-secret')
+    vi.spyOn(bridge._api, 'getUserInfo').mockResolvedValue({ name: '张三' })
+    vi.spyOn(bridge._api, 'getChatInfo').mockResolvedValue({ name: '项目群' })
+
+    await bridge._handleCommand('/new', {
+      senderId: 'ou_xxx',
+      chatId: 'oc_group',
+      chatType: 'chat',
+    })
+
+    const session = Array.from(manager.sessions.values())[0]
+    expect(session).toBeTruthy()
+    expect(session.title).toBe('飞书 · 张三')
+    expect(sendTextMessage).toHaveBeenCalledWith('chat_id', 'oc_group', '会话创建中，请等待信息返回后，即可开始聊天')
+    expect(enqueueMessage).toHaveBeenCalledWith(
+      session.id,
+      { text: 'hello', images: undefined },
+      '张三',
+      'oc_group',
+      'chat'
+    )
+    expect(sent.find(item => item.channel === 'feishu:sessionCreated')?.data.sessionId).toBe(session.id)
+  })
+
   it('creates a new Feishu session under a requested relative directory with /new [目录]', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
@@ -1400,6 +1491,148 @@ describe('FeishuBridge', () => {
     await bridge._onAgentResult(session.id)
 
     expect(uploadImage).toHaveBeenCalledWith(generatedImagePath)
+    expect(sendImageMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', 'img_generated')
+  })
+
+  it('sends Feishu images from standard tool_result file resources after agent result', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const uploadImage = vi.spyOn(bridge._api, 'uploadImage').mockResolvedValue('img_generated')
+    const sendImageMessage = vi.spyOn(bridge._api, 'sendImageMessage').mockResolvedValue('om_img')
+    manager.runner = { normalizeMessage: raw => raw }
+
+    const generatedImagePath = path.join(tempDir, 'cover.png')
+    fs.writeFileSync(generatedImagePath, Buffer.from('pngdata'))
+
+    const created = manager.create({ type: 'feishu', source: 'feishu', title: '图片会话', cwd: tempDir })
+    const session = manager.sessions.get(created.id)
+    bridge._sessionIdentities.set(session.id, {
+      senderId: 'ou_xxx',
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
+    })
+
+    bridge._replyCollector.startCollect(session.id, { sendFn: vi.fn() })
+    await manager._processMessage(session, {
+      type: 'assistant_message',
+      content: [{
+        type: 'tool_use',
+        id: 'tool-use-1',
+        name: 'generate_image',
+        input: { prompt: 'draw' }
+      }],
+      sdkSessionId: 'sdk-tool'
+    })
+    await manager._processMessage(session, {
+      type: 'user_message',
+      parentToolUseId: 'tool-use-1',
+      content: [{
+        type: 'tool_result',
+        tool_use_id: 'tool-use-1',
+        content: [{
+          type: 'resource_link',
+          uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+          name: 'cover.png',
+          mimeType: 'image/png'
+        }],
+        structured_content: {
+          type: 'image_result',
+          files: [{
+            uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+            name: 'cover.png',
+            mimeType: 'image/png'
+          }]
+        }
+      }],
+      toolUseResult: {
+        content: [{
+          type: 'resource_link',
+          uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+          name: 'cover.png',
+          mimeType: 'image/png'
+        }],
+        structuredContent: {
+          type: 'image_result',
+          files: [{
+            uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+            name: 'cover.png',
+            mimeType: 'image/png'
+          }]
+        }
+      }
+    })
+
+    await bridge._onAgentResult(session.id)
+
+    expect(uploadImage).toHaveBeenCalledWith(generatedImagePath)
+    expect(sendImageMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', 'img_generated')
+  })
+
+  it('does not send duplicate Feishu images when tool_use and normalized tool_result reference the same file', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const uploadImage = vi.spyOn(bridge._api, 'uploadImage').mockResolvedValue('img_generated')
+    const sendImageMessage = vi.spyOn(bridge._api, 'sendImageMessage').mockResolvedValue('om_img')
+    manager.runner = { normalizeMessage: raw => raw }
+
+    const generatedImagePath = path.join(tempDir, 'dedupe-cover.png')
+    fs.writeFileSync(generatedImagePath, Buffer.from('pngdata'))
+
+    const created = manager.create({ type: 'feishu', source: 'feishu', title: '图片会话', cwd: tempDir })
+    const session = manager.sessions.get(created.id)
+    bridge._sessionIdentities.set(session.id, {
+      senderId: 'ou_xxx',
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
+    })
+
+    bridge._replyCollector.startCollect(session.id, { sendFn: vi.fn() })
+    bridge._onAgentMessage(session.id, {
+      type: 'assistant',
+      content: [],
+      tool_use: {
+        output_image: generatedImagePath
+      }
+    })
+
+    await manager._processMessage(session, {
+      type: 'assistant_message',
+      content: [{
+        type: 'tool_use',
+        id: 'tool-use-dedupe-1',
+        name: 'generate_image',
+        input: { prompt: 'draw' }
+      }],
+      sdkSessionId: 'sdk-tool'
+    })
+    await manager._processMessage(session, {
+      type: 'user_message',
+      parentToolUseId: 'tool-use-dedupe-1',
+      content: [{
+        type: 'tool_result',
+        tool_use_id: 'tool-use-dedupe-1',
+        content: [{
+          type: 'resource_link',
+          uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+          name: 'dedupe-cover.png',
+          mimeType: 'image/png'
+        }]
+      }],
+      toolUseResult: {
+        content: [{
+          type: 'resource_link',
+          uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+          name: 'dedupe-cover.png',
+          mimeType: 'image/png'
+        }]
+      }
+    })
+
+    await bridge._onAgentResult(session.id)
+
+    expect(uploadImage).toHaveBeenCalledTimes(1)
+    expect(uploadImage).toHaveBeenCalledWith(generatedImagePath)
+    expect(sendImageMessage).toHaveBeenCalledTimes(1)
     expect(sendImageMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', 'img_generated')
   })
 
@@ -2085,9 +2318,43 @@ describe('FeishuBridge', () => {
     expect(result).toEqual({
       senderId: 'ou_original',
       chatId: 'oc_shared',
-      chatType: 'p2p'
+      chatType: 'p2p',
+      senderName: 'ou_callback',
+      chatName: null
     })
     clearTimeout(bridge._sessionMapper._pendingChoices.get('ou_original:oc_shared')?.timer)
+  })
+
+  it('uses history-choice card value context when callback payload is missing user and chat ids', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const commandSpy = vi.spyOn(bridge, '_handleCommand').mockResolvedValue()
+
+    await bridge._handleCardAction({
+      actionType: 'button',
+      actionValue: {
+        intent: 'new',
+        source: 'history-choice',
+        senderId: 'ou_card',
+        senderName: '张三',
+        chatId: 'oc_card',
+        chatType: 'chat',
+        chatName: '项目群'
+      }
+    })
+
+    expect(commandSpy).toHaveBeenCalledWith('/new', expect.objectContaining({
+      senderId: 'ou_card',
+      senderName: '张三',
+      chatId: 'oc_card',
+      chatType: 'chat',
+      chatName: '项目群'
+    }), expect.objectContaining({
+      cardValue: expect.objectContaining({
+        senderId: 'ou_card',
+        chatId: 'oc_card'
+      })
+    }))
   })
 
   it('rebinds the current Feishu command mapKey to the active session in the same chat before rename', async () => {
@@ -2569,5 +2836,36 @@ describe('FeishuEventClient', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('FeishuMessageAPI', () => {
+  it('loads user display names through the basic_batch endpoint', async () => {
+    const api = new FeishuMessageAPI()
+    api.setCredentials('app-id', 'app-secret')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      json: async () => ({
+        code: 0,
+        data: {
+          users: [{
+            name: '张三',
+            en_name: 'San Zhang'
+          }]
+        }
+      })
+    })
+
+    const user = await api.getUserInfo('ou_xxx')
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/contact/v3/users/basic_batch?user_id_type=open_id'),
+      expect.objectContaining({
+        method: 'POST'
+      })
+    )
+    expect(user).toEqual(expect.objectContaining({
+      name: '张三',
+      en_name: 'San Zhang'
+    }))
   })
 })

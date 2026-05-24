@@ -125,6 +125,44 @@ class FeishuMessageAPI {
     }
   }
 
+  async getUserInfo(userId) {
+    const token = await this.getAccessToken()
+    const resp = await globalThis.fetch(
+      `${this._apiBase}/contact/v3/users/basic_batch?user_id_type=open_id`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        body: JSON.stringify({ user_ids: [userId] }),
+      }
+    )
+    const data = await resp.json()
+    if (data.code !== 0) {
+      throw new Error(`Feishu get user failed: ${data.msg} (code=${data.code})`)
+    }
+    const user = Array.isArray(data?.data?.users) ? data.data.users[0] : (data?.data?.user || data?.data || null)
+    return user
+  }
+
+  async getChatInfo(chatId) {
+    const token = await this.getAccessToken()
+    const resp = await globalThis.fetch(
+      `${this._apiBase}/im/v1/chats/${encodeURIComponent(chatId)}`,
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    )
+    const data = await resp.json()
+    if (data.code !== 0) {
+      throw new Error(`Feishu get chat failed: ${data.msg} (code=${data.code})`)
+    }
+    const chat = data?.data?.chat || data?.data || null
+    return chat
+  }
+
   /**
    * 发送交互式卡片消息
    * @param {'open_id'|'chat_id'} receiveIdType
