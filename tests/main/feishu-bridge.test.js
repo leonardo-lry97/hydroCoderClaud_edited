@@ -93,6 +93,90 @@ describe('FeishuBridge', () => {
     })
   })
 
+  it('binds a proactive Feishu target and reuses the same session on the first reply', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const sendSpy = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
+
+    const created = manager.create({ type: 'chat', source: 'manual', title: '桌面会话', cwd: tempDir })
+    const session = manager.sessions.get(created.id)
+
+    const sendResult = await bridge.sendTextToTarget({
+      sessionId: session.id,
+      openId: 'ou_target',
+      displayName: '张三',
+      text: '任务已完成'
+    })
+
+    expect(sendSpy).toHaveBeenCalledWith('open_id', 'ou_target', '任务已完成')
+    expect(sendResult).toMatchObject({ success: true, targetId: 'ou_target', messageId: 'om_send_1' })
+    expect(bridge.getSessionBinding(session.id)).toEqual({
+      targetId: 'ou_target',
+      openId: 'ou_target',
+      displayName: '张三'
+    })
+
+    const sessionId = await bridge._ensureSession(
+      {
+        userId: 'ou_target',
+        chatId: 'oc_reply',
+        chatType: 'p2p',
+        nickname: '张三',
+        chatName: '张三'
+      },
+      { text: '收到', images: [] },
+      'ou_target',
+      'oc_reply',
+      'p2p'
+    )
+
+    expect(sessionId).toBe(session.id)
+    expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_reply')).toBe(session.id)
+    expect(manager.sessionDatabase.updateDingTalkMetadata).toHaveBeenCalledWith(session.id, 'ou_target', 'oc_reply')
+  })
+
+  it('keeps Feishu target names empty instead of falling back to openId', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    vi.spyOn(bridge._api, 'listUsers').mockResolvedValue([
+      { openId: 'ou_target', userId: 'user-1', displayName: '', name: '' }
+    ])
+
+    const targets = await bridge.listSendableTargets()
+
+    expect(targets).toEqual([
+      expect.objectContaining({
+        id: 'ou_target',
+        openId: 'ou_target',
+        displayName: '',
+        name: ''
+      })
+    ])
+  })
+
+  it('hydrates Feishu proactive target names from user detail when list results only contain openId', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    vi.spyOn(bridge._api, 'listUsers').mockResolvedValue([
+      { openId: 'ou_target', userId: 'user-1', displayName: 'ou_target', name: 'ou_target' }
+    ])
+    vi.spyOn(bridge._api, 'getUserInfo').mockResolvedValue({
+      name: '张越胜'
+    })
+
+    const targets = await bridge.listSendableTargets()
+
+    expect(bridge._api.getUserInfo).toHaveBeenCalledWith('ou_target')
+    expect(targets).toEqual([
+      expect.objectContaining({
+        id: 'ou_target',
+        openId: 'ou_target',
+        displayName: '张越胜',
+        name: '张越胜'
+      })
+    ])
+  })
+
   it('preserves group-chat context for card actions instead of forcing p2p', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
@@ -2908,5 +2992,118 @@ describe('FeishuMessageAPI', () => {
       name: '张三',
       en_name: 'San Zhang'
     }))
+  })
+
+  it('recursively lists all organization members across child departments', async () => {
+    const api = new FeishuMessageAPI()
+    api.setCredentials('app-id', 'app-secret')
+    const responses = {
+      '/open-apis/auth/v3/app_access_token/internal': {
+        code: 0,
+        app_access_token: 'token-1',
+        expire: 7200
+      },
+      '/contact/v3/departments/0/children': {
+        code: 0,
+        data: {
+          items: [
+            { open_department_id: 'od_sales' },
+            { open_department_id: 'od_eng' }
+          ]
+        }
+      },
+      '/contact/v3/departments/od_sales/children': {
+        code: 0,
+        data: {
+          items: [
+            { open_department_id: 'od_sales_a' }
+          ]
+        }
+      },
+      '/contact/v3/departments/od_eng/children': {
+        code: 0,
+        data: {
+          items: []
+        }
+      },
+      '/contact/v3/departments/od_sales_a/children': {
+        code: 0,
+        data: {
+          items: []
+        }
+      },
+      '/contact/v3/users/find_by_department?department_id=0': {
+        code: 0,
+        data: {
+          items: []
+        }
+      },
+      '/contact/v3/users/find_by_department?department_id=od_sales': {
+        code: 0,
+        data: {
+          items: [
+            { open_id: 'ou_dup', name: '张三' },
+            { open_id: 'ou_sales', display_name: '销售' }
+          ]
+        }
+      },
+      '/contact/v3/users/find_by_department?department_id=od_sales_a': {
+        code: 0,
+        data: {
+          items: [
+            { open_id: 'ou_sales_a', real_name: '研发A' }
+          ]
+        }
+      },
+      '/contact/v3/users/find_by_department?department_id=od_eng': {
+        code: 0,
+        data: {
+          items: [
+            { open_id: 'ou_dup', name: '张三' },
+            { open_id: 'ou_eng', nickname: '工程师' }
+          ]
+        }
+      }
+    }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(typeof input === 'string' ? input : String(input))
+      let body = null
+      if (url.pathname === '/open-apis/auth/v3/app_access_token/internal') {
+        body = responses['/open-apis/auth/v3/app_access_token/internal']
+      } else if (url.pathname === '/open-apis/contact/v3/departments/0/children') {
+        body = responses['/contact/v3/departments/0/children']
+      } else if (url.pathname === '/open-apis/contact/v3/departments/od_sales/children') {
+        body = responses['/contact/v3/departments/od_sales/children']
+      } else if (url.pathname === '/open-apis/contact/v3/departments/od_eng/children') {
+        body = responses['/contact/v3/departments/od_eng/children']
+      } else if (url.pathname === '/open-apis/contact/v3/departments/od_sales_a/children') {
+        body = responses['/contact/v3/departments/od_sales_a/children']
+      } else if (url.pathname === '/open-apis/contact/v3/users/find_by_department') {
+        const departmentId = url.searchParams.get('department_id')
+        body = responses[`/contact/v3/users/find_by_department?department_id=${departmentId}`]
+      }
+      if (!body) {
+        throw new Error(`Unexpected Feishu request: ${url.toString()}`)
+      }
+      return {
+        json: async () => body
+      }
+    })
+
+    const users = await api.listUsers({ limit: 10 })
+
+    expect(fetchSpy).toHaveBeenCalled()
+    expect(users.map((user) => user.openId)).toEqual([
+      'ou_dup',
+      'ou_sales',
+      'ou_eng',
+      'ou_sales_a'
+    ])
+    expect(users).toEqual([
+      expect.objectContaining({ openId: 'ou_dup', displayName: '张三' }),
+      expect.objectContaining({ openId: 'ou_sales', displayName: '销售' }),
+      expect.objectContaining({ openId: 'ou_eng', displayName: '工程师' }),
+      expect.objectContaining({ openId: 'ou_sales_a', displayName: '研发A' })
+    ])
   })
 })

@@ -146,6 +146,125 @@ class FeishuMessageAPI {
     return user
   }
 
+  /**
+   * 列出可发送的组织成员
+   * @param {object} [options]
+   * @param {number} [options.limit=200]
+   * @param {number} [options.pageSize=50]
+   * @param {string} [options.pageToken='']
+   * @returns {Promise<Array<object>>}
+   */
+  async listUsers(options = {}) {
+    const limit = Number.isFinite(options.limit) ? Math.max(1, Math.floor(options.limit)) : 200
+    const pageSize = Math.min(Math.max(Number(options.pageSize) || 50, 1), 100)
+    const rootDepartmentId = typeof options.departmentId === 'string' && options.departmentId.trim()
+      ? options.departmentId.trim()
+      : '0'
+    const departmentIdType = typeof options.departmentIdType === 'string' && options.departmentIdType.trim()
+      ? options.departmentIdType.trim()
+      : 'open_department_id'
+    const token = await this.getAccessToken()
+    const users = []
+    const seenOpenIds = new Set()
+    const visitedDepartments = new Set()
+    const queuedDepartments = new Set([rootDepartmentId])
+    const departmentQueue = [rootDepartmentId]
+    const requestJson = async (url, errorLabel) => {
+      const resp = await globalThis.fetch(url, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await resp.json()
+      if (data.code !== 0) {
+        throw new Error(`Feishu ${errorLabel} failed: ${data.msg} (code=${data.code})`)
+      }
+      return data
+    }
+    const extractBatch = (data) => {
+      if (Array.isArray(data?.data?.items)) return data.data.items
+      if (Array.isArray(data?.data?.users)) return data.data.users
+      if (Array.isArray(data?.data?.departments)) return data.data.departments
+      if (Array.isArray(data?.data)) return data.data
+      return []
+    }
+    const nextPageToken = (data) => data?.data?.page_token || data?.data?.next_page_token || data?.data?.pageToken || ''
+    const normalizeUser = (item) => {
+      const openId = item?.open_id || item?.openId || item?.id || ''
+      if (!openId) return null
+      return {
+        openId,
+        userId: item?.user_id || item?.userId || null,
+        name: item?.name || item?.display_name || item?.nickname || item?.user_name || item?.real_name || item?.en_name || '',
+        displayName: item?.name || item?.display_name || item?.nickname || item?.user_name || item?.real_name || item?.en_name || openId,
+        email: item?.email || null,
+        departmentIds: Array.isArray(item?.department_ids) ? item.department_ids : (typeof item?.department_id === 'string' ? [item.department_id] : []),
+        jobTitle: item?.job_title || item?.jobTitle || '',
+        avatarUrl: item?.avatar?.avatar_72 || item?.avatar?.avatar_240 || item?.avatar_url || null,
+      }
+    }
+    const enqueueDepartment = (item) => {
+      const childDepartmentId = item?.open_department_id || item?.openDepartmentId || item?.department_id || item?.departmentId || item?.id || ''
+      if (!childDepartmentId || visitedDepartments.has(childDepartmentId) || queuedDepartments.has(childDepartmentId)) {
+        return
+      }
+      queuedDepartments.add(childDepartmentId)
+      departmentQueue.push(childDepartmentId)
+    }
+
+    while (departmentQueue.length > 0 && users.length < limit) {
+      const departmentId = departmentQueue.shift()
+      if (!departmentId || visitedDepartments.has(departmentId)) {
+        continue
+      }
+      visitedDepartments.add(departmentId)
+
+      let userPageToken = departmentId === rootDepartmentId
+        ? (typeof options.pageToken === 'string' ? options.pageToken : '')
+        : ''
+      do {
+        const url = new URL(`${this._apiBase}/contact/v3/users/find_by_department`)
+        url.searchParams.set('department_id', departmentId)
+        url.searchParams.set('department_id_type', departmentIdType)
+        url.searchParams.set('user_id_type', 'open_id')
+        url.searchParams.set('page_size', String(Math.min(pageSize, limit - users.length)))
+        if (userPageToken) {
+          url.searchParams.set('page_token', userPageToken)
+        }
+
+        const data = await requestJson(url, 'list users by department')
+        const batch = extractBatch(data)
+        for (const item of batch) {
+          const user = normalizeUser(item)
+          if (!user || seenOpenIds.has(user.openId)) continue
+          seenOpenIds.add(user.openId)
+          users.push(user)
+          if (users.length >= limit) break
+        }
+        userPageToken = nextPageToken(data)
+      } while (userPageToken && users.length < limit)
+
+      let childPageToken = ''
+      do {
+        const url = new URL(`${this._apiBase}/contact/v3/departments/${encodeURIComponent(departmentId)}/children`)
+        url.searchParams.set('department_id_type', departmentIdType)
+        url.searchParams.set('fetch_child', 'false')
+        url.searchParams.set('page_size', String(pageSize))
+        if (childPageToken) {
+          url.searchParams.set('page_token', childPageToken)
+        }
+
+        const data = await requestJson(url, 'list child departments')
+        const batch = extractBatch(data)
+        for (const item of batch) {
+          enqueueDepartment(item)
+        }
+        childPageToken = nextPageToken(data)
+      } while (childPageToken)
+    }
+
+    return users
+  }
+
   async getChatInfo(chatId) {
     const token = await this.getAccessToken()
     const resp = await globalThis.fetch(

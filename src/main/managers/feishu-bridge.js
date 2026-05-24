@@ -54,6 +54,10 @@ class FeishuBridge {
     this._pendingMessages = new Map()
     /** @type {Map<string, { senderId: string, chatId: string, chatType: string }>} 每个 session 的飞书身份（用于桌面端介入路由和图片发送） */
     this._sessionIdentities = new Map()
+    /** @type {Map<string, { openId: string, displayName: string }>} 主动推送绑定的飞书目标 */
+    this._sessionTargets = new Map()
+    /** @type {Map<string, string>} open_id → sessionId */
+    this._targetSessionMap = new Map()
     this._activeSendChunks = new Map()
     this._knownRobotMentionIds = new Set()
 
@@ -110,6 +114,8 @@ class FeishuBridge {
     this._processedMsgIds.clear()
     this._pendingMessages.clear()
     this._sessionIdentities.clear()
+    this._sessionTargets.clear()
+    this._targetSessionMap.clear()
     this._activeSendChunks.clear()
     this._knownRobotMentionIds.clear()
   }
@@ -894,6 +900,28 @@ class FeishuBridge {
       }
     }
 
+    if (!sessionId && chatType === 'p2p') {
+      const proactiveSessionId = await this._findBoundSessionIdBySenderId(senderId)
+      if (proactiveSessionId) {
+        this._sessionMapper.sessionMap.set(mapKey, proactiveSessionId)
+        this._sessionIdentities.set(proactiveSessionId, {
+          senderId,
+          senderName: identity.nickname || senderId,
+          chatId,
+          chatType,
+          chatName: identity.chatName || null,
+        })
+        if (this._sessionDatabase?.updateDingTalkMetadata) {
+          try {
+            this._sessionDatabase.updateDingTalkMetadata(proactiveSessionId, senderId || '', chatId || '')
+          } catch (err) {
+            console.warn('[FeishuBridge] Failed to persist proactive Feishu binding:', err.message)
+          }
+        }
+        return proactiveSessionId
+      }
+    }
+
     const historySessions = await this._sessionMapper._queryHistorySessions(identity)
     if (historySessions && historySessions.length > 0) {
       this._pendingMessages.set(mapKey, { message, senderId, chatId, chatType })
@@ -992,6 +1020,129 @@ class FeishuBridge {
     )
   }
 
+  async listSendableTargets({ limit = Number.MAX_SAFE_INTEGER } = {}) {
+    const users = await this._api.listUsers?.({ limit }) || []
+    return Promise.all(users.map(async (user) => {
+      let displayName = this._normalizeFeishuDisplayName(
+        user.displayName || user.name || user.nickname || user.realName || '',
+        user.openId
+      ) || this._normalizeFeishuDisplayName(this._pickFeishuDisplayName(user), user.openId)
+
+      if (!displayName && user.openId && typeof this._api?.getUserInfo === 'function') {
+        try {
+          const detail = await this._api.getUserInfo(user.openId)
+          displayName = this._pickFeishuDisplayName(detail)
+        } catch (err) {
+          console.warn('[FeishuBridge] Failed to hydrate proactive target name:', JSON.stringify({
+            openId: user.openId,
+            error: err.message,
+          }))
+        }
+      }
+
+      return {
+        id: user.openId,
+        openId: user.openId,
+        userId: user.userId,
+        displayName: displayName || '',
+        name: displayName || '',
+        email: user.email || null,
+        jobTitle: user.jobTitle || '',
+        avatarUrl: user.avatarUrl || null,
+        hasContextToken: true,
+      }
+    }))
+  }
+
+  bindSessionToTarget(sessionId, { openId, targetId, displayName } = {}) {
+    this._syncSessionDatabase()
+    const resolvedOpenId = typeof (openId || targetId) === 'string'
+      ? (openId || targetId).trim()
+      : ''
+    if (!sessionId || !resolvedOpenId) {
+      throw new Error('sessionId 和 openId 不能为空')
+    }
+    const session = this._agentSessionManager.sessions.get(sessionId)
+      || this._sessionDatabase?.getAgentConversation?.(sessionId)
+    if (!session) {
+      throw new Error(`Session ${sessionId} 不存在或已关闭`)
+    }
+
+    const previousTarget = this._sessionTargets.get(sessionId)
+    if (previousTarget?.openId && previousTarget.openId !== resolvedOpenId) {
+      this._targetSessionMap.delete(previousTarget.openId)
+    }
+
+    const previousSessionId = this._targetSessionMap.get(resolvedOpenId)
+    if (previousSessionId && previousSessionId !== sessionId) {
+      const previousSessionTarget = this._sessionTargets.get(previousSessionId)
+      if (previousSessionTarget?.openId) {
+        this._targetSessionMap.delete(previousSessionTarget.openId)
+      }
+      this._sessionTargets.delete(previousSessionId)
+      if (this._sessionIdentities.get(previousSessionId)?.chatType === 'p2p') {
+        this._sessionIdentities.delete(previousSessionId)
+      }
+    }
+
+    const target = {
+      openId: resolvedOpenId,
+      displayName: displayName || previousTarget?.displayName || resolvedOpenId,
+    }
+    this._sessionTargets.set(sessionId, target)
+    this._targetSessionMap.set(resolvedOpenId, sessionId)
+    this._sessionIdentities.set(sessionId, {
+      senderId: resolvedOpenId,
+      senderName: target.displayName || resolvedOpenId,
+      chatId: null,
+      chatType: 'p2p',
+      chatName: target.displayName || resolvedOpenId,
+    })
+    return { success: true, target }
+  }
+
+  unbindSessionTarget(sessionId) {
+    if (!sessionId) return { success: false, error: 'sessionId 不能为空' }
+    const target = this._sessionTargets.get(sessionId) || null
+    if (target?.openId) {
+      this._targetSessionMap.delete(target.openId)
+    }
+    this._sessionTargets.delete(sessionId)
+    const identity = this._sessionIdentities.get(sessionId)
+    if (identity?.chatType === 'p2p' && !identity.chatId) {
+      this._sessionIdentities.delete(sessionId)
+    }
+    return { success: true }
+  }
+
+  getSessionBinding(sessionId) {
+    const target = this._sessionTargets.get(sessionId) || null
+    if (!target) return null
+    return {
+      targetId: target.openId,
+      openId: target.openId,
+      displayName: target.displayName,
+    }
+  }
+
+  async sendTextToTarget({ sessionId, openId, targetId, displayName, text } = {}) {
+    this._syncSessionDatabase()
+    const content = typeof text === 'string' ? text.trim() : ''
+    if (!content) {
+      throw new Error('发送内容不能为空')
+    }
+    const candidateOpenId = openId || targetId || this._sessionTargets.get(sessionId)?.openId || ''
+    const resolvedOpenId = typeof candidateOpenId === 'string' ? candidateOpenId.trim() : ''
+    if (!resolvedOpenId) {
+      throw new Error('openId 不能为空')
+    }
+    if (sessionId) {
+      this.bindSessionToTarget(sessionId, { openId: resolvedOpenId, displayName })
+    }
+    const messageId = await this._api.sendTextMessage('open_id', resolvedOpenId, content)
+    return { success: true, messageId, targetId: resolvedOpenId }
+  }
+
   _resolveMapKeyForSession(sessionId) {
     for (const [key, sid] of this._sessionMapper.sessionMap) {
       if (sid === sessionId) return key
@@ -1045,6 +1196,19 @@ class FeishuBridge {
       }
     }
 
+    return null
+  }
+
+  async _findBoundSessionIdBySenderId(senderId) {
+    if (!senderId) return null
+    const sessionId = this._targetSessionMap.get(senderId)
+    if (!sessionId) return null
+    const liveSession = this._agentSessionManager.sessions.get(sessionId)
+    if (liveSession) return sessionId
+    const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
+    if (row && row.status !== 'closed') return sessionId
+    this._targetSessionMap.delete(senderId)
+    this._sessionTargets.delete(sessionId)
     return null
   }
 
@@ -1703,6 +1867,11 @@ class FeishuBridge {
         this._sessionMapper.clearSessionState(key)
       }
     }
+    const target = this._sessionTargets.get(sessionId)
+    if (target?.openId) {
+      this._targetSessionMap.delete(target.openId)
+    }
+    this._sessionTargets.delete(sessionId)
     this._sessionIdentities.delete(sessionId)
   }
 
