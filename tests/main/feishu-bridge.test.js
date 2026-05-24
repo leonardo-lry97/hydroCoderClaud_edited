@@ -222,6 +222,45 @@ describe('FeishuBridge', () => {
     ])
   })
 
+  it('forwards inbound Feishu post text and images instead of treating them as empty', async () => {
+    const { configManager, manager, mainWindow, sent } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const downloadedImage = {
+      base64: Buffer.from('post-image').toString('base64'),
+      mediaType: 'image/png'
+    }
+    vi.spyOn(bridge._api, 'downloadImage').mockResolvedValue(downloadedImage)
+    manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
+    const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
+
+    await bridge._handleFeishuMessage({
+      msgId: 'om_post_1',
+      senderId: 'ou_xxx',
+      chatId: 'oc_xxx',
+      chatType: 'p2p',
+      msgType: 'post',
+      text: '请分析这张图',
+      images: [{ imageKey: 'img_post_1', messageId: 'om_post_1' }]
+    })
+
+    const session = Array.from(manager.sessions.values())[0]
+    expect(bridge._api.downloadImage).toHaveBeenCalledWith('img_post_1', 'om_post_1')
+    expect(enqueueMessage).toHaveBeenCalledWith(
+      session.id,
+      {
+        text: '请分析这张图',
+        images: [downloadedImage]
+      },
+      'ou_xxx',
+      'oc_xxx',
+      'p2p'
+    )
+    expect(sent.map(item => item.channel)).toEqual([
+      'feishu:sessionCreated',
+      'feishu:messageReceived'
+    ])
+  })
+
   it('replies with an explicit notice for unsupported Feishu message types', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
@@ -2272,6 +2311,45 @@ describe('FeishuEventClient', () => {
       imageKey: 'img_v3_0211u_456f155b-671f-4139-9c25-6e5748842e8g',
       messageId: 'om_x100'
     }])
+  })
+
+  it('extracts text and image keys from direct-array post content', () => {
+    const client = new FeishuEventClient()
+    const messageHandler = vi.fn()
+    client.on('message', messageHandler)
+
+    client._handleImMessage({
+      event_type: 'im.message.receive_v1',
+      message: {
+        message_id: 'om_post_direct',
+        message_type: 'post',
+        chat_id: 'oc_xxx',
+        chat_type: 'p2p',
+        content: JSON.stringify({
+          content: [
+            [
+              { tag: 'text', text: '请分析这张图' },
+              { tag: 'img', image_key: 'img_post_direct' }
+            ]
+          ]
+        })
+      },
+      sender: {
+        sender_id: {
+          open_id: 'ou_xxx'
+        }
+      }
+    })
+
+    expect(messageHandler).toHaveBeenCalledWith(expect.objectContaining({
+      msgId: 'om_post_direct',
+      msgType: 'post',
+      text: '请分析这张图',
+      images: [{
+        imageKey: 'img_post_direct',
+        messageId: 'om_post_direct'
+      }]
+    }))
   })
 
   it('extracts group-card context from card action events', () => {

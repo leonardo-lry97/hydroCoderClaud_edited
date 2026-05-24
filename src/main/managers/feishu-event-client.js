@@ -239,14 +239,12 @@ class FeishuEventClient extends EventEmitter {
       try {
         const parsed = JSON.parse(msg.content || '{}')
         const parts = []
-        for (const lang of ['zh_cn', 'en_us']) {
-          const blocks = parsed?.content?.[lang]?.content || parsed?.content?.[lang] || []
-          for (const block of blocks) {
-            if (Array.isArray(block)) {
-              for (const elem of block) {
-                if (elem?.tag === 'text' && elem?.text) parts.push(elem.text)
-              }
-            }
+        for (const elem of this._collectPostElements(parsed)) {
+          if (!elem || typeof elem !== 'object') continue
+          if (elem.tag === 'text' && elem.text) {
+            parts.push(elem.text)
+          } else if (elem.tag === 'a' && elem.text) {
+            parts.push(elem.text)
           }
         }
         return parts.join('')
@@ -301,20 +299,14 @@ class FeishuEventClient extends EventEmitter {
       }
 
       if ((msg.message_type || msg.msg_type) === 'post') {
-        for (const lang of ['zh_cn', 'en_us']) {
-          const blocks = parsed?.content?.[lang]?.content || parsed?.content?.[lang] || []
-          for (const block of blocks) {
-            if (!Array.isArray(block)) continue
-            for (const elem of block) {
-              if (elem?.tag !== 'at') continue
-              addMention({
-                key: elem?.user_id || elem?.open_id || elem?.user_open_id || null,
-                name: elem?.user_name || elem?.name || elem?.text || null,
-                id: elem?.user_id || elem?.open_id || elem?.user_open_id || null,
-                id_type: elem?.user_id ? 'user_id' : (elem?.open_id || elem?.user_open_id ? 'open_id' : null),
-              })
-            }
-          }
+        for (const elem of this._collectPostElements(parsed)) {
+          if (elem?.tag !== 'at') continue
+          addMention({
+            key: elem?.user_id || elem?.open_id || elem?.user_open_id || null,
+            name: elem?.user_name || elem?.name || elem?.text || null,
+            id: elem?.user_id || elem?.open_id || elem?.user_open_id || null,
+            id_type: elem?.user_id ? 'user_id' : (elem?.open_id || elem?.user_open_id ? 'open_id' : null),
+          })
         }
       }
     } catch {}
@@ -335,21 +327,36 @@ class FeishuEventClient extends EventEmitter {
         }
       } else if (msgType === 'post') {
         const parsed = JSON.parse(msg.content || '{}')
-        for (const lang of ['zh_cn', 'en_us']) {
-          const blocks = parsed?.content?.[lang]?.content || parsed?.content?.[lang] || []
-          for (const block of blocks) {
-            if (Array.isArray(block)) {
-              for (const elem of block) {
-                if (elem?.tag === 'img' && elem?.image_key) {
-                  images.push({ imageKey: elem.image_key, messageId })
-                }
-              }
-            }
+        for (const elem of this._collectPostElements(parsed)) {
+          if (elem?.tag === 'img' && elem?.image_key) {
+            images.push({ imageKey: elem.image_key, messageId })
           }
         }
       }
     } catch {}
     return images
+  }
+
+  _collectPostElements(parsed) {
+    const result = []
+    const visit = (value) => {
+      if (!value) return
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item)
+        return
+      }
+      if (typeof value !== 'object') return
+      if (typeof value.tag === 'string') {
+        result.push(value)
+        return
+      }
+      for (const key of Object.keys(value)) {
+        visit(value[key])
+      }
+    }
+
+    visit(parsed?.content || parsed)
+    return result
   }
 
   _isUnsupportedMessageType(msg) {
