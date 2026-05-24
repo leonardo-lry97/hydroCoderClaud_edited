@@ -863,7 +863,7 @@ class FeishuBridge {
       sessionId, { content, images },
       async (sid, { userContent, fullText }) => {
         if (!fullText) return
-        const block = `> ${userContent}\n\n${fullText}`
+        const block = `桌面介入> ${userContent}\n\n${fullText}`
         await this._api.sendTextMessage(receiveIdType, receiveId, block)
       }
     )
@@ -985,7 +985,7 @@ class FeishuBridge {
       if (!identity) return
       const receiveId = identity.chatType === 'p2p' ? identity.senderId : identity.chatId
       const receiveIdType = identity.chatType === 'p2p' ? 'open_id' : 'chat_id'
-      const block = `> ${data.userContent}\n\n${data.fullText}`
+      const block = `桌面介入> ${data.userContent}\n\n${data.fullText}`
       await this._api.sendTextMessage(receiveIdType, receiveId, block)
       if (Array.isArray(data.userImages) && data.userImages.length > 0) {
         await this._sendBase64Images(receiveIdType, receiveId, data.userImages)

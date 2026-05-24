@@ -477,7 +477,7 @@ describe('FeishuBridge', () => {
     expect(sendTextMessage).toHaveBeenCalledWith(
       'open_id',
       'ou_xxx',
-      expect.stringContaining('请看这张标注图')
+      expect.stringContaining('桌面介入> 请看这张标注图')
     )
     expect(uploadImage).toHaveBeenCalledTimes(1)
     expect(sendImageMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', 'img_uploaded')
