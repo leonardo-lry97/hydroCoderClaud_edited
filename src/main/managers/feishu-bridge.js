@@ -215,8 +215,19 @@ class FeishuBridge {
   // ─── 消息处理 ───
 
   async _handleFeishuMessage(event) {
+    const initialMsgId = event?.msgId || event?.raw?.message?.message_id || ''
+    if (initialMsgId) {
+      if (this._processedMsgIds.has(initialMsgId)) return
+      this._processedMsgIds.set(initialMsgId, Date.now())
+    }
+
     const hydratedEvent = await this._hydrateInboundEvent(event)
     const { msgId, senderId, senderName, chatId, chatType, chatName, text, images, unsupported, msgType, mentions } = hydratedEvent
+    if (!initialMsgId && msgId) {
+      if (this._processedMsgIds.has(msgId)) return
+      this._processedMsgIds.set(msgId, Date.now())
+    }
+
     const resolvedNames = await this._resolveFeishuDisplayNames({
       senderId,
       senderName,
@@ -224,9 +235,6 @@ class FeishuBridge {
       chatType,
       chatName,
     })
-
-    if (this._processedMsgIds.has(msgId)) return
-    this._processedMsgIds.set(msgId, Date.now())
 
     if (unsupported) {
       await this._sendUnsupportedMessageNotice(senderId, chatId, chatType, msgType)
@@ -238,9 +246,9 @@ class FeishuBridge {
       msgId,
       chatType,
       msgType,
-      text,
-      mentions,
-      normalizedText,
+      hasText: !!text,
+      mentionCount: Array.isArray(mentions) ? mentions.length : 0,
+      hasNormalizedText: !!normalizedText,
     }))
     if (normalizedText && normalizedText.startsWith('/')) {
       this._handleCommand(normalizedText, { senderId, chatId, chatType }, { mentions }).catch(() => {})
@@ -316,8 +324,7 @@ class FeishuBridge {
 
     console.log('[FeishuBridge] notify frontend messageReceived:', JSON.stringify({
       sessionId,
-      senderId,
-      text: normalizedText,
+      chatType,
       imagesCount: Array.isArray(downloadedImages) ? downloadedImages.length : 0,
     }))
     this._notifier.notifyMessageReceived({
@@ -425,9 +432,8 @@ class FeishuBridge {
       const hydratedText = this._eventClient._extractText(normalizedMessage) || text
       console.log('[FeishuBridge] hydrated inbound event:', JSON.stringify({
         msgId,
-        originalText: text,
-        hydratedText,
-        hydratedMentions,
+        hydratedMentionCount: hydratedMentions.length,
+        hydratedTextLength: hydratedText.length,
       }))
       return {
         ...event,
@@ -500,7 +506,7 @@ class FeishuBridge {
 
   async _handleCardAction(event) {
     const { actionType, actionValue, userId, chatId, chatType } = event
-    console.log('[FeishuBridge] Card action:', actionType, JSON.stringify(actionValue))
+    console.log('[FeishuBridge] Card action:', actionType)
     const commandText = this._resolveCardCommand(actionType, actionValue)
     if (!commandText) return
     const resolvedContext = this._resolveHistoryChoiceContext({ userId, chatId, chatType, actionValue })

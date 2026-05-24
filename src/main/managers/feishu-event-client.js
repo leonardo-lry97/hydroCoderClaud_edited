@@ -175,8 +175,10 @@ class FeishuEventClient extends EventEmitter {
       const msg = data?.message || {}
       const sender = data?.sender || {}
       const senderId = sender?.sender_id?.open_id || sender?.sender_id?.user_id
+      const senderName = sender?.sender_name || sender?.name || sender?.display_name || null
+      const chatName = data?.chat?.name || data?.chat_name || msg?.chat_name || null
 
-      console.log('[FeishuEventClient] event_type:', data?.event_type, 'message_type:', msg.message_type, 'senderId:', senderId)
+      console.log('[FeishuEventClient] event_type:', data?.event_type, 'message_type:', msg.message_type)
 
       const parsed = {
         msgId: msg.message_id,
@@ -184,6 +186,8 @@ class FeishuEventClient extends EventEmitter {
         chatId: msg.chat_id,
         chatType: msg.chat_type,
         senderId,
+        senderName,
+        chatName,
         mentions: this._extractMentions(msg),
         text: this._extractText(msg),
         images: this._extractImages(msg, msg.message_id),
@@ -192,7 +196,7 @@ class FeishuEventClient extends EventEmitter {
         raw: data,
       }
 
-      console.log('[FeishuEventClient] Emitting message, text:', parsed.text?.substring(0, 50))
+      console.log('[FeishuEventClient] Emitting message')
       this.emit('message', parsed)
     } catch (err) {
       console.error('[FeishuEventClient] Handle IM message error:', err)
@@ -209,6 +213,11 @@ class FeishuEventClient extends EventEmitter {
       const userId = operatorId?.open_id || operatorId?.user_id || event?.open_id || event?.user_id || null
       const chatId = context?.open_chat_id || context?.chat_id || context?.chat?.chat_id || null
       const chatType = context?.chat_type || (chatId ? 'chat' : 'p2p')
+      console.log('[FeishuEventClient] Card action parsed:', JSON.stringify({
+        actionTag: action.tag,
+        chatType,
+        hasContext: !!context,
+      }))
       this.emit('cardAction', {
         actionType: action.tag,
         actionValue: action.value,

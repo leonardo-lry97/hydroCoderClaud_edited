@@ -225,6 +225,47 @@ describe('FeishuBridge', () => {
     ])
   })
 
+  it('skips hydrate and display-name resolution for duplicate Feishu message ids', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const hydrateSpy = vi.spyOn(bridge, '_hydrateInboundEvent').mockResolvedValue({
+      msgId: 'om_dup_1',
+      senderId: 'ou_dup',
+      senderName: null,
+      chatId: 'oc_dup',
+      chatType: 'p2p',
+      chatName: null,
+      text: '你好',
+      images: [],
+      unsupported: false,
+      msgType: 'text',
+      mentions: []
+    })
+    const resolveNamesSpy = vi.spyOn(bridge, '_resolveFeishuDisplayNames').mockResolvedValue({
+      senderName: '张三',
+      chatName: '张三'
+    })
+    vi.spyOn(bridge, '_ensureSession').mockResolvedValue('s-dup')
+    vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
+
+    const duplicateEvent = {
+      msgId: 'om_dup_1',
+      senderId: 'ou_dup',
+      chatId: 'oc_dup',
+      chatType: 'p2p',
+      text: '你好',
+      images: []
+    }
+
+    await bridge._handleFeishuMessage(duplicateEvent)
+    await bridge._handleFeishuMessage(duplicateEvent)
+
+    expect(hydrateSpy).toHaveBeenCalledTimes(1)
+    expect(resolveNamesSpy).toHaveBeenCalledTimes(1)
+    expect(bridge._ensureSession).toHaveBeenCalledTimes(1)
+    expect(bridge._enqueueMessage).toHaveBeenCalledTimes(1)
+  })
+
   it('uses readable sender and chat names for default Feishu session titles', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
