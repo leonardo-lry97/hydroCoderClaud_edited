@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import fs from 'fs'
+import path from 'path'
 
 vi.mock('uuid', () => ({ v4: () => 'interaction-uuid-fixed' }))
 
@@ -33,6 +34,7 @@ describe('AgentSessionManager interactions', () => {
     manager.sessionDatabase = {
       insertAgentMessage: vi.fn(),
       updateAgentMessageToolOutput: vi.fn(),
+      updateAgentConversation: vi.fn(),
       updateAgentConversationModel: vi.fn(),
       getAgentConversation: vi.fn(() => null)
     }
@@ -1762,5 +1764,90 @@ describe('AgentSessionManager interactions', () => {
     expect(result.success).toBe(false)
     expect(result.errorKind).toBe('CLI_UNAVAILABLE')
     expect(result.canFallbackToHttp).toBe(true)
+  })
+
+  it('injects saved image paths into multimodal user text so non-vision flows can read local files', async () => {
+    const { manager } = createManager()
+    const session = new AgentSession({ id: 's-image-path-hint', cwd: fs.mkdtempSync('C:/Windows/Temp/agent-image-hint-') })
+    session.dbConversationId = 1
+    manager.sessions.set(session.id, session)
+
+    let firstQueuedMessage = null
+    manager.runner = {
+      buildEnv: vi.fn(() => ({ ANTHROPIC_BASE_URL: 'https://example.com' })),
+      createQuery: vi.fn(async (messageQueue) => ({
+        async *[Symbol.asyncIterator]() {
+          const first = await messageQueue.next()
+          firstQueuedMessage = first.value
+          yield {
+            type: 'system',
+            subtype: 'init',
+            session_id: 'sdk-image-hint',
+            tools: [],
+            model: 'claude-sonnet-4-6'
+          }
+          yield {
+            type: 'result',
+            subtype: 'success',
+            is_error: false,
+            result: 'ok',
+            total_cost_usd: 0,
+            num_turns: 1,
+            duration_ms: 5
+          }
+        },
+        close: vi.fn(async () => {})
+      })),
+      normalizeMessage: raw => {
+        if (raw.type === 'system' && raw.subtype === 'init') {
+          return {
+            type: 'init',
+            sdkSessionId: raw.session_id,
+            tools: raw.tools,
+            model: raw.model,
+            slashCommands: raw.slash_commands || []
+          }
+        }
+        if (raw.type === 'result') {
+          return {
+            type: 'result',
+            subtype: raw.subtype,
+            isError: raw.is_error,
+            result: raw.result,
+            totalCostUsd: raw.total_cost_usd,
+            numTurns: raw.num_turns,
+            durationMs: raw.duration_ms
+          }
+        }
+        return raw
+      }
+    }
+
+    await manager.sendMessage(session.id, {
+      text: '请查看这张图并读出内容',
+      images: [{
+        mediaType: 'image/png',
+        base64: Buffer.from('pngdata').toString('base64')
+      }]
+    })
+
+    expect(firstQueuedMessage).toBeTruthy()
+    expect(Array.isArray(firstQueuedMessage.message.content)).toBe(true)
+    expect(firstQueuedMessage.message.content[0]).toMatchObject({
+      type: 'text'
+    })
+    expect(firstQueuedMessage.message.content[0].text).toContain('请查看这张图并读出内容')
+    expect(firstQueuedMessage.message.content[0].text).toContain('图片已保存到以下路径')
+    expect(firstQueuedMessage.message.content[0].text).toMatch(/\.\/chat_paste_images\/.+\.png/)
+    expect(firstQueuedMessage.message.content[1]).toMatchObject({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: 'image/png'
+      }
+    })
+    const savedDir = path.join(session.cwd, 'chat_paste_images')
+    expect(fs.existsSync(savedDir)).toBe(true)
+    expect(fs.readdirSync(savedDir).length).toBe(1)
   })
 })

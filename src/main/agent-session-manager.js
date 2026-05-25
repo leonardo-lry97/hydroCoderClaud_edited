@@ -35,6 +35,7 @@ const {
 } = require('./utils/claude-executable-path')
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|bmp|tiff|svg)$/i
+const IMAGE_PATH_HINT_HEADER = '图片已保存到以下路径，可使用 Read 或其他文件工具查看：'
 
 const HYDRO_IDENTITY_SYSTEM_PROMPT = [
   'Present yourself to end users as Hydro Desktop AI, an AI personal desktop assistant developed by Zhishui Workshop.',
@@ -1112,6 +1113,7 @@ class AgentSessionManager extends EventEmitter {
     let messageContent
     let displayContent  // 用于存储到数据库的可读内容
     let imageData = null  // 图片数据（用于保存到数据库）
+    let savedImagePaths = []
 
     if (typeof userMessage === 'string') {
       // 兼容旧格式：纯文本
@@ -1125,9 +1127,21 @@ class AgentSessionManager extends EventEmitter {
         // 多模态消息：文本 + 图片
         messageContent = []
 
-        // 添加文本（如果有）
-        if (text) {
-          messageContent.push({ type: 'text', text })
+        // 保存图片数据到数据库
+        imageData = images
+
+        // 自动保存图片到会话目录，并将路径提示一并发给模型
+        if (imageData.length > 0 && session.cwd) {
+          savedImagePaths = this._saveImagesToDir(session.cwd, imageData)
+        }
+
+        const normalizedText = typeof text === 'string' ? text.trim() : ''
+        const pathHintText = this._buildSavedImagePathHint(savedImagePaths)
+        const textBlocks = []
+        if (normalizedText) textBlocks.push(normalizedText)
+        if (pathHintText) textBlocks.push(pathHintText)
+        if (textBlocks.length > 0) {
+          messageContent.push({ type: 'text', text: textBlocks.join('\n\n') })
         }
 
         // 添加图片
@@ -1148,14 +1162,6 @@ class AgentSessionManager extends EventEmitter {
           displayContent += ` (${images.length}张图片)`
         } else if (images.length === 1 && !text) {
           displayContent = '[图片]'
-        }
-
-        // 保存图片数据到数据库
-        imageData = images
-
-        // 自动保存图片到会话目录
-        if (imageData.length > 0 && session.cwd) {
-          this._saveImagesToDir(session.cwd, imageData)
         }
       } else {
         // 只有文本
@@ -2720,6 +2726,7 @@ class AgentSessionManager extends EventEmitter {
       }
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      const savedPaths = []
       for (let i = 0; i < images.length; i++) {
         const img = images[i]
         const ext = this._getImageExt(img.mediaType)
@@ -2728,10 +2735,30 @@ class AgentSessionManager extends EventEmitter {
         const filePath = path.join(imagesDir, fileName)
         fs.writeFileSync(filePath, Buffer.from(img.base64, 'base64'))
         console.log(`[Agent] Image saved: ${filePath}`)
+        savedPaths.push(filePath)
       }
+      return savedPaths
     } catch (e) {
       console.warn('[Agent] Failed to save images:', e.message)
+      return []
     }
+  }
+
+  _buildSavedImagePathHint(paths) {
+    if (!Array.isArray(paths) || paths.length === 0) return ''
+    const lines = paths.map(filePath => `- ${this._toWorkspaceRelativePath(filePath)}`)
+    return `${IMAGE_PATH_HINT_HEADER}\n${lines.join('\n')}`
+  }
+
+  _toWorkspaceRelativePath(filePath) {
+    if (typeof filePath !== 'string' || !filePath) return ''
+    const normalized = filePath.replace(/\\/g, '/')
+    const marker = '/chat_paste_images/'
+    const index = normalized.lastIndexOf(marker)
+    if (index >= 0) {
+      return `.${normalized.slice(index)}`
+    }
+    return normalized
   }
 
   _getImageExt(mediaType) {
