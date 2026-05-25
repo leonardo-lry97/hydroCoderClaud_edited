@@ -123,6 +123,7 @@
                 <span class="dingtalk-target-name">{{ target.displayName || target.name || target.userId || target.id }}</span>
               </div>
             </div>
+            <div v-if="dingtalkError" class="dingtalk-error">{{ dingtalkError }}</div>
             <div v-if="dingtalkTargets.length === 0" class="dingtalk-empty">{{ t('agent.dingtalkNoTargets') }}</div>
             <template v-else>
               <textarea
@@ -131,7 +132,6 @@
                 :placeholder="t('agent.dingtalkQuickSendPlaceholder')"
                 rows="3"
               />
-              <div v-if="dingtalkError" class="dingtalk-error">{{ dingtalkError }}</div>
               <div class="dingtalk-actions">
                 <button class="dingtalk-action secondary" type="button" @click="closeDingTalkDropdown">
                   {{ t('common.cancel') }}

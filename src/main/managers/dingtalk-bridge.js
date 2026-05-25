@@ -566,7 +566,7 @@ class DingTalkBridge {
     }
 
     // 桌面端主动绑定过该钉钉成员时，优先复用绑定会话
-    const boundSessionId = this._targetSessionMap.get(staffId)
+    const boundSessionId = this._findBoundSessionIdByStaffId(staffId)
     if (boundSessionId) {
       const db = this.agentSessionManager.sessionDatabase
       const row = db && db.getAgentConversation(boundSessionId)
@@ -680,6 +680,9 @@ class DingTalkBridge {
     if (!session) {
       throw new Error(`Session ${sessionId} 不存在或已关闭`)
     }
+    if (session.meta && typeof session.meta === 'object') {
+      session.meta.dingtalkTargetStaffId = resolvedStaffId
+    }
 
     const previousTarget = this._sessionTargets.get(sessionId)
     if (previousTarget?.staffId && previousTarget.staffId !== resolvedStaffId) {
@@ -702,6 +705,53 @@ class DingTalkBridge {
     this._sessionTargets.set(sessionId, target)
     this._targetSessionMap.set(resolvedStaffId, sessionId)
     return { success: true, target }
+  }
+
+  _findBoundSessionIdByStaffId(staffId) {
+    const normalizedStaffId = typeof staffId === 'string' ? staffId.trim() : ''
+    if (!normalizedStaffId) return null
+
+    const isSessionAvailable = (sessionId) => {
+      if (!sessionId) return false
+      const liveSession = this.agentSessionManager.sessions.get(sessionId)
+      if (liveSession) return true
+      const row = this.agentSessionManager.sessionDatabase?.getAgentConversation?.(sessionId)
+      return Boolean(row && row.status !== 'closed')
+    }
+
+    const directSessionId = this._targetSessionMap.get(normalizedStaffId)
+    if (isSessionAvailable(directSessionId)) {
+      return directSessionId
+    }
+    if (directSessionId) {
+      this._targetSessionMap.delete(normalizedStaffId)
+      this._sessionTargets.delete(directSessionId)
+    }
+
+    for (const [sessionId, target] of this._sessionTargets.entries()) {
+      if (target?.staffId !== normalizedStaffId) continue
+      if (!isSessionAvailable(sessionId)) {
+        this._sessionTargets.delete(sessionId)
+        continue
+      }
+      this._targetSessionMap.set(normalizedStaffId, sessionId)
+      return sessionId
+    }
+
+    for (const [sessionId, session] of this.agentSessionManager.sessions.entries()) {
+      const targetStaffId = typeof session?.meta?.dingtalkTargetStaffId === 'string'
+        ? session.meta.dingtalkTargetStaffId.trim()
+        : ''
+      if (targetStaffId !== normalizedStaffId) continue
+      this._sessionTargets.set(sessionId, {
+        staffId: normalizedStaffId,
+        displayName: this._sessionTargets.get(sessionId)?.displayName || normalizedStaffId
+      })
+      this._targetSessionMap.set(normalizedStaffId, sessionId)
+      return sessionId
+    }
+
+    return null
   }
 
   getSessionBinding(sessionId) {
@@ -1298,11 +1348,10 @@ class DingTalkBridge {
       if (visited.has(parentId)) continue
       visited.add(parentId)
 
-      const response = await globalThis.fetch('https://oapi.dingtalk.com/topapi/v2/department/listsub', {
+      const response = await globalThis.fetch(`https://oapi.dingtalk.com/topapi/v2/department/listsub?access_token=${encodeURIComponent(token)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          access_token: token,
           dept_id: parentId
         })
       })
@@ -1331,11 +1380,10 @@ class DingTalkBridge {
     let hasMore = true
 
     while (hasMore) {
-      const response = await globalThis.fetch('https://oapi.dingtalk.com/topapi/v2/user/list', {
+      const response = await globalThis.fetch(`https://oapi.dingtalk.com/topapi/v2/user/list?access_token=${encodeURIComponent(token)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          access_token: token,
           dept_id: deptId,
           cursor,
           size: 100,
