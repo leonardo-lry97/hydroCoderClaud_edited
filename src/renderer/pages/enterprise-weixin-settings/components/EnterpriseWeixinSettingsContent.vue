@@ -80,84 +80,187 @@
         当前活跃会话: {{ activeSessions }} 个
       </div>
     </n-card>
+
+    <n-card title="高级设置" class="settings-section">
+      <n-form-item label="历史会话数量">
+        <n-input-number
+          v-model:value="formData.maxHistorySessions"
+          :min="1"
+          :max="20"
+          :disabled="!formData.enabled"
+        />
+        <template #feedback>企业微信用户选择历史会话时显示的最大数量（1-20）</template>
+      </n-form-item>
+    </n-card>
+
+    <div class="settings-footer">
+      <n-space>
+        <n-button v-if="!embedded" @click="handleClose">{{ t('common.close') }}</n-button>
+        <n-button type="primary" @click="handleSave">{{ t('common.save') }}</n-button>
+      </n-space>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useMessage } from 'naive-ui'
+import { useIPC } from '@composables/useIPC'
+import { useLocale } from '@composables/useLocale'
 
 const props = defineProps({
   embedded: { type: Boolean, default: false }
 })
 
-const formData = reactive({
+const message = useMessage()
+const { invoke } = useIPC()
+const { t } = useLocale()
+
+const formData = ref({
   enabled: false,
   botId: '',
   secret: '',
   defaultCwd: '',
+  maxHistorySessions: 5,
 })
-
 const connected = ref(false)
 const activeSessions = ref(0)
 const connecting = ref(false)
 
+let cleanupFns = []
+
 const statusType = computed(() => connected.value ? 'success' : 'default')
 const statusText = computed(() => connected.value ? '已连接' : '未连接')
-const canConnect = computed(() => formData.enabled && formData.botId && formData.secret)
+const canConnect = computed(() =>
+  formData.value.enabled && formData.value.botId && formData.value.secret
+)
 
-async function loadConfig() {
-  if (!window.electronAPI) return
-  const config = await window.electronAPI.getConfig()
-  const c = config?.enterpriseWeixin || {}
-  formData.enabled = !!c.enabled
-  formData.botId = c.botId || ''
-  formData.secret = c.secret || ''
-  formData.defaultCwd = c.defaultCwd || ''
-}
-
-async function loadStatus() {
-  if (!window.electronAPI?.getEnterpriseWeixinStatus) return
+const loadConfig = async () => {
   try {
-    const status = await window.electronAPI.getEnterpriseWeixinStatus()
-    connected.value = !!status?.connected
-    activeSessions.value = status?.activeSessions || 0
-  } catch { /* ignore */ }
+    const config = await invoke('getConfig')
+    console.log('[EnterpriseWeixinSettings] Loaded config:', { ...config?.enterpriseWeixin, secret: config?.enterpriseWeixin?.secret ? '***' : '' })
+    if (config?.enterpriseWeixin) {
+      formData.value = { ...formData.value, ...config.enterpriseWeixin }
+    }
+  } catch (err) {
+    console.error('[EnterpriseWeixinSettings] Load config error:', err)
+  }
 }
 
-async function saveConfig() {
-  if (!window.electronAPI?.updateEnterpriseWeixinConfig) return
-  await window.electronAPI.updateEnterpriseWeixinConfig({
-    enabled: formData.enabled,
-    botId: formData.botId,
-    secret: formData.secret,
-    defaultCwd: formData.defaultCwd,
-  })
+const refreshStatus = async () => {
+  try {
+    const status = await invoke('getEnterpriseWeixinStatus')
+    if (status) {
+      connected.value = status.connected
+      activeSessions.value = status.activeSessions || 0
+    }
+  } catch {}
 }
 
-async function handleConnect() {
+const handleSave = async () => {
+  console.log('[EnterpriseWeixinSettings] Saving config:', { ...formData.value, secret: '***' })
+  try {
+    await invoke('updateEnterpriseWeixinConfig', {
+      botId: formData.value.botId,
+      secret: formData.value.secret,
+      enabled: formData.value.enabled,
+      defaultCwd: formData.value.defaultCwd,
+      maxHistorySessions: formData.value.maxHistorySessions,
+    })
+    message.success('企业微信配置已保存')
+    await refreshStatus()
+  } catch (err) {
+    console.error('[EnterpriseWeixinSettings] Save error:', err)
+    message.error('保存失败: ' + (err.message || err))
+  }
+}
+
+const handleConnect = async () => {
   connecting.value = true
   try {
-    await saveConfig()
-    if (window.electronAPI?.startEnterpriseWeixin) {
-      await window.electronAPI.startEnterpriseWeixin()
-    }
-    await loadStatus()
+    await invoke('updateEnterpriseWeixinConfig', {
+      botId: formData.value.botId,
+      secret: formData.value.secret,
+      enabled: true,
+      defaultCwd: formData.value.defaultCwd,
+      maxHistorySessions: formData.value.maxHistorySessions,
+    })
+    formData.value.enabled = true
+    await invoke('startEnterpriseWeixin')
+    await refreshStatus()
+    message.success('企业微信桥接已连接')
   } catch (err) {
-    console.error('[EnterpriseWeixin] Connect failed:', err)
+    message.error('连接失败: ' + (err.message || err))
   } finally {
     connecting.value = false
   }
 }
 
-async function handleDisconnect() {
-  if (window.electronAPI?.stopEnterpriseWeixin) {
-    await window.electronAPI.stopEnterpriseWeixin()
+const handleDisconnect = async () => {
+  try {
+    await invoke('stopEnterpriseWeixin')
+    await refreshStatus()
+    message.success('企业微信桥接已断开')
+  } catch (err) {
+    message.error('断开失败: ' + (err.message || err))
   }
-  await loadStatus()
+}
+
+const handleClose = () => {
+  window.close()
 }
 
 onMounted(async () => {
   await loadConfig()
-  await loadStatus()
+  await refreshStatus()
+
+  if (window.electronAPI?.onEnterpriseWeixinStatusChange) {
+    cleanupFns.push(
+      window.electronAPI.onEnterpriseWeixinStatusChange((data) => {
+        connected.value = data?.connected || false
+      })
+    )
+  }
+  if (window.electronAPI?.onEnterpriseWeixinError) {
+    cleanupFns.push(
+      window.electronAPI.onEnterpriseWeixinError((data) => {
+        message.error(data?.error || 'Enterprise Weixin error')
+      })
+    )
+  }
+})
+
+onUnmounted(() => {
+  cleanupFns.forEach(fn => { try { fn() } catch {} })
+  cleanupFns = []
 })
 </script>
+
+<style scoped>
+.embedded-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.embedded-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.embedded-subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-color-2);
+}
+
+.session-info {
+  margin-top: 12px;
+  font-size: 13px;
+  opacity: 0.7;
+}
+</style>

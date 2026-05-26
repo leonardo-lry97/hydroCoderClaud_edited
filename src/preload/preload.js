@@ -1145,6 +1145,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('feishu:sessionClosed', listener);
   },
 
+  // 企业微信事件监听
+  onEnterpriseWeixinStatusChange: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('enterprise-weixin:statusChange', listener);
+    return () => ipcRenderer.removeListener('enterprise-weixin:statusChange', listener);
+  },
+  onEnterpriseWeixinError: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('enterprise-weixin:error', listener);
+    return () => ipcRenderer.removeListener('enterprise-weixin:error', listener);
+  },
+  onEnterpriseWeixinMessageReceived: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('enterprise-weixin:messageReceived', listener);
+    return () => ipcRenderer.removeListener('enterprise-weixin:messageReceived', listener);
+  },
+  onEnterpriseWeixinSessionCreated: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('enterprise-weixin:sessionCreated', listener);
+    return () => ipcRenderer.removeListener('enterprise-weixin:sessionCreated', listener);
+  },
+
   onWeixinMessageReceived: (callback) => {
     const listener = (event, data) => callback(data);
     ipcRenderer.on('weixin:messageReceived', listener);
