@@ -2145,14 +2145,14 @@ describe('FeishuBridge', () => {
         tool_use_id: 'tool-use-1',
         content: [{
           type: 'resource_link',
-          uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+          uri: generatedImagePath.startsWith('/') ? `file://${generatedImagePath.replace(/\\/g, '/')}` : `file:///${generatedImagePath.replace(/\\/g, '/')}`,
           name: 'cover.png',
           mimeType: 'image/png'
         }],
         structured_content: {
           type: 'image_result',
           files: [{
-            uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+            uri: generatedImagePath.startsWith('/') ? `file://${generatedImagePath.replace(/\\/g, '/')}` : `file:///${generatedImagePath.replace(/\\/g, '/')}`,
             name: 'cover.png',
             mimeType: 'image/png'
           }]
@@ -2161,14 +2161,14 @@ describe('FeishuBridge', () => {
       toolUseResult: {
         content: [{
           type: 'resource_link',
-          uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+          uri: generatedImagePath.startsWith('/') ? `file://${generatedImagePath.replace(/\\/g, '/')}` : `file:///${generatedImagePath.replace(/\\/g, '/')}`,
           name: 'cover.png',
           mimeType: 'image/png'
         }],
         structuredContent: {
           type: 'image_result',
           files: [{
-            uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+            uri: generatedImagePath.startsWith('/') ? `file://${generatedImagePath.replace(/\\/g, '/')}` : `file:///${generatedImagePath.replace(/\\/g, '/')}`,
             name: 'cover.png',
             mimeType: 'image/png'
           }]
@@ -2227,7 +2227,7 @@ describe('FeishuBridge', () => {
         tool_use_id: 'tool-use-dedupe-1',
         content: [{
           type: 'resource_link',
-          uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+          uri: generatedImagePath.startsWith('/') ? `file://${generatedImagePath.replace(/\\/g, '/')}` : `file:///${generatedImagePath.replace(/\\/g, '/')}`,
           name: 'dedupe-cover.png',
           mimeType: 'image/png'
         }]
@@ -2235,7 +2235,7 @@ describe('FeishuBridge', () => {
       toolUseResult: {
         content: [{
           type: 'resource_link',
-          uri: `file:///${generatedImagePath.replace(/\\/g, '/')}`,
+          uri: generatedImagePath.startsWith('/') ? `file://${generatedImagePath.replace(/\\/g, '/')}` : `file:///${generatedImagePath.replace(/\\/g, '/')}`,
           name: 'dedupe-cover.png',
           mimeType: 'image/png'
         }]
