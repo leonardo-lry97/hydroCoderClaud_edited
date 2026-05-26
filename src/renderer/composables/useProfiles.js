@@ -8,7 +8,7 @@ export function useProfiles() {
   const { invoke, silentInvoke } = useIPC()
 
   const profiles = ref([])
-  const loading = ref(false)
+  const loading = ref(true)
   const error = ref(null)
 
   /**

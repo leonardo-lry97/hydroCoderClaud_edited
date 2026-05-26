@@ -17,7 +17,7 @@
         <span class="name">{{ defaultProfile.name }}</span>
       </div>
     </div>
-    <div class="current-profile no-profile" v-else>
+    <div class="current-profile no-profile" v-else-if="!loading">
       <div class="label">{{ t('profileManager.isDefault') }}</div>
       <div class="profile-info">
         <span class="icon no-icon"><Icon name="xCircle" :size="24" /></span>
