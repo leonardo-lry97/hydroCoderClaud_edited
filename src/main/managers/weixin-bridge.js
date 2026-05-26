@@ -4,9 +4,7 @@
  */
 
 const path = require('path')
-
-const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|bmp)$/i
-const IMAGE_PATH_MAX_DEPTH = 10
+const { normalizePath, IMAGE_EXTENSIONS, IMAGE_PATH_MAX_DEPTH } = require('./im-utils')
 
 class WeixinBridge {
   constructor(configManager, agentSessionManager, weixinNotifyService, mainWindow) {
@@ -375,14 +373,7 @@ class WeixinBridge {
   }
 
   _normalizePath(filePath) {
-    // MSYS /c/... → C:/... (Windows only)
-    if (process.platform === 'win32') {
-      const msysMatch = filePath.match(/^\/([a-zA-Z])\/(.*)$/)
-      if (msysMatch) {
-        return `${msysMatch[1].toUpperCase()}:/${msysMatch[2]}`
-      }
-    }
-    return filePath
+    return normalizePath(filePath)
   }
 
   _ensureSession(message) {

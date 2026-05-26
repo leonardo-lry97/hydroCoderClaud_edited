@@ -7,42 +7,21 @@
 
 const fs = require('fs')
 const path = require('path')
-
-const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|bmp)$/i
-const IMAGE_MAX_SIZE = 20 * 1024 * 1024 // 20MB
-const IMAGE_PATH_MAX_DEPTH = 10 // 递归提取最大深度
+const { extractImagePaths, normalizePath, IMAGE_EXTENSIONS, IMAGE_MAX_SIZE } = require('./im-utils')
 
 module.exports = {
   /**
    * 递归提取 tool_use input 中的图片文件绝对路径
    */
   _extractImagePaths(obj, depth = 0) {
-    if (depth > IMAGE_PATH_MAX_DEPTH) return []
-    const paths = []
-    if (typeof obj === 'string') {
-      if (IMAGE_EXTENSIONS.test(obj) && (obj.startsWith('/') || /^[A-Z]:[/\\]/.test(obj))) {
-        paths.push(this._normalizePath(obj))
-      }
-    } else if (obj && typeof obj === 'object') {
-      for (const val of Object.values(obj)) {
-        paths.push(...this._extractImagePaths(val, depth + 1))
-      }
-    }
-    return paths
+    return extractImagePaths(obj, depth)
   },
 
   /**
    * 归一化路径：将 MSYS 风格 /c/... 转为 Windows 风格 C:/...
    */
   _normalizePath(p) {
-    // MSYS: /c/workspace/... → C:/workspace/... (Windows only)
-    if (process.platform === 'win32') {
-      const msysMatch = p.match(/^\/([a-zA-Z])\/(.*)$/)
-      if (msysMatch) {
-        return `${msysMatch[1].toUpperCase()}:/${msysMatch[2]}`
-      }
-    }
-    return p
+    return normalizePath(p)
   },
 
   /**

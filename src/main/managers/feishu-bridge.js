@@ -13,10 +13,9 @@ const { ImReplyCollector } = require('./im-reply-collector')
 const { ImFrontendNotifier } = require('./im-frontend-notifier')
 const { FeishuEventClient } = require('./feishu-event-client')
 const { FeishuMessageAPI } = require('./feishu-message-api')
+const { extractImagePaths, normalizePath, formatRelativeTime, IMAGE_EXTENSIONS, IMAGE_MAX_SIZE } = require('./im-utils')
 
 // 图片相关常量（与钉钉保持一致）
-const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|bmp)$/i
-const IMAGE_MAX_SIZE = 20 * 1024 * 1024 // 20MB
 const FEISHU_MSG_ID_TTL = 10 * 60 * 1000
 const FEISHU_MSG_ID_CLEANUP_INTERVAL = 60 * 1000
 const FEISHU_CARD_SESSION_LIMIT = 10
@@ -1548,29 +1547,11 @@ class FeishuBridge {
    * 与钉钉 _extractImagePaths 相同逻辑
    */
   _extractImagePaths(obj, depth = 0) {
-    if (depth > 10) return []
-    if (!obj || typeof obj !== 'object') return []
-
-    const paths = []
-    for (const value of Object.values(obj)) {
-      if (typeof value === 'string') {
-        if (IMAGE_EXTENSIONS.test(value) && (value.startsWith('/') || /^[A-Z]:[/\\]/.test(value))) {
-          paths.push(this._normalizePath(value))
-        }
-      } else if (typeof value === 'object' && value !== null) {
-        paths.push(...this._extractImagePaths(value, depth + 1))
-      }
-    }
-    return paths
+    return extractImagePaths(obj, depth)
   }
 
   _normalizePath(rawPath) {
-    // MSYS /c/... → C:/... (Windows only)
-    if (process.platform === 'win32') {
-      const m = rawPath.match(/^\/([a-zA-Z])\/(.*)$/)
-      if (m) return `${m[1].toUpperCase()}:/${m[2]}`
-    }
-    return rawPath
+    return normalizePath(rawPath)
   }
 
   // ─── 辅助 ───
@@ -2051,18 +2032,7 @@ class FeishuBridge {
   }
 
   _formatRelativeTime(timestamp) {
-    const value = Number(timestamp)
-    if (!Number.isFinite(value) || value <= 0) return '未知时间'
-
-    const diff = Date.now() - value
-    const min = 60 * 1000
-    const hour = 60 * min
-    const day = 24 * hour
-    if (diff < hour) return `${Math.max(1, Math.floor(diff / min))}分钟前`
-    if (diff < day) return `${Math.floor(diff / hour)}小时前`
-    if (diff < 7 * day) return `${Math.floor(diff / day)}天前`
-    if (diff < 30 * day) return `${Math.floor(diff / (7 * day))}周前`
-    return `${Math.floor(diff / (30 * day))}个月前`
+    return formatRelativeTime(timestamp)
   }
 
   async _resolveCloseTargetSessionId(args, { chatId, mapKey }) {
