@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 
 vi.mock('uuid', () => ({ v4: () => 'interaction-uuid-fixed' }))
@@ -1264,7 +1265,7 @@ describe('AgentSessionManager interactions', () => {
           expect.objectContaining({
             type: 'tool_use',
             name: '__image_artifact__',
-            input: { imagePaths: ['C:\\workspace\\output\\cover.png'] }
+            input: { imagePaths: [path.join('C:', 'workspace', 'output', 'cover.png')] }
           })
         ])
       })
@@ -1843,7 +1844,7 @@ describe('AgentSessionManager interactions', () => {
 
   it('injects saved image paths into multimodal user text so non-vision flows can read local files', async () => {
     const { manager } = createManager()
-    const session = new AgentSession({ id: 's-image-path-hint', cwd: fs.mkdtempSync('C:/Windows/Temp/agent-image-hint-') })
+    const session = new AgentSession({ id: 's-image-path-hint', cwd: fs.mkdtempSync(path.join(os.tmpdir(), 'agent-image-hint-')) })
     session.dbConversationId = 1
     manager.sessions.set(session.id, session)
 

@@ -35,10 +35,12 @@ module.exports = {
    * 归一化路径：将 MSYS 风格 /c/... 转为 Windows 风格 C:/...
    */
   _normalizePath(p) {
-    // MSYS: /c/workspace/... → C:/workspace/...
-    const msysMatch = p.match(/^\/([a-zA-Z])\/(.*)$/)
-    if (msysMatch) {
-      return `${msysMatch[1].toUpperCase()}:/${msysMatch[2]}`
+    // MSYS: /c/workspace/... → C:/workspace/... (Windows only)
+    if (process.platform === 'win32') {
+      const msysMatch = p.match(/^\/([a-zA-Z])\/(.*)$/)
+      if (msysMatch) {
+        return `${msysMatch[1].toUpperCase()}:/${msysMatch[2]}`
+      }
     }
     return p
   },

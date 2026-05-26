@@ -1565,9 +1565,11 @@ class FeishuBridge {
   }
 
   _normalizePath(rawPath) {
-    // MSYS /c/... → C:/...
-    const m = rawPath.match(/^\/([a-zA-Z])\/(.*)$/)
-    if (m) return `${m[1].toUpperCase()}:/${m[2]}`
+    // MSYS /c/... → C:/... (Windows only)
+    if (process.platform === 'win32') {
+      const m = rawPath.match(/^\/([a-zA-Z])\/(.*)$/)
+      if (m) return `${m[1].toUpperCase()}:/${m[2]}`
+    }
     return rawPath
   }
 

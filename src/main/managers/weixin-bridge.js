@@ -375,9 +375,12 @@ class WeixinBridge {
   }
 
   _normalizePath(filePath) {
-    const msysMatch = filePath.match(/^\/([a-zA-Z])\/(.*)$/)
-    if (msysMatch) {
-      return `${msysMatch[1].toUpperCase()}:/${msysMatch[2]}`
+    // MSYS /c/... → C:/... (Windows only)
+    if (process.platform === 'win32') {
+      const msysMatch = filePath.match(/^\/([a-zA-Z])\/(.*)$/)
+      if (msysMatch) {
+        return `${msysMatch[1].toUpperCase()}:/${msysMatch[2]}`
+      }
     }
     return filePath
   }
