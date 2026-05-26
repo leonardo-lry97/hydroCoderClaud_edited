@@ -261,6 +261,42 @@ describe('WeixinBridge', () => {
     expect(() => manager.bindSessionExternalImSource(session.id, 'feishu')).toThrow(/已绑定weixin渠道/)
   })
 
+  it('locks a normal session to Weixin only after proactive send succeeds', async () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
+    const session = manager.sessions.get(created.id)
+
+    bridge.weixinNotifyService.sendText.mockRejectedValueOnce(new Error('send failed'))
+    await expect(bridge.sendTextToTarget({
+      sessionId: session.id,
+      accountId: 'acc-1',
+      targetId: 'acc-1:user-a',
+      displayName: '雷斯林',
+      text: '任务已完成'
+    })).rejects.toThrow(/send failed/)
+
+    expect(session.source).toBe('manual')
+    expect(bridge.getSessionBinding(session.id)).toBe(null)
+    expect(manager.sessionDatabase.updateAgentConversation).not.toHaveBeenCalledWith(session.id, {
+      source: 'weixin'
+    })
+
+    await bridge.sendTextToTarget({
+      sessionId: session.id,
+      accountId: 'acc-1',
+      targetId: 'acc-1:user-a',
+      displayName: '雷斯林',
+      text: '任务已完成'
+    })
+
+    expect(session.source).toBe('weixin')
+    expect(bridge.getSessionBinding(session.id)).toEqual({
+      accountId: 'acc-1',
+      targetId: 'acc-1:user-a',
+      displayName: '雷斯林'
+    })
+  })
+
   it('emits session updated after first proactive Weixin bind', () => {
     const { bridge, manager, sent } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })

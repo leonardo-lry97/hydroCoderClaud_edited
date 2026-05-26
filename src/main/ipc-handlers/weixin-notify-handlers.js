@@ -52,6 +52,9 @@ function setupWeixinNotifyHandlers(ipcMain, weixinNotifyService, weixinBridge, m
   }))
 
   ipcMain.handle('weixin-notify:sendText', handleTrusted(async (payload = {}) => {
+    if (weixinBridge?.sendTextToTarget) {
+      return await weixinBridge.sendTextToTarget(payload)
+    }
     return await weixinNotifyService.sendText(payload)
   }))
 

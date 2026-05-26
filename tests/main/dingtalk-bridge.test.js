@@ -197,6 +197,35 @@ describe('DingTalkBridge', () => {
     })).toThrow(/当前会话已绑定钉钉联系人「staff-1」/)
   })
 
+  it('restores persisted DingTalk target binding after in-memory binding is lost', () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'dingtalk', title: '桌面会话' })
+    const session = manager.sessions.get(created.id)
+
+    bridge._sessionTargets.clear()
+    bridge._targetSessionMap.clear()
+    manager.sessionDatabase.getAgentConversation.mockImplementation((sessionId) => (
+      sessionId === session.id
+        ? {
+            session_id: session.id,
+            type: 'chat',
+            source: 'dingtalk',
+            title: '桌面会话',
+            staff_id: 'staff-1',
+            conversation_id: '',
+            status: 'idle'
+          }
+        : null
+    ))
+
+    expect(bridge.getSessionBinding(session.id)).toEqual({
+      targetId: 'staff-1',
+      staffId: 'staff-1',
+      displayName: 'staff-1'
+    })
+    expect(bridge._targetSessionMap.get('staff-1')).toBe(session.id)
+  })
+
   it('reuses the proactively bound DingTalk session on first reply even after in-memory target mapping is lost', async () => {
     const { bridge, manager } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '桌面会话' })

@@ -5,6 +5,19 @@ import { describe, expect, it } from 'vitest'
 const toolbarPath = path.resolve(__dirname, '../../src/renderer/pages/main/components/agent/ChatInputToolbar.vue')
 
 describe('DingTalk quick send target filter', () => {
+  it('does not pre-bind a DingTalk session before sendText', () => {
+    const source = fs.readFileSync(toolbarPath, 'utf-8')
+    const start = source.indexOf('const sendDingTalkQuickMessage = async () => {')
+    const end = source.indexOf('const sendWeixinQuickMessage = async () => {')
+
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+
+    const sendBlock = source.slice(start, end)
+    expect(sendBlock).not.toContain('bindSessionToDingTalkTarget')
+    expect(sendBlock).toContain('sendDingTalkText')
+  })
+
   it('limits the target dropdown to the existing bound DingTalk target', () => {
     const source = fs.readFileSync(toolbarPath, 'utf-8')
     const start = source.indexOf('const loadDingTalkTargets = async () => {')

@@ -421,12 +421,15 @@ class WeixinBridge {
     const sessionId = message?.sessionId
     if (!sessionId) return
 
-    const session = this._resolveSession(sessionId)
-    if (!session) return
-
-    const mapKey = this._getMapKey(message)
-    this.sessionMap.set(mapKey, session.id)
-    this._rememberKnownTarget(session.id, message)
+    try {
+      this.bindSessionToTarget(sessionId, {
+        accountId: message.accountId || message.target?.accountId,
+        targetId: message.targetId,
+        displayName: this._getTargetDisplayName(message)
+      })
+    } catch (err) {
+      console.warn('[WeixinBridge] Failed to bind session after successful send:', err.message)
+    }
   }
 
   _rememberSessionTarget(sessionId, message) {
@@ -511,6 +514,33 @@ class WeixinBridge {
     this.desktopPendingBlocks.delete(sessionId)
     console.log(`[WeixinBridge] Bound session ${sessionId} to target ${targetId} (${displayName || targetId})`)
     return { success: true, target }
+  }
+
+  async sendTextToTarget({ sessionId, accountId, targetId, displayName, text } = {}) {
+    const content = typeof text === 'string' ? text.trim() : ''
+    if (!content) {
+      throw new Error('发送内容不能为空')
+    }
+    if (sessionId) {
+      this.agentSessionManager.assertSessionImBindingAllowed(sessionId, 'weixin')
+    }
+
+    const result = await this.weixinNotifyService.sendText({
+      accountId,
+      targetId,
+      text: content,
+      sessionId
+    })
+
+    if (sessionId) {
+      this.bindSessionToTarget(sessionId, {
+        accountId: result?.target?.accountId || accountId,
+        targetId: result?.target?.id || targetId,
+        displayName: displayName || result?.target?.displayName
+      })
+    }
+
+    return result
   }
 
   /**

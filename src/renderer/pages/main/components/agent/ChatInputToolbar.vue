@@ -569,17 +569,6 @@ const sendDingTalkQuickMessage = async () => {
   dingtalkError.value = ''
   try {
     const target = selectedDingTalkTarget.value
-    if (dingtalkApi?.bindSessionToDingTalkTarget) {
-      const bindResult = await dingtalkApi.bindSessionToDingTalkTarget({
-        sessionId: props.sessionId,
-        staffId: target.staffId || target.userId || target.id,
-        targetId: target.id,
-        displayName: target.displayName || target.name || target.userId || target.id
-      })
-      if (bindResult?.error) {
-        throw new Error(bindResult.error)
-      }
-    }
     const result = await dingtalkApi.sendDingTalkText({
       sessionId: props.sessionId,
       staffId: target.staffId || target.userId || target.id,
@@ -608,17 +597,6 @@ const sendWeixinQuickMessage = async () => {
   weixinError.value = ''
   try {
     const target = selectedWeixinTarget.value
-    if (weixinApi?.bindSessionToWeixinTarget) {
-      const bindResult = await weixinApi.bindSessionToWeixinTarget({
-        sessionId: props.sessionId,
-        accountId: target.accountId,
-        targetId: target.id,
-        displayName: target.displayName || target.userId || target.id
-      })
-      if (bindResult?.error) {
-        throw new Error(bindResult.error)
-      }
-    }
     const result = await weixinApi.sendWeixinNotifyText({
       sessionId: props.sessionId,
       accountId: target.accountId,

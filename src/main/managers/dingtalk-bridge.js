@@ -868,7 +868,22 @@ class DingTalkBridge {
 
   getSessionBinding(sessionId) {
     const target = this._sessionTargets.get(sessionId) || null
-    if (!target) return null
+    if (!target) {
+      const row = this.agentSessionManager.sessionDatabase?.getAgentConversation?.(sessionId)
+      const staffId = typeof row?.staff_id === 'string' ? row.staff_id.trim() : ''
+      if (!staffId || row?.status === 'closed' || !(row?.type === 'dingtalk' || row?.source === 'dingtalk')) return null
+      const restoredTarget = {
+        staffId,
+        displayName: staffId
+      }
+      this._sessionTargets.set(sessionId, restoredTarget)
+      this._targetSessionMap.set(staffId, sessionId)
+      return {
+        targetId: restoredTarget.staffId,
+        staffId: restoredTarget.staffId,
+        displayName: restoredTarget.displayName
+      }
+    }
     return {
       targetId: target.staffId,
       staffId: target.staffId,
