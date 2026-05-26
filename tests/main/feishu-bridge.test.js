@@ -3743,26 +3743,21 @@ describe('FeishuMessageAPI', () => {
   it('loads user display names through the basic_batch endpoint', async () => {
     const api = new FeishuMessageAPI()
     api.setCredentials('app-id', 'app-secret')
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      json: async () => ({
-        code: 0,
-        data: {
-          users: [{
-            name: '张三',
-            en_name: 'San Zhang'
-          }]
-        }
-      })
+    const batchGetIdSpy = vi.spyOn(api._client.contact.v3.user, 'batchGetId').mockResolvedValue({
+      data: {
+        users: [{
+          name: '张三',
+          en_name: 'San Zhang'
+        }]
+      }
     })
 
     const user = await api.getUserInfo('ou_xxx')
 
-    expect(fetchSpy).toHaveBeenCalledWith(
-      expect.stringContaining('/contact/v3/users/basic_batch?user_id_type=open_id'),
-      expect.objectContaining({
-        method: 'POST'
-      })
-    )
+    expect(batchGetIdSpy).toHaveBeenCalledWith({
+      params: { user_id_type: 'open_id' },
+      data: { user_ids: ['ou_xxx'] }
+    })
     expect(user).toEqual(expect.objectContaining({
       name: '张三',
       en_name: 'San Zhang'
@@ -3772,102 +3767,39 @@ describe('FeishuMessageAPI', () => {
   it('recursively lists all organization members across child departments', async () => {
     const api = new FeishuMessageAPI()
     api.setCredentials('app-id', 'app-secret')
-    const responses = {
-      '/open-apis/auth/v3/app_access_token/internal': {
-        code: 0,
-        app_access_token: 'token-1',
-        expire: 7200
-      },
-      '/contact/v3/departments/0/children': {
-        code: 0,
-        data: {
-          items: [
-            { open_department_id: 'od_sales' },
-            { open_department_id: 'od_eng' }
-          ]
-        }
-      },
-      '/contact/v3/departments/od_sales/children': {
-        code: 0,
-        data: {
-          items: [
-            { open_department_id: 'od_sales_a' }
-          ]
-        }
-      },
-      '/contact/v3/departments/od_eng/children': {
-        code: 0,
-        data: {
-          items: []
-        }
-      },
-      '/contact/v3/departments/od_sales_a/children': {
-        code: 0,
-        data: {
-          items: []
-        }
-      },
-      '/contact/v3/users/find_by_department?department_id=0': {
-        code: 0,
-        data: {
-          items: []
-        }
-      },
-      '/contact/v3/users/find_by_department?department_id=od_sales': {
-        code: 0,
-        data: {
-          items: [
-            { open_id: 'ou_dup', name: '张三' },
-            { open_id: 'ou_sales', display_name: '销售' }
-          ]
-        }
-      },
-      '/contact/v3/users/find_by_department?department_id=od_sales_a': {
-        code: 0,
-        data: {
-          items: [
-            { open_id: 'ou_sales_a', real_name: '研发A' }
-          ]
-        }
-      },
-      '/contact/v3/users/find_by_department?department_id=od_eng': {
-        code: 0,
-        data: {
-          items: [
-            { open_id: 'ou_dup', name: '张三' },
-            { open_id: 'ou_eng', nickname: '工程师' }
-          ]
-        }
+
+    const userListSpy = vi.spyOn(api._client.contact.v3.user, 'list').mockImplementation(async ({ path, params }) => {
+      const deptUsers = {
+        '0': { items: [] },
+        'od_sales': { items: [
+          { open_id: 'ou_dup', name: '张三' },
+          { open_id: 'ou_sales', display_name: '销售' }
+        ]},
+        'od_sales_a': { items: [
+          { open_id: 'ou_sales_a', real_name: '研发A' }
+        ]},
+        'od_eng': { items: [
+          { open_id: 'ou_dup', name: '张三' },
+          { open_id: 'ou_eng', nickname: '工程师' }
+        ]}
       }
-    }
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      const url = new URL(typeof input === 'string' ? input : String(input))
-      let body = null
-      if (url.pathname === '/open-apis/auth/v3/app_access_token/internal') {
-        body = responses['/open-apis/auth/v3/app_access_token/internal']
-      } else if (url.pathname === '/open-apis/contact/v3/departments/0/children') {
-        body = responses['/contact/v3/departments/0/children']
-      } else if (url.pathname === '/open-apis/contact/v3/departments/od_sales/children') {
-        body = responses['/contact/v3/departments/od_sales/children']
-      } else if (url.pathname === '/open-apis/contact/v3/departments/od_eng/children') {
-        body = responses['/contact/v3/departments/od_eng/children']
-      } else if (url.pathname === '/open-apis/contact/v3/departments/od_sales_a/children') {
-        body = responses['/contact/v3/departments/od_sales_a/children']
-      } else if (url.pathname === '/open-apis/contact/v3/users/find_by_department') {
-        const departmentId = url.searchParams.get('department_id')
-        body = responses[`/contact/v3/users/find_by_department?department_id=${departmentId}`]
+      return { data: deptUsers[path.department_id] || { items: [] } }
+    })
+
+    const deptChildrenSpy = vi.spyOn(api._client.contact.v3.department, 'children').mockImplementation(async ({ path }) => {
+      const children = {
+        '0': { items: [{ open_department_id: 'od_sales' }, { open_department_id: 'od_eng' }] },
+        'od_sales': { items: [{ open_department_id: 'od_sales_a' }] },
+        'od_eng': { items: [] },
+        'od_sales_a': { items: [] }
       }
-      if (!body) {
-        throw new Error(`Unexpected Feishu request: ${url.toString()}`)
-      }
-      return {
-        json: async () => body
-      }
+      return { data: children[path.department_id] || { items: [] } }
     })
 
     const users = await api.listUsers({ limit: 10 })
 
-    expect(fetchSpy).toHaveBeenCalled()
+    expect(userListSpy).toHaveBeenCalled()
+    expect(deptChildrenSpy).toHaveBeenCalled()
     expect(users.map((user) => user.openId)).toEqual([
       'ou_dup',
       'ou_sales',

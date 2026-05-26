@@ -1,63 +1,34 @@
 /**
  * 飞书消息 API 封装
  *
- * 通过 REST API 主动向飞书用户发送消息（桌面→飞书推送通道）。
- * 这是飞书桥接与钉钉桥接最关键的区别——飞书天然支持服务端主动推送。
+ * 通过 @larksuiteoapi/node-sdk Client 向飞书发送/获取消息。
+ * SDK Client 自动管理 access token 的获取、缓存和刷新。
  *
  * API 参考：https://open.feishu.cn/document/server-docs/im-v1/message/create
  */
 
-const FEISHU_API_BASE = 'https://open.feishu.cn/open-apis'
+const { Client } = require('@larksuiteoapi/node-sdk')
+const fs = require('fs')
+const path = require('path')
+
 const MAX_TEXT_LENGTH = 6000
 
 class FeishuMessageAPI {
   constructor(opts = {}) {
-    this._apiBase = opts.apiBase || FEISHU_API_BASE
     this._maxTextLength = opts.maxTextLength || MAX_TEXT_LENGTH
-    this._accessToken = null
-    this._tokenExpiresAt = 0
-    this._appId = null
-    this._appSecret = null
+    this._client = null
   }
 
   // ─── 配置 ───
 
   setCredentials(appId, appSecret) {
-    this._appId = appId
-    this._appSecret = appSecret
-    this._accessToken = null
-    this._tokenExpiresAt = 0
-  }
-
-  // ─── Token 管理 ───
-
-  async getAccessToken() {
-    if (this._accessToken && Date.now() < this._tokenExpiresAt) {
-      return this._accessToken
+    this._appId = appId || null
+    this._appSecret = appSecret || null
+    if (!appId || !appSecret) {
+      this._client = null
+      return
     }
-    return this._refreshToken()
-  }
-
-  /** @private */
-  async _refreshToken() {
-    if (!this._appId || !this._appSecret) {
-      throw new Error('Feishu credentials not configured')
-    }
-    const resp = await globalThis.fetch(
-      `${this._apiBase}/auth/v3/app_access_token/internal`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ app_id: this._appId, app_secret: this._appSecret }),
-      }
-    )
-    const data = await resp.json()
-    if (data.code !== 0) {
-      throw new Error(`Feishu token error: ${data.msg} (code=${data.code})`)
-    }
-    this._accessToken = data.app_access_token
-    this._tokenExpiresAt = Date.now() + (data.expire - 300) * 1000
-    return this._accessToken
+    this._client = new Client({ appId, appSecret })
   }
 
   // ─── 消息发送 ───
@@ -65,57 +36,35 @@ class FeishuMessageAPI {
   /**
    * 发送文本消息
    * @param {'open_id'|'user_id'|'chat_id'} receiveIdType
-   * @param {string} receiveId - 接收者 ID
-   * @param {string} content - 文本内容
-   * @returns {Promise<string|null>} message_id 或 null
+   * @param {string} receiveId
+   * @param {string} content
+   * @returns {Promise<string|null>} message_id
    */
   async sendTextMessage(receiveIdType, receiveId, content) {
-    const token = await this.getAccessToken()
+    this._assertReady()
     const text = typeof content === 'string' ? content : String(content)
-
-    const contentJson = JSON.stringify({ text: this._truncate(text) })
-
-    const resp = await globalThis.fetch(
-      `${this._apiBase}/im/v1/messages?receive_id_type=${receiveIdType}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          receive_id: receiveId,
-          msg_type: 'text',
-          content: contentJson,
-        }),
-      }
-    )
-    const data = await resp.json()
-    if (data.code !== 0) {
-      throw new Error(`Feishu send failed: ${data.msg} (code=${data.code})`)
-    }
-    return data?.data?.message_id || null
+    const r = await this._client.im.v1.message.create({
+      params: { receive_id_type: receiveIdType },
+      data: {
+        receive_id: receiveId,
+        msg_type: 'text',
+        content: JSON.stringify({ text: this._truncate(text) }),
+      },
+    })
+    return r?.data?.message_id || null
   }
 
   /**
-   * 获取指定消息的内容
+   * 获取指定消息
    * @param {string} messageId
    * @returns {Promise<object|null>}
    */
   async getMessage(messageId) {
-    const token = await this.getAccessToken()
-    const resp = await globalThis.fetch(
-      `${this._apiBase}/im/v1/messages/${encodeURIComponent(messageId)}`,
-      {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    )
-    const data = await resp.json()
-    if (data.code !== 0) {
-      throw new Error(`Feishu get message failed: ${data.msg} (code=${data.code})`)
-    }
-    const item = data?.data?.items?.[0] || data?.data?.item || null
+    this._assertReady()
+    const r = await this._client.im.v1.message.get({
+      path: { message_id: messageId },
+    })
+    const item = r?.data?.items?.[0] || r?.data?.item || null
     if (!item) return null
     return {
       ...item,
@@ -125,36 +74,28 @@ class FeishuMessageAPI {
     }
   }
 
+  /**
+   * 批量获取用户信息
+   * @param {string} userId - open_id
+   * @returns {Promise<object|null>}
+   */
   async getUserInfo(userId) {
-    const token = await this.getAccessToken()
-    const resp = await globalThis.fetch(
-      `${this._apiBase}/contact/v3/users/basic_batch?user_id_type=open_id`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json; charset=utf-8',
-        },
-        body: JSON.stringify({ user_ids: [userId] }),
-      }
-    )
-    const data = await resp.json()
-    if (data.code !== 0) {
-      throw new Error(`Feishu get user failed: ${data.msg} (code=${data.code})`)
-    }
-    const user = Array.isArray(data?.data?.users) ? data.data.users[0] : (data?.data?.user || data?.data || null)
+    this._assertReady()
+    const r = await this._client.contact.v3.user.batchGetId({
+      params: { user_id_type: 'open_id' },
+      data: { user_ids: [userId] },
+    })
+    const user = Array.isArray(r?.data?.users) ? r.data.users[0] : (r?.data?.user || r?.data || null)
     return user
   }
 
   /**
-   * 列出可发送的组织成员
+   * 通过部门树遍历列出可发送的组织成员
    * @param {object} [options]
-   * @param {number} [options.limit=200]
-   * @param {number} [options.pageSize=50]
-   * @param {string} [options.pageToken='']
    * @returns {Promise<Array<object>>}
    */
   async listUsers(options = {}) {
+    this._assertReady()
     const limit = Number.isFinite(options.limit) ? Math.max(1, Math.floor(options.limit)) : 200
     const pageSize = Math.min(Math.max(Number(options.pageSize) || 50, 1), 100)
     const rootDepartmentId = typeof options.departmentId === 'string' && options.departmentId.trim()
@@ -163,31 +104,13 @@ class FeishuMessageAPI {
     const departmentIdType = typeof options.departmentIdType === 'string' && options.departmentIdType.trim()
       ? options.departmentIdType.trim()
       : 'open_department_id'
-    const token = await this.getAccessToken()
+
     const users = []
     const seenOpenIds = new Set()
     const visitedDepartments = new Set()
     const queuedDepartments = new Set([rootDepartmentId])
     const departmentQueue = [rootDepartmentId]
-    const requestJson = async (url, errorLabel) => {
-      const resp = await globalThis.fetch(url, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await resp.json()
-      if (data.code !== 0) {
-        throw new Error(`Feishu ${errorLabel} failed: ${data.msg} (code=${data.code})`)
-      }
-      return data
-    }
-    const extractBatch = (data) => {
-      if (Array.isArray(data?.data?.items)) return data.data.items
-      if (Array.isArray(data?.data?.users)) return data.data.users
-      if (Array.isArray(data?.data?.departments)) return data.data.departments
-      if (Array.isArray(data?.data)) return data.data
-      return []
-    }
-    const nextPageToken = (data) => data?.data?.page_token || data?.data?.next_page_token || data?.data?.pageToken || ''
+
     const normalizeUser = (item) => {
       const openId = item?.open_id || item?.openId || item?.id || ''
       if (!openId) return null
@@ -202,37 +125,33 @@ class FeishuMessageAPI {
         avatarUrl: item?.avatar?.avatar_72 || item?.avatar?.avatar_240 || item?.avatar_url || null,
       }
     }
+
     const enqueueDepartment = (item) => {
       const childDepartmentId = item?.open_department_id || item?.openDepartmentId || item?.department_id || item?.departmentId || item?.id || ''
-      if (!childDepartmentId || visitedDepartments.has(childDepartmentId) || queuedDepartments.has(childDepartmentId)) {
-        return
-      }
+      if (!childDepartmentId || visitedDepartments.has(childDepartmentId) || queuedDepartments.has(childDepartmentId)) return
       queuedDepartments.add(childDepartmentId)
       departmentQueue.push(childDepartmentId)
     }
 
     while (departmentQueue.length > 0 && users.length < limit) {
       const departmentId = departmentQueue.shift()
-      if (!departmentId || visitedDepartments.has(departmentId)) {
-        continue
-      }
+      if (!departmentId || visitedDepartments.has(departmentId)) continue
       visitedDepartments.add(departmentId)
 
-      let userPageToken = departmentId === rootDepartmentId
-        ? (typeof options.pageToken === 'string' ? options.pageToken : '')
-        : ''
+      let userPageToken = ''
       do {
-        const url = new URL(`${this._apiBase}/contact/v3/users/find_by_department`)
-        url.searchParams.set('department_id', departmentId)
-        url.searchParams.set('department_id_type', departmentIdType)
-        url.searchParams.set('user_id_type', 'open_id')
-        url.searchParams.set('page_size', String(Math.min(pageSize, limit - users.length)))
-        if (userPageToken) {
-          url.searchParams.set('page_token', userPageToken)
+        const params = {
+          department_id_type: departmentIdType,
+          user_id_type: 'open_id',
+          page_size: Math.min(pageSize, limit - users.length),
         }
+        if (userPageToken) params.page_token = userPageToken
 
-        const data = await requestJson(url, 'list users by department')
-        const batch = extractBatch(data)
+        const r = await this._client.contact.v3.user.list({
+          path: { department_id: departmentId },
+          params,
+        })
+        const batch = Array.isArray(r?.data?.items) ? r.data.items : []
         for (const item of batch) {
           const user = normalizeUser(item)
           if (!user || seenOpenIds.has(user.openId)) continue
@@ -240,78 +159,64 @@ class FeishuMessageAPI {
           users.push(user)
           if (users.length >= limit) break
         }
-        userPageToken = nextPageToken(data)
+        userPageToken = r?.data?.page_token || ''
       } while (userPageToken && users.length < limit)
 
       let childPageToken = ''
       do {
-        const url = new URL(`${this._apiBase}/contact/v3/departments/${encodeURIComponent(departmentId)}/children`)
-        url.searchParams.set('department_id_type', departmentIdType)
-        url.searchParams.set('fetch_child', 'false')
-        url.searchParams.set('page_size', String(pageSize))
-        if (childPageToken) {
-          url.searchParams.set('page_token', childPageToken)
+        const params = {
+          department_id_type: departmentIdType,
+          fetch_child: false,
+          page_size: pageSize,
         }
+        if (childPageToken) params.page_token = childPageToken
 
-        const data = await requestJson(url, 'list child departments')
-        const batch = extractBatch(data)
+        const r = await this._client.contact.v3.department.children({
+          path: { department_id: departmentId },
+          params,
+        })
+        const batch = Array.isArray(r?.data?.items) ? r.data.items : []
         for (const item of batch) {
           enqueueDepartment(item)
         }
-        childPageToken = nextPageToken(data)
+        childPageToken = r?.data?.page_token || ''
       } while (childPageToken)
     }
 
     return users
   }
 
+  /**
+   * 获取群聊信息
+   * @param {string} chatId
+   * @returns {Promise<object|null>}
+   */
   async getChatInfo(chatId) {
-    const token = await this.getAccessToken()
-    const resp = await globalThis.fetch(
-      `${this._apiBase}/im/v1/chats/${encodeURIComponent(chatId)}`,
-      {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    )
-    const data = await resp.json()
-    if (data.code !== 0) {
-      throw new Error(`Feishu get chat failed: ${data.msg} (code=${data.code})`)
-    }
-    const chat = data?.data?.chat || data?.data || null
-    return chat
+    this._assertReady()
+    const r = await this._client.im.v1.chat.get({
+      path: { chat_id: chatId },
+    })
+    return r?.data?.chat || r?.data || null
   }
 
   /**
    * 发送交互式卡片消息
    * @param {'open_id'|'chat_id'} receiveIdType
    * @param {string} receiveId
-   * @param {object} card - 卡片 JSON
+   * @param {object|string} card - 卡片 JSON
    */
   async sendCardMessage(receiveIdType, receiveId, card) {
-    const token = await this.getAccessToken()
+    this._assertReady()
     const cardJson = typeof card === 'string' ? card : JSON.stringify(card)
-
-    const resp = await globalThis.fetch(
-      `${this._apiBase}/im/v1/messages?receive_id_type=${receiveIdType}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          receive_id: receiveId,
-          msg_type: 'interactive',
-          content: cardJson,
-        }),
-      }
-    )
-    const data = await resp.json()
-    if (data.code !== 0) {
-      throw new Error(`Feishu card send failed: ${data.msg} (code=${data.code})`)
-    }
-    return data?.data?.message_id || null
+    const r = await this._client.im.v1.message.create({
+      params: { receive_id_type: receiveIdType },
+      data: {
+        receive_id: receiveId,
+        msg_type: 'interactive',
+        content: cardJson,
+      },
+    })
+    return r?.data?.message_id || null
   }
 
   /**
@@ -321,10 +226,7 @@ class FeishuMessageAPI {
    * @returns {Promise<string>} image_key
    */
   async uploadImage(source, imageType = 'message') {
-    const token = await this.getAccessToken()
-    const fs = require('fs')
-    const path = require('path')
-
+    this._assertReady()
     let buffer, fileName
     if (Buffer.isBuffer(source)) {
       buffer = source
@@ -333,120 +235,77 @@ class FeishuMessageAPI {
       buffer = fs.readFileSync(source)
       fileName = path.basename(source)
     }
-
-    // 使用 fetch + FormData 上传
-    // 飞书上传图片: POST /open-apis/im/v1/images
-    const form = new FormData()
-    form.append('image_type', imageType)
-    form.append('image', new Blob([buffer], { type: 'application/octet-stream' }), fileName)
-
-    const resp = await globalThis.fetch(
-      `${this._apiBase}/im/v1/images`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: form,
-      }
-    )
-    const data = await resp.json()
-    if (data.code !== 0) {
-      throw new Error(`Feishu image upload failed: ${data.msg}`)
-    }
-    return data?.data?.image_key || null
+    const r = await this._client.im.v1.image.create({
+      data: { image_type: imageType, image: buffer },
+    })
+    return r?.data?.image_key || null
   }
 
   /**
-   * 下载消息中的图片（获取 base64 数据）
-   * GET /open-apis/im/v1/messages/{message_id}/resources/{file_key}?type=image
+   * 下载消息中的图片资源
    * @param {string} imageKey - file_key
-   * @param {string} messageId - 消息 ID
+   * @param {string} messageId
    * @returns {Promise<{base64: string, mediaType: string}>}
    */
   async downloadImage(imageKey, messageId) {
-    const token = await this.getAccessToken()
-    const url = `${this._apiBase}/im/v1/messages/${encodeURIComponent(messageId)}/resources/${encodeURIComponent(imageKey)}?type=image`
-    console.log('[FeishuMessageAPI] Downloading image from:', url)
-
-    const resp = await globalThis.fetch(url, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${token}` },
+    this._assertReady()
+    const r = await this._client.im.v1.messageResource.get({
+      path: { message_id: messageId, file_key: imageKey },
+      params: { type: 'image' },
     })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`Feishu image download failed: HTTP ${resp.status} - ${body.substring(0, 200)}`)
-    }
-
-    const contentType = resp.headers.get('content-type') || 'image/jpeg'
-    const mediaType = contentType.split(';')[0].trim() || 'image/jpeg'
-    const buffer = Buffer.from(await resp.arrayBuffer())
-    return { base64: buffer.toString('base64'), mediaType }
+    // SDK unwraps binary response into r.data
+    const buf = Buffer.isBuffer(r?.data) ? r.data : (r?.data ? Buffer.from(r.data) : Buffer.alloc(0))
+    const contentType = r?.headers?.['content-type'] || 'image/jpeg'
+    const mediaType = String(contentType).split(';')[0].trim() || 'image/jpeg'
+    return { base64: buf.toString('base64'), mediaType }
   }
 
   /**
    * 发送图片消息
    * @param {'open_id'|'chat_id'} receiveIdType
    * @param {string} receiveId
-   * @param {string} imageKey - 已上传的 image_key
+   * @param {string} imageKey
+   * @returns {Promise<string|null>} message_id
    */
   async sendImageMessage(receiveIdType, receiveId, imageKey) {
-    const token = await this.getAccessToken()
-    const contentJson = JSON.stringify({ image_key: imageKey })
-
-    const resp = await globalThis.fetch(
-      `${this._apiBase}/im/v1/messages?receive_id_type=${receiveIdType}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          receive_id: receiveId,
-          msg_type: 'image',
-          content: contentJson,
-        }),
-      }
-    )
-    const data = await resp.json()
-    if (data.code !== 0) {
-      throw new Error(`Feishu image send failed: ${data.msg}`)
-    }
-    return data?.data?.message_id || null
+    this._assertReady()
+    const r = await this._client.im.v1.message.create({
+      params: { receive_id_type: receiveIdType },
+      data: {
+        receive_id: receiveId,
+        msg_type: 'image',
+        content: JSON.stringify({ image_key: imageKey }),
+      },
+    })
+    return r?.data?.message_id || null
   }
 
   /**
-   * 回复消息（在指定消息的线程中回复）
-   * @param {string} msgId - 被回复的消息 ID
-   * @param {string} content - 文本内容
+   * 回复消息（在线程中回复）
+   * @param {string} msgId
+   * @param {string} content
+   * @returns {Promise<string|null>} message_id
    */
   async replyTextMessage(msgId, content) {
-    const token = await this.getAccessToken()
-    const contentJson = JSON.stringify({ text: this._truncate(content) })
-
-    const resp = await globalThis.fetch(
-      `${this._apiBase}/im/v1/messages/${msgId}/reply`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: contentJson,
-          msg_type: 'text',
-        }),
-      }
-    )
-    const data = await resp.json()
-    if (data.code !== 0) {
-      throw new Error(`Feishu reply failed: ${data.msg}`)
-    }
-    return data?.data?.message_id || null
+    this._assertReady()
+    const r = await this._client.im.v1.message.reply({
+      path: { message_id: msgId },
+      data: {
+        content: JSON.stringify({ text: this._truncate(content) }),
+        msg_type: 'text',
+      },
+    })
+    return r?.data?.message_id || null
   }
 
   // ─── 辅助 ───
+
+  /** @private */
+  _assertReady() {
+    if (!this._client) {
+      throw new Error('Feishu credentials not configured')
+    }
+  }
 
   /** @private */
   _truncate(text) {
