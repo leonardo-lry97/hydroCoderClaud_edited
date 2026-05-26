@@ -1449,7 +1449,10 @@ class DingTalkBridge {
 
 
   /**
-   * 获取钉钉 access token（带缓存）
+   * 获取钉钉 access token（带缓存，提前 5 分钟过期）
+   *
+   * 注意：dingtalk-stream-sdk-nodejs 仅提供 Stream WebSocket 通信，
+   * 不封装 REST API。Token 获取使用钉钉新版 REST 端点。
    */
   async _getAccessToken() {
     if (this._accessToken && Date.now() < this._accessTokenExpiresAt) {
@@ -1459,6 +1462,10 @@ class DingTalkBridge {
     const config = this.configManager.getConfig()
     const { appKey, appSecret } = config.dingtalk || {}
 
+    if (!appKey || !appSecret) {
+      throw new Error('钉钉未配置 appKey/appSecret，无法获取 access token')
+    }
+
     const response = await globalThis.fetch('https://api.dingtalk.com/v1.0/oauth2/accessToken', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1466,12 +1473,15 @@ class DingTalkBridge {
     })
 
     if (!response.ok) {
-      throw new Error(`Get access token failed: ${response.status}`)
+      const body = await response.text().catch(() => '')
+      throw new Error(`钉钉 access token 获取失败: HTTP ${response.status} ${body.substring(0, 200)}`)
     }
 
     const result = await response.json()
+    if (!result.accessToken) {
+      throw new Error(`钉钉 access token 响应缺少 accessToken 字段: ${JSON.stringify(result)}`)
+    }
     this._accessToken = result.accessToken
-    // 提前 5 分钟过期，避免边界问题
     this._accessTokenExpiresAt = Date.now() + (result.expireIn - 300) * 1000
     return this._accessToken
   }
