@@ -700,11 +700,12 @@ class FeishuBridge {
           await this._api.sendTextMessage(receiveIdType, receiveId, 'AI 正在响应中，请等待完成后再操作')
           break
         }
-        const history = await this._sessionMapper._queryHistorySessions({
+        let history = await this._sessionMapper._queryHistorySessions({
           userId: context.senderId,
           chatId: context.chatId,
           chatType: context.chatType,
         })
+        history = this._mergeCurrentSessionIntoHistory(history, sessionId, context)
         if (!history || history.length === 0) {
           await this._api.sendTextMessage(receiveIdType, receiveId, '没有历史会话记录\n\n发送任意消息可开始新会话')
           break
@@ -800,6 +801,37 @@ class FeishuBridge {
       default:
         await this._api.sendTextMessage(receiveIdType, receiveId, `未知命令: ${cmd}\n输入 /help 查看可用命令`)
     }
+  }
+
+  _mergeCurrentSessionIntoHistory(history, sessionId, context = {}) {
+    const rows = Array.isArray(history) ? history : []
+    if (!sessionId) return rows
+
+    const hasCurrent = rows.some(row => {
+      const rowSessionId = row?.session_id || row?.sessionId || row?.id || null
+      return rowSessionId === sessionId
+    })
+    if (hasCurrent) return rows
+
+    const liveSession = this._agentSessionManager.sessions.get(sessionId)
+    const dbRow = this._sessionDatabase?.getAgentConversation?.(sessionId)
+    if (!liveSession && (!dbRow || dbRow.status === 'closed')) return rows
+
+    const currentRow = {
+      ...(dbRow || {}),
+      session_id: dbRow?.session_id || liveSession?.id || sessionId,
+      title: dbRow?.title || liveSession?.title || sessionId,
+      cwd: dbRow?.cwd || liveSession?.cwd || null,
+      api_profile_id: dbRow?.api_profile_id || liveSession?.apiProfileId || null,
+      updated_at: dbRow?.updated_at || (liveSession?.updatedAt ? new Date(liveSession.updatedAt).getTime() : Date.now()),
+      type: dbRow?.type || liveSession?.type || 'feishu',
+      source: dbRow?.source || liveSession?.source || 'feishu',
+      staff_id: dbRow?.staff_id || context.senderId || '',
+      conversation_id: dbRow?.conversation_id || context.chatId || '',
+      status: dbRow?.status || liveSession?.status || 'idle',
+    }
+
+    return [currentRow, ...rows]
   }
 
   _normalizeCommandText(text, context = {}, options = {}) {

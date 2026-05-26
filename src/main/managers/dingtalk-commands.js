@@ -71,8 +71,7 @@ module.exports = {
 
   async _cmdResume(args, { mapKey, senderStaffId, senderNick, conversationId, conversationTitle, conversationType, robotCode }, webhook) {
     // 获取当前活跃会话（如果有）
-    const mappedSessionId = this._resolveActiveSessionId(mapKey)
-    const currentSessionId = mappedSessionId || this._findBoundSessionIdByStaffId?.(senderStaffId) || null
+    const currentSessionId = this._resolveActiveSessionId(mapKey)
     const currentSession = currentSessionId ? this.agentSessionManager.sessions.get(currentSessionId) : null
 
     // 如果正在 streaming，不允许操作
@@ -178,7 +177,7 @@ module.exports = {
     }
 
     // 无参数 → 显示选择菜单（传入当前会话 ID 用于标记）
-    this._setPendingChoice(mapKey, { sessions, originalMessage: null, robotCode: null, senderStaffId })
+    this._setPendingChoice(mapKey, { sessions, originalMessage: null, robotCode: null, senderStaffId, source: 'resume-command' })
     await this._sendChoiceMenu(webhook, sessions, currentSessionId)
     return null  // 已由 _sendChoiceMenu 回复
   },
@@ -303,7 +302,7 @@ module.exports = {
       // 清理相关映射（需要找到对应的 mapKey）
       for (const [key, sid] of this.sessionMap.entries()) {
         if (sid === targetSession.id) {
-          this._clearSessionState(targetSession.id, key)
+          this._clearSessionState(targetSession.id, key, { clearTargetBinding: true })
           this._clearPendingChoice(key)
           break
         }
@@ -326,7 +325,7 @@ module.exports = {
     }
 
     await this.agentSessionManager.close(sessionId)
-    this._clearSessionState(sessionId, mapKey)
+    this._clearSessionState(sessionId, mapKey, { clearTargetBinding: true })
     this._clearPendingChoice(mapKey)
     this._notifyFrontend('dingtalk:sessionClosed', { sessionId })
 

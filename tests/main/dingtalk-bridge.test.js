@@ -40,6 +40,7 @@ describe('DingTalkBridge', () => {
       createAgentConversation: vi.fn(() => ({ id: 1 })),
       updateAgentConversation: vi.fn(),
       updateDingTalkMetadata: vi.fn(),
+      closeAgentConversation: vi.fn(),
       getAgentConversation: vi.fn(() => null),
       getDingTalkSessions: vi.fn(() => []),
       getImSessionsByType: vi.fn(() => [])
@@ -139,6 +140,61 @@ describe('DingTalkBridge', () => {
     expect(manager.sessionDatabase.updateAgentConversation).not.toHaveBeenCalledWith(session.id, {
       source: 'dingtalk'
     })
+  })
+
+  it('rejects sending a DingTalk-bound session to another target before network send', async () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
+    const session = manager.sessions.get(created.id)
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    bridge.bindSessionToTarget(session.id, {
+      staffId: 'staff-1',
+      displayName: '张三'
+    })
+
+    await expect(bridge.sendTextToTarget({
+      sessionId: session.id,
+      staffId: 'staff-2',
+      displayName: '李四',
+      text: '任务已完成'
+    })).rejects.toThrow(/当前会话已绑定钉钉联系人「张三」/)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(bridge.getSessionBinding(session.id)).toEqual({
+      targetId: 'staff-1',
+      staffId: 'staff-1',
+      displayName: '张三'
+    })
+    expect(bridge._targetSessionMap.get('staff-2')).toBeUndefined()
+  })
+
+  it('rejects rebinding a persisted DingTalk target after in-memory binding is lost', () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'dingtalk', title: '桌面会话' })
+    const session = manager.sessions.get(created.id)
+
+    bridge._sessionTargets.clear()
+    bridge._targetSessionMap.clear()
+    manager.sessionDatabase.getAgentConversation.mockImplementation((sessionId) => (
+      sessionId === session.id
+        ? {
+            session_id: session.id,
+            type: 'chat',
+            source: 'dingtalk',
+            title: '桌面会话',
+            staff_id: 'staff-1',
+            conversation_id: '',
+            status: 'idle'
+          }
+        : null
+    ))
+
+    expect(() => bridge.bindSessionToTarget(session.id, {
+      staffId: 'staff-2',
+      displayName: '李四'
+    })).toThrow(/当前会话已绑定钉钉联系人「staff-1」/)
   })
 
   it('reuses the proactively bound DingTalk session on first reply even after in-memory target mapping is lost', async () => {
@@ -280,6 +336,62 @@ describe('DingTalkBridge', () => {
     )
   })
 
+  it('handles DingTalk resume menu numeric replies even when a session is already active', async () => {
+    const { bridge, manager } = createHarness()
+    vi.spyOn(bridge, '_sendChoiceMenu').mockResolvedValue()
+    const handlePendingChoice = vi.spyOn(bridge, '_handlePendingChoice').mockResolvedValue()
+    const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
+
+    const active = manager.create({ type: 'chat', source: 'dingtalk', title: '当前会话' })
+    const history = manager.create({ type: 'chat', source: 'dingtalk', title: '历史会话' })
+    bridge.sessionMap.set('staff-1:conv-1', active.id)
+
+    manager.sessionDatabase.getImSessionsByType.mockReturnValue([
+      { session_id: history.id, title: '历史会话', updated_at: Date.now() }
+    ])
+
+    const result = await bridge._cmdResume([], {
+      mapKey: 'staff-1:conv-1',
+      senderStaffId: 'staff-1',
+      senderNick: '张三',
+      conversationId: 'conv-1',
+      conversationTitle: '测试群',
+      conversationType: '2',
+      robotCode: 'robot-1'
+    }, 'https://example.com/webhook')
+
+    expect(result).toBeNull()
+    expect(bridge._pendingChoices.get('staff-1:conv-1')?.source).toBe('resume-command')
+
+    await bridge._handleDingTalkMessage({
+      data: JSON.stringify({
+        msgId: 'msg-resume-choice',
+        msgtype: 'text',
+        text: { content: '2' },
+        senderStaffId: 'staff-1',
+        senderNick: '张三',
+        sessionWebhook: 'https://example.com/webhook',
+        robotCode: 'robot-1',
+        conversationId: 'conv-1',
+        conversationTitle: '测试群',
+        conversationType: '2'
+      })
+    })
+
+    expect(handlePendingChoice).toHaveBeenCalledWith(
+      'staff-1:conv-1',
+      '2',
+      'https://example.com/webhook',
+      expect.objectContaining({
+        robotCode: 'robot-1',
+        senderStaffId: 'staff-1',
+        conversationId: 'conv-1',
+        conversationType: '2'
+      })
+    )
+    expect(enqueueMessage).not.toHaveBeenCalled()
+  })
+
   it('switches the active DingTalk reply binding to the latest desktop session for the same user', async () => {
     const { bridge, manager } = createHarness()
     const first = manager.create({ type: 'chat', source: 'manual', title: '会话1' })
@@ -387,7 +499,118 @@ describe('DingTalkBridge', () => {
     expect(sendChoiceMenu).toHaveBeenCalledWith(
       'https://example.com/webhook',
       [expect.objectContaining({ session_id: session.id })],
-      session.id
+      null
+    )
+  })
+
+  it('clears proactive DingTalk target binding when closing the active mapped session', async () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '桌面会话' })
+    const session = manager.sessions.get(created.id)
+
+    bridge.bindSessionToTarget(session.id, {
+      staffId: 'staff-1',
+      displayName: '张三'
+    })
+    bridge.sessionMap.set('staff-1:conv-1', session.id)
+
+    const reply = await bridge._cmdClose([], {
+      mapKey: 'staff-1:conv-1',
+      senderStaffId: 'staff-1',
+      conversationId: 'conv-1'
+    })
+
+    expect(reply).toContain('会话已关闭')
+    expect(bridge.sessionMap.get('staff-1:conv-1')).toBeUndefined()
+    expect(bridge.getSessionBinding(session.id)).toBe(null)
+    expect(bridge._targetSessionMap.get('staff-1')).toBeUndefined()
+  })
+
+  it('does not mark a proactively bound DingTalk session as current in resume menu without an active chat map', async () => {
+    const { bridge, manager } = createHarness()
+    vi.spyOn(bridge, '_replyToDingTalk').mockResolvedValue()
+    const sendChoiceMenu = vi.spyOn(bridge, '_sendChoiceMenu').mockResolvedValue()
+
+    const created = manager.create({ type: 'chat', source: 'manual', title: '桌面会话' })
+    const session = manager.sessions.get(created.id)
+    bridge.bindSessionToTarget(session.id, {
+      staffId: 'staff-1',
+      displayName: '张三'
+    })
+
+    manager.sessionDatabase.getImSessionsByType.mockReturnValue([
+      {
+        session_id: session.id,
+        title: '桌面会话',
+        staff_id: 'staff-1',
+        conversation_id: 'conv-1',
+        type: 'chat',
+        source: 'dingtalk',
+        updated_at: Date.now()
+      }
+    ])
+
+    const result = await bridge._cmdResume([], {
+      mapKey: 'staff-1:conv-1',
+      senderStaffId: 'staff-1',
+      senderNick: '张三',
+      conversationId: 'conv-1',
+      conversationTitle: '测试群',
+      conversationType: '2',
+      robotCode: 'robot-1'
+    }, 'https://example.com/webhook')
+
+    expect(result).toBeNull()
+    expect(sendChoiceMenu).toHaveBeenCalledWith(
+      'https://example.com/webhook',
+      [expect.objectContaining({ session_id: session.id })],
+      null
+    )
+  })
+
+  it('replays pending DingTalk image messages to the desktop frontend after choosing a historical session', async () => {
+    const { bridge, manager, sent } = createHarness()
+    vi.spyOn(bridge, '_replyToDingTalk').mockResolvedValue()
+    vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
+
+    const created = manager.create({ type: 'chat', source: 'manual', title: '历史会话' })
+    const image = { base64: Buffer.from('img').toString('base64'), mediaType: 'image/png' }
+
+    bridge._pendingChoices.set('staff-1:conv-1', {
+      sessions: [{ session_id: created.id, title: '历史会话', updated_at: Date.now() }],
+      originalMessage: { text: '', images: [image] },
+      timer: setTimeout(() => {}, 1000)
+    })
+
+    await bridge._handlePendingChoice('staff-1:conv-1', '1', 'https://example.com/webhook', {
+      robotCode: 'robot-1',
+      senderStaffId: 'staff-1',
+      senderNick: '张三',
+      conversationId: 'conv-1',
+      conversationTitle: '测试群',
+      conversationType: '2'
+    })
+
+    expect(sent).toContainEqual({
+      channel: 'dingtalk:messageReceived',
+      data: {
+        sessionId: created.id,
+        senderNick: '张三',
+        text: '[图片]',
+        images: [image]
+      }
+    })
+    expect(bridge._enqueueMessage).toHaveBeenCalledWith(
+      created.id,
+      { text: '', images: [image] },
+      'https://example.com/webhook',
+      '张三',
+      expect.objectContaining({
+        robotCode: 'robot-1',
+        senderStaffId: 'staff-1',
+        conversationId: 'conv-1',
+        conversationType: '2'
+      })
     )
   })
 })

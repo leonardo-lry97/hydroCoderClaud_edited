@@ -300,6 +300,22 @@ const updateConversationRuntime = ({ sessionId, apiProfileId, modelId } = {}) =>
   })
 }
 
+const focusConversationById = async (sessionId) => {
+  if (!sessionId) {
+    await loadConversations()
+    return
+  }
+
+  let conv = conversations.value.find(item => item.id === sessionId)
+  if (!conv) {
+    await loadConversations()
+    conv = conversations.value.find(item => item.id === sessionId)
+  }
+
+  if (!conv) return
+  emit('select', conv)
+}
+
 // 监听重命名事件（从后端推送）
 let cleanupRenamed = null
 let cleanupAgentResult = null
@@ -364,18 +380,18 @@ onMounted(() => {
 
   // 钉钉会话创建/关闭时自动刷新列表
   if (window.electronAPI?.onDingTalkSessionCreated) {
-    cleanupDingtalkSession = window.electronAPI.onDingTalkSessionCreated(() => {
-      loadConversations()
+    cleanupDingtalkSession = window.electronAPI.onDingTalkSessionCreated((data) => {
+      focusConversationById(data?.sessionId)
     })
   }
   if (window.electronAPI?.onWeixinSessionCreated) {
-    cleanupWeixinSession = window.electronAPI.onWeixinSessionCreated(() => {
-      loadConversations()
+    cleanupWeixinSession = window.electronAPI.onWeixinSessionCreated((data) => {
+      focusConversationById(data?.sessionId)
     })
   }
   if (window.electronAPI?.onFeishuSessionCreated) {
-    cleanupFeishuSession = window.electronAPI.onFeishuSessionCreated(() => {
-      loadConversations()
+    cleanupFeishuSession = window.electronAPI.onFeishuSessionCreated((data) => {
+      focusConversationById(data?.sessionId)
     })
   }
   if (window.electronAPI?.onDingTalkSessionClosed) {

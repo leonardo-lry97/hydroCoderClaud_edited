@@ -2213,6 +2213,75 @@ describe('FeishuBridge', () => {
     )
   })
 
+  it('includes the current proactively rebound Feishu session in /resume even when DB history lookup is empty', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
+    vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([])
+    vi.spyOn(bridge._sessionMapper, 'initPendingChoice').mockImplementation(async (_mapKey, history, onSendChoiceMenu, options) => {
+      await onSendChoiceMenu(options.menuBuilder(history))
+      return { sessionId: null }
+    })
+
+    const created = manager.create({ type: 'chat', source: 'feishu', title: '桌面发起会话', cwd: tempDir })
+    const session = manager.sessions.get(created.id)
+    bridge._sessionMapper.sessionMap.set('ou_target:oc_reply', session.id)
+    bridge._sessionIdentities.set(session.id, {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+    manager.sessionDatabase.getAgentConversation.mockImplementation((sessionId) => (
+      sessionId === session.id
+        ? {
+            session_id: session.id,
+            type: 'chat',
+            source: 'feishu',
+            title: '桌面发起会话',
+            cwd: tempDir,
+            staff_id: 'ou_target',
+            conversation_id: 'oc_reply',
+            status: 'idle',
+            updated_at: Date.now()
+          }
+        : null
+    ))
+
+    await bridge._handleCommand('/resume', {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+
+    expect(sendTextMessage).not.toHaveBeenCalledWith(
+      'open_id',
+      'ou_target',
+      expect.stringContaining('没有历史会话记录')
+    )
+    expect(bridge._sessionMapper.initPendingChoice).toHaveBeenCalledWith(
+      'ou_target:oc_reply',
+      [expect.objectContaining({ session_id: session.id, title: '桌面发起会话' })],
+      expect.any(Function),
+      expect.any(Object)
+    )
+    expect(sendCardMessage).toHaveBeenCalledWith(
+      'open_id',
+      'ou_target',
+      expect.objectContaining({
+        header: expect.objectContaining({
+          title: expect.objectContaining({
+            content: '历史会话'
+          })
+        })
+      })
+    )
+  })
+
   it('falls back to text when sending the sessions card fails', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)

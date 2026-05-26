@@ -389,7 +389,8 @@ class DingTalkBridge {
     }
 
     const mapKey = `${senderStaffId}:${conversationId || 'default'}`
-    if (this._pendingChoices.has(mapKey)) {
+    const pendingChoice = this._pendingChoices.get(mapKey)
+    if (pendingChoice && pendingChoice.source !== 'resume-command') {
       const activeSessionId = this._resolveActiveSessionId(mapKey)
       if (activeSessionId) {
         this._clearPendingChoice(mapKey)
@@ -714,6 +715,8 @@ class DingTalkBridge {
     if (!session) {
       throw new Error(`Session ${sessionId} 不存在或已关闭`)
     }
+    this.agentSessionManager.assertSessionImBindingAllowed(sessionId, 'dingtalk')
+    this._assertSessionTargetAllowed(sessionId, resolvedStaffId, displayName)
     this.agentSessionManager.bindSessionExternalImSource(sessionId, 'dingtalk')
     if (session.meta && typeof session.meta === 'object') {
       session.meta.dingtalkTargetStaffId = resolvedStaffId
@@ -750,6 +753,25 @@ class DingTalkBridge {
       }
     }
     return { success: true, target }
+  }
+
+  _assertSessionTargetAllowed(sessionId, resolvedStaffId, displayName) {
+    if (!sessionId || !resolvedStaffId) return
+
+    const existingTarget = this._sessionTargets.get(sessionId)
+    const liveSession = this.agentSessionManager.sessions.get(sessionId)
+    const row = this.agentSessionManager.sessionDatabase?.getAgentConversation?.(sessionId)
+    const metaStaffId = typeof liveSession?.meta?.dingtalkTargetStaffId === 'string'
+      ? liveSession.meta.dingtalkTargetStaffId.trim()
+      : ''
+    const rowStaffId = typeof row?.staff_id === 'string' ? row.staff_id.trim() : ''
+    const existingStaffId = existingTarget?.staffId || metaStaffId || rowStaffId
+
+    if (existingStaffId && existingStaffId !== resolvedStaffId) {
+      const currentLabel = existingTarget?.displayName || existingStaffId
+      const nextLabel = displayName || resolvedStaffId
+      throw new Error(`当前会话已绑定钉钉联系人「${currentLabel}」，不能再发送给「${nextLabel}」。请新建会话后再联系其他成员。`)
+    }
   }
 
   _clearCurrentConversationMapBinding(sessionId, staffId) {
@@ -867,6 +889,7 @@ class DingTalkBridge {
     }
     if (sessionId) {
       this.agentSessionManager.assertSessionImBindingAllowed(sessionId, 'dingtalk')
+      this._assertSessionTargetAllowed(sessionId, resolvedStaffId, displayName)
     }
     const token = await this._getAccessToken()
     const config = this.configManager.getConfig()
@@ -930,11 +953,18 @@ class DingTalkBridge {
    * @param {string} sessionId
    * @param {string} [mapKey] - 可选，提供时同时清理 sessionMap
    */
-  _clearSessionState(sessionId, mapKey) {
+  _clearSessionState(sessionId, mapKey, { clearTargetBinding = false } = {}) {
     this._sessionProcessQueues.delete(sessionId)
     if (mapKey) this.sessionMap.delete(mapKey)
     this._sessionWebhooks.delete(sessionId)
     this._desktopPendingBlocks.delete(sessionId)
+    if (clearTargetBinding) {
+      const target = this._sessionTargets.get(sessionId)
+      if (target?.staffId) {
+        this._targetSessionMap.delete(target.staffId)
+      }
+      this._sessionTargets.delete(sessionId)
+    }
   }
 
   /**

@@ -397,14 +397,26 @@ const loadDingTalkTargets = async () => {
     if (targets?.error) {
       throw new Error(targets.error)
     }
-    dingtalkTargets.value = Array.isArray(targets) ? targets : []
-    dingtalkError.value = ''
     const bindingTargetId = binding?.targetId || binding?.staffId || null
-    if (bindingTargetId && dingtalkTargets.value.some(target => target.id === bindingTargetId)) {
-      selectedDingTalkTargetId.value = bindingTargetId
-    } else if (!dingtalkTargets.value.some(target => target.id === selectedDingTalkTargetId.value)) {
-      selectedDingTalkTargetId.value = dingtalkTargets.value[0]?.id || null
+    const allTargets = Array.isArray(targets) ? targets : []
+    if (bindingTargetId) {
+      const boundTarget = allTargets.find(target => [target.id, target.staffId, target.userId].includes(bindingTargetId))
+        || {
+          id: bindingTargetId,
+          staffId: binding?.staffId || bindingTargetId,
+          userId: binding?.staffId || bindingTargetId,
+          displayName: binding?.displayName || bindingTargetId,
+          name: binding?.displayName || bindingTargetId
+        }
+      dingtalkTargets.value = [boundTarget]
+      selectedDingTalkTargetId.value = boundTarget.id
+    } else {
+      dingtalkTargets.value = allTargets
+      if (!dingtalkTargets.value.some(target => target.id === selectedDingTalkTargetId.value)) {
+        selectedDingTalkTargetId.value = dingtalkTargets.value[0]?.id || null
+      }
     }
+    dingtalkError.value = ''
   } catch (err) {
     console.error('[ChatInputToolbar] loadDingTalkTargets error:', err)
     dingtalkTargets.value = []

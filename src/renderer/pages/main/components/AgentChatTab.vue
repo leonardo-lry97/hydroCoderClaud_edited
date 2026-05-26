@@ -585,6 +585,7 @@ const onWindowFocus = () => {
 onMounted(async () => {
   // 先注册流式监听器，再加载历史消息，确保钉钉第一条消息的 streaming 事件不被错过
   setupStreamListeners()
+  setupExternalImMessageListeners()
   await loadQueueSetting()
   await loadApiProfiles()
   if (resolvedAgentApi.value?.getAgentSession) {
@@ -605,8 +606,6 @@ onMounted(async () => {
   await initDefaultModel(resolvedApiProfileId.value, resolvedModelId.value)  // 从会话快照读取模型
   await loadMessages()  // 加载历史消息
   await syncActiveSessionState()
-
-  setupExternalImMessageListeners()  // 外部 IM 消息监听器（钉钉/微信/飞书统一适配）
   // 绑定滚动事件检测用户手动滚动
   if (messagesListRef.value) {
     messagesListRef.value.addEventListener('scroll', onMessagesScroll, { passive: true })
