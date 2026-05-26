@@ -195,11 +195,12 @@ class SessionDatabaseBase {
       { name: 'model_id', type: 'TEXT' },
       { name: 'last_bootstrapped_runtime', type: 'TEXT' },
       { name: 'pending_runtime_change', type: "TEXT DEFAULT 'unknown'" },
-      { name: 'queued_messages', type: "TEXT DEFAULT '[]'" },  // 存储队列消息（JSON 数组）
-      { name: 'staff_id', type: 'TEXT' },         // 钉钉发送者 staffId（保留向后兼容）
-      { name: 'conversation_id', type: 'TEXT' },   // 钉钉群/单聊会话 ID（保留向后兼容）
-      { name: 'im_user_id', type: 'TEXT' },        // 通用 IM 用户标识
-      { name: 'im_channel_id', type: 'TEXT' },     // 通用 IM 通道/会话标识
+      { name: 'queued_messages', type: "TEXT DEFAULT '[]'" },
+      { name: 'staff_id', type: 'TEXT' },         // @deprecated → im_user_id
+      { name: 'conversation_id', type: 'TEXT' },   // @deprecated → im_chat_id
+      { name: 'im_user_id', type: 'TEXT' },        // IM 用户标识（staffId / openId）
+      { name: 'im_chat_id', type: 'TEXT' },        // IM 聊天标识（群聊/单聊 ID）
+      { name: 'im_channel', type: 'TEXT' },        // IM 平台类型（dingtalk / weixin / feishu / enterprise-weixin）
       { name: 'source', type: "TEXT DEFAULT 'manual'" },
       { name: 'task_id', type: 'INTEGER' },
       { name: 'owner_client_id', type: "TEXT DEFAULT 'host-ui'" },

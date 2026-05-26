@@ -247,17 +247,28 @@ function withAgentOperations(BaseClass) {
     }
 
     /**
-     * 通用 IM 身份持久化写入
+     * 通用 IM 身份持久化写入（同时写新旧列，向后兼容）
      * @param {string} sessionId
-     * @param {string} userId — IM 用户标识（staffId / openId / targetId 等）
-     * @param {string} channelId — IM 通道/群标识（conversationId / chatId / accountId 等）
+     * @param {string} userId — IM 用户标识
+     * @param {string} chatId — IM 聊天标识（群聊/单聊）
      */
-    updateImIdentity(sessionId, userId, channelId) {
+    updateImIdentity(sessionId, userId, chatId) {
       this.db.prepare(`
         UPDATE agent_conversations
-        SET staff_id = ?, conversation_id = ?, im_user_id = ?, im_channel_id = ?, updated_at = ?
+        SET staff_id = ?, conversation_id = ?, im_user_id = ?, im_chat_id = ?, updated_at = ?
         WHERE session_id = ?
-      `).run(userId, channelId, userId, channelId, Date.now(), sessionId)
+      `).run(userId, chatId, userId, chatId, Date.now(), sessionId)
+    }
+
+    /**
+     * 设置会话的 IM 平台绑定
+     * @param {string} sessionId
+     * @param {string|null} imChannel — dingtalk / weixin / feishu / enterprise-weixin
+     */
+    setImChannel(sessionId, imChannel) {
+      this.db.prepare(`
+        UPDATE agent_conversations SET im_channel = ?, updated_at = ? WHERE session_id = ?
+      `).run(imChannel || null, Date.now(), sessionId)
     }
 
     /**
@@ -273,7 +284,7 @@ function withAgentOperations(BaseClass) {
         SELECT * FROM agent_conversations
         WHERE (type = ? OR source = ?)
           AND (im_user_id = ? OR staff_id = ?)
-          AND (im_channel_id = ? OR conversation_id = ?)
+          AND (im_chat_id = ? OR conversation_id = ?)
         ORDER BY updated_at DESC LIMIT ?
       `).all(imType, imType, userId, userId, channelId, channelId, limit)
     }
@@ -300,7 +311,7 @@ function withAgentOperations(BaseClass) {
         SELECT * FROM agent_conversations
         WHERE (type = ? OR source = ?)
           AND (im_user_id = ? OR staff_id = ?)
-          AND (im_channel_id = ? OR conversation_id = ?)
+          AND (im_chat_id = ? OR conversation_id = ?)
         ORDER BY updated_at DESC LIMIT ?
       `).all(type, type, staffId, staffId, conversationId, conversationId, limit)
     }
