@@ -8,24 +8,61 @@
       </button>
     </div>
 
-    <div class="filter-area">
-      <n-select
-        v-model:value="selectedSource"
-        :options="sourceOptions"
-        :placeholder="t('agent.allSources')"
-        size="small"
-      />
-    </div>
+    <div class="filter-toolbar">
+      <!-- 目录筛选 -->
+      <n-dropdown
+        trigger="click"
+        placement="bottom-start"
+        :options="cwdMenuOptions"
+        :render-label="renderCwdMenuLabel"
+        @select="handleCwdSelect"
+      >
+        <button
+          type="button"
+          class="filter-trigger-btn"
+          :class="{ active: !!selectedCwd }"
+          :title="cwdFilterTitle"
+          :aria-label="cwdFilterTitle"
+        >
+          <Icon :name="cwdFilterIcon" :size="16" class="filter-trigger-icon" />
+        </button>
+      </n-dropdown>
 
-    <!-- 目录筛选 -->
-    <div class="dir-filter-area" v-if="availableCwds.length > 0">
-      <n-select
-        v-model:value="selectedCwd"
-        :options="cwdOptions"
-        :render-label="renderCwdLabel"
-        :placeholder="t('agent.allDirectories')"
-        size="small"
-      />
+      <n-dropdown
+        trigger="click"
+        placement="bottom-start"
+        :options="sourceMenuOptions"
+        :render-label="renderSourceMenuLabel"
+        @select="handleSourceSelect"
+      >
+        <button
+          type="button"
+          class="filter-trigger-btn"
+          :class="{ active: selectedSource !== 'all' }"
+          :title="sourceFilterTitle"
+          :aria-label="sourceFilterTitle"
+        >
+          <Icon :name="sourceFilterIcon" :size="16" class="filter-trigger-icon" />
+        </button>
+      </n-dropdown>
+
+      <n-dropdown
+        trigger="click"
+        placement="bottom-start"
+        :options="taskMenuOptions"
+        :render-label="renderTaskMenuLabel"
+        @select="handleTaskSelect"
+      >
+        <button
+          type="button"
+          class="filter-trigger-btn"
+          :class="{ active: selectedTaskFilter !== 'all' }"
+          :title="taskFilterTitle"
+          :aria-label="taskFilterTitle"
+        >
+          <Icon :name="taskFilterIcon" :size="16" class="filter-trigger-icon" />
+        </button>
+      </n-dropdown>
     </div>
 
     <!-- 对话列表 -->
@@ -43,15 +80,17 @@
           @dblclick="startRename(conv)"
         >
           <div class="conv-info">
-            <button
-              v-if="conv.taskId"
-              class="conv-icon-btn"
-              :title="t('rightPanel.tabs.scheduledTasks')"
-              @click.stop="openScheduledTaskManager({ taskId: conv.taskId })"
-            >
-              <Icon :name="getConversationIcon(conv)" :size="12" class="conv-icon interactive" />
-            </button>
-            <Icon v-else :name="getConversationIcon(conv)" :size="12" class="conv-icon" />
+            <div class="conv-icon-group">
+              <Icon :name="getConversationBaseIcon(conv)" :size="12" class="conv-icon" />
+              <button
+                v-if="hasConversationTask(conv)"
+                class="conv-icon-btn"
+                :title="t('rightPanel.tabs.scheduledTasks')"
+                @click.stop="openScheduledTaskManager({ taskId: conv.taskId })"
+              >
+                <Icon name="clock" :size="12" class="conv-icon interactive task-icon" />
+              </button>
+            </div>
             <input
               v-if="editingId === conv.id"
               class="rename-input"
@@ -118,9 +157,7 @@ import { useAgentPanel } from '@composables/useAgentPanel'
 import Icon from '@components/icons/Icon.vue'
 import ScheduledTaskDetailPanel from './ScheduledTaskDetailPanel.vue'
 import {
-  getAllExternalImTypeIds,
-  getConversationSource,
-  getConversationIcon,
+  getSessionImChannel,
   getExternalImMeta
 } from '@shared/external-im-meta'
 
@@ -144,7 +181,9 @@ const {
   loading,
   selectedCwd,
   selectedSource,
+  selectedTaskFilter,
   availableCwds,
+  selectCwd,
   groupedConversations,
   loadConversations,
   createConversation,
@@ -154,19 +193,28 @@ const {
   renameConversation
 } = useAgentPanel()
 
-// 下拉选项：第一项"全部"，后跟各目录 basename
-const cwdOptions = computed(() => {
-  const dirs = availableCwds.value.map(cwd => {
-    const basename = cwd.replace(/\\/g, '/').split('/').filter(Boolean).pop() || cwd
-    return { label: basename, value: cwd }
-  })
-  return [{ label: t('agent.allDirectories'), value: null }, ...dirs]
-})
-
 const externalSourceLabelKeys = {
   dingtalk: 'agent.sourceDingtalk',
   weixin: 'agent.sourceWeixin',
-  feishu: 'agent.sourceFeishu'
+  feishu: 'agent.sourceFeishu',
+  'enterprise-weixin': 'agent.sourceEnterpriseWeixin'
+}
+
+const sourceMenuTypes = ['feishu', 'dingtalk', 'weixin', 'enterprise-weixin']
+
+const sourceIconMap = {
+  all: 'chat',
+  'no-im': 'xCircle',
+  dingtalk: 'dingtalk',
+  weixin: 'weixin',
+  feishu: 'feishu',
+  'enterprise-weixin': 'building'
+}
+
+const taskIconMap = {
+  all: 'clock',
+  'with-task': 'history',
+  'without-task': 'xCircle'
 }
 
 const resolveExternalSourceLabel = (type) => {
@@ -178,21 +226,142 @@ const resolveExternalSourceLabel = (type) => {
   return getExternalImMeta(type)?.label?.['zh-CN'] || type
 }
 
-const sourceOptions = computed(() => ([
-  { label: t('agent.allSources'), value: 'all' },
-  { label: t('agent.sourceManual'), value: 'manual' },
-  { label: t('agent.sourceScheduled'), value: 'scheduled' },
-  ...getAllExternalImTypeIds().map(type => ({
-    label: resolveExternalSourceLabel(type),
-    value: type
+const getConversationBaseIcon = (conv) => {
+  const imChannel = getSessionImChannel(conv)
+  if (imChannel) {
+    return getExternalImMeta(imChannel)?.icon || imChannel
+  }
+  return 'chat'
+}
+
+const hasConversationTask = (conv) => Boolean(conv?.taskId)
+
+const getCwdDisplayName = (cwd) => {
+  if (!cwd) return t('agent.allDirectories')
+  return cwd.replace(/\\/g, '/').split('/').filter(Boolean).pop() || cwd
+}
+
+const createFilterOptionLabel = (option, selectedValue) => {
+  const isSelected = option.key === selectedValue
+  return h('div', {
+    class: 'filter-option-label',
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      width: '100%',
+      minWidth: 0,
+      fontSize: '13px',
+      lineHeight: '1.4',
+      paddingTop: option.extraTopGap ? '6px' : 0
+    }
+  }, [
+    h(Icon, {
+      name: option.iconName,
+      size: 14,
+      class: 'filter-option-icon',
+      style: { flexShrink: 0, marginRight: '8px', color: 'var(--text-color-secondary)' }
+    }),
+    h('span', {
+      class: 'filter-option-text',
+      title: option.title || option.label,
+      style: { minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+    }, option.label),
+    isSelected
+      ? h(Icon, {
+        name: 'check',
+        size: 12,
+        class: 'filter-option-check',
+        style: { flexShrink: 0, marginLeft: '6px', color: 'var(--primary-color)' }
+      })
+      : null
+  ])
+}
+
+const cwdMenuOptions = computed(() => {
+  const dirs = availableCwds.value.map(cwd => ({
+    label: getCwdDisplayName(cwd),
+    title: cwd,
+    key: cwd,
+    iconName: 'folder'
   }))
+  return [{
+    label: t('agent.allDirectories'),
+    title: t('agent.allDirectories'),
+    key: 'all',
+    iconName: 'folderOpen'
+  }, ...dirs, {
+    type: 'divider',
+    key: 'cwd-divider'
+  }, {
+    label: t('agent.openDirectory'),
+    title: t('agent.openDirectory'),
+    key: 'open-directory',
+    iconName: 'folderOpen',
+    extraTopGap: true
+  }]
+})
+
+const sourceMenuOptions = computed(() => ([
+  { label: t('agent.allSources'), title: t('agent.allSources'), key: 'all', iconName: sourceIconMap.all },
+  ...sourceMenuTypes.map(type => ({
+    label: resolveExternalSourceLabel(type),
+    title: resolveExternalSourceLabel(type),
+    key: type,
+    iconName: sourceIconMap[type] || getExternalImMeta(type)?.icon || 'chat'
+  })),
+  { label: t('agent.sourceNoIm'), title: t('agent.sourceNoIm'), key: 'no-im', iconName: sourceIconMap['no-im'] }
 ]))
 
-// 渲染选项 label，非"全部"选项加 title 显示完整路径
-const renderCwdLabel = (option) => {
-  if (!option.value) return h('span', option.label)
-  return h('span', { title: option.value }, option.label)
+const taskMenuOptions = computed(() => ([
+  { label: t('agent.taskFilterAll'), title: t('agent.taskFilterAll'), key: 'all', iconName: taskIconMap.all },
+  { label: t('agent.taskFilterWithTask'), title: t('agent.taskFilterWithTask'), key: 'with-task', iconName: taskIconMap['with-task'] },
+  { label: t('agent.taskFilterWithoutTask'), title: t('agent.taskFilterWithoutTask'), key: 'without-task', iconName: taskIconMap['without-task'] }
+]))
+
+const renderCwdMenuLabel = (option) => createFilterOptionLabel(option, selectedCwd.value || 'all')
+
+const renderSourceMenuLabel = (option) => createFilterOptionLabel(option, selectedSource.value)
+
+const renderTaskMenuLabel = (option) => createFilterOptionLabel(option, selectedTaskFilter.value)
+
+const handleCwdSelect = async (key) => {
+  if (key === 'open-directory') {
+    const folder = await window.electronAPI?.selectFolder?.()
+    if (folder) selectCwd(folder)
+    return
+  }
+
+  if (key === 'all') {
+    selectedCwd.value = null
+    return
+  }
+
+  selectCwd(key)
 }
+
+const handleSourceSelect = (key) => {
+  selectedSource.value = key
+}
+
+const handleTaskSelect = (key) => {
+  selectedTaskFilter.value = key
+}
+
+const cwdFilterIcon = computed(() => (selectedCwd.value ? 'folderOpen' : 'folder'))
+
+const sourceFilterIcon = computed(() => {
+  if (selectedSource.value === 'all') return sourceIconMap.all
+  if (selectedSource.value === 'no-im') return sourceIconMap['no-im']
+  return sourceIconMap[selectedSource.value] || getExternalImMeta(selectedSource.value)?.icon || 'chat'
+})
+
+const taskFilterIcon = computed(() => taskIconMap[selectedTaskFilter.value] || taskIconMap.all)
+
+const cwdFilterTitle = computed(() => `${t('agent.filterDirectory')}: ${selectedCwd.value ? getCwdDisplayName(selectedCwd.value) : t('agent.allDirectories')}`)
+
+const sourceFilterTitle = computed(() => `${t('agent.filterIm')}: ${selectedSource.value === 'all' ? t('agent.allSources') : selectedSource.value === 'no-im' ? t('agent.sourceNoIm') : resolveExternalSourceLabel(selectedSource.value)}`)
+
+const taskFilterTitle = computed(() => `${t('agent.filterTask')}: ${selectedTaskFilter.value === 'all' ? t('agent.taskFilterAll') : selectedTaskFilter.value === 'with-task' ? t('agent.taskFilterWithTask') : t('agent.taskFilterWithoutTask')}`)
 
 // 按时间分组的对话列表（消除模板重复）
 const conversationGroups = computed(() => {
@@ -477,11 +646,6 @@ defineExpose({
   font-weight: bold;
 }
 
-.filter-area {
-  padding: 0 16px 10px;
-  flex-shrink: 0;
-}
-
 .scheduled-task-manager-modal {
   width: min(1180px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
@@ -493,9 +657,51 @@ defineExpose({
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
 }
 
-.dir-filter-area {
+.filter-toolbar {
   padding: 0 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
+}
+
+.filter-trigger-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-color-light);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: var(--text-color-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s;
+  flex-shrink: 0;
+}
+
+.filter-trigger-btn:hover:not(:disabled) {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background: var(--hover-bg);
+  transform: translateY(-1px);
+}
+
+.filter-trigger-btn.active {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background: var(--primary-ghost);
+}
+
+.filter-trigger-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.filter-trigger-icon {
+  transition: transform 0.2s;
 }
 
 .conversation-list {
@@ -552,6 +758,14 @@ defineExpose({
   min-width: 0;
 }
 
+.conv-icon-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 28px;
+  flex-shrink: 0;
+}
+
 .conv-icon {
   color: var(--primary-color);
   flex-shrink: 0;
@@ -565,6 +779,8 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: none;
   background: transparent;
@@ -575,6 +791,10 @@ defineExpose({
 .conv-icon-btn:hover .conv-icon.interactive {
   color: var(--primary-color-hover);
   transform: scale(1.08);
+}
+
+.task-icon {
+  color: var(--text-color-secondary);
 }
 
 .conv-title {

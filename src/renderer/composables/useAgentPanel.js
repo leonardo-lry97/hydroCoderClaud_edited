@@ -3,7 +3,10 @@
  * 管理 Agent 对话列表、创建、删除等操作
  */
 import { ref, computed, watch } from 'vue'
-import { getSessionImChannel, getConversationSource } from '@shared/external-im-meta'
+import { getSessionImChannel } from '@shared/external-im-meta'
+
+const RECENT_CWD_LIMIT = 10
+const RECENT_CWD_STORAGE_KEY = 'agent.leftPanel.recentCwds'
 
 // 模块级别的已关闭会话集合（跨组件共享）
 // 用于在队列自动消费前检查会话是否已关闭
@@ -46,10 +49,116 @@ function isEmbeddedAppConversation(conv) {
     cwd.includes('/embedded-apps/')
 }
 
+function isChatConversation(conv) {
+  return typeof conv?.type !== 'string' || conv.type === 'chat'
+}
+
+function isListableConversation(conv) {
+  return isChatConversation(conv) && !isEmbeddedAppConversation(conv)
+}
+
+function matchesSourceFilter(conv, selectedSource) {
+  if (selectedSource === 'all') return true
+
+  const imChannel = getSessionImChannel(conv)
+  if (selectedSource === 'no-im') return !imChannel
+  return imChannel === selectedSource
+}
+
+function matchesTaskFilter(conv, selectedTaskFilter) {
+  if (selectedTaskFilter === 'all') return true
+
+  const hasTask = Boolean(conv?.taskId)
+  return selectedTaskFilter === 'with-task' ? hasTask : !hasTask
+}
+
+function normalizeCwd(cwd) {
+  return typeof cwd === 'string' ? cwd.trim() : ''
+}
+
+function getLocalStorage() {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage : null
+  } catch {
+    return null
+  }
+}
+
+function uniqueCwds(cwds) {
+  const seen = new Set()
+  const result = []
+  for (const cwd of cwds) {
+    const normalized = normalizeCwd(cwd)
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized)
+      result.push(normalized)
+    }
+  }
+  return result
+}
+
+function loadRecentCwds() {
+  const storage = getLocalStorage()
+  if (!storage) return []
+
+  try {
+    const raw = storage.getItem(RECENT_CWD_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed)
+      ? uniqueCwds(parsed).slice(0, RECENT_CWD_LIMIT)
+      : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecentCwds(cwds) {
+  const storage = getLocalStorage()
+  if (!storage) return
+
+  try {
+    storage.setItem(
+      RECENT_CWD_STORAGE_KEY,
+      JSON.stringify(uniqueCwds(cwds).slice(0, RECENT_CWD_LIMIT))
+    )
+  } catch {
+    // 忽略本地存储不可用的情况，目录筛选本身仍可用。
+  }
+}
+
+function getConversationTimestamp(conv) {
+  const ts = Date.parse(conv?.updatedAt || conv?.createdAt || '')
+  return Number.isFinite(ts) ? ts : 0
+}
+
+function getConversationCwdsByRecency(conversations) {
+  const latestByCwd = new Map()
+  for (const conv of conversations) {
+    const cwd = normalizeCwd(conv?.cwd)
+    if (!cwd) continue
+
+    const timestamp = getConversationTimestamp(conv)
+    const previous = latestByCwd.get(cwd)
+    if (!previous || timestamp > previous.timestamp) {
+      latestByCwd.set(cwd, { cwd, timestamp })
+    }
+  }
+
+  return Array.from(latestByCwd.values())
+    .sort((a, b) => b.timestamp - a.timestamp || a.cwd.localeCompare(b.cwd))
+    .map(item => item.cwd)
+}
+
+function mergeRecentCwds(recentCwds, conversationCwds) {
+  return uniqueCwds([...recentCwds, ...conversationCwds]).slice(0, RECENT_CWD_LIMIT)
+}
+
 export function useAgentPanel() {
   const conversations = ref([])
   const loading = ref(false)
   const selectedSource = ref('all')
+  const selectedTaskFilter = ref('all')
+  const recentCwds = ref(loadRecentCwds())
 
   /**
    * 加载对话列表（后端已合并活跃+历史）
@@ -61,7 +170,7 @@ export function useAgentPanel() {
     try {
       const list = await window.electronAPI.listAgentSessions()
       conversations.value = Array.isArray(list)
-        ? list.filter(conv => !isEmbeddedAppConversation(conv))
+        ? list.filter(isListableConversation)
         : []
     } catch (err) {
       console.error('[useAgentPanel] loadConversations error:', err)
@@ -177,21 +286,35 @@ export function useAgentPanel() {
   const selectedCwd = ref(null)
 
   const sourceFilteredConversations = computed(() => {
-    return conversations.value.filter(conv => {
-      return selectedSource.value === 'all' || getSessionImChannel(conv) === selectedSource.value || getConversationSource(conv) === selectedSource.value
-    })
+    return conversations.value.filter(conv => matchesSourceFilter(conv, selectedSource.value))
+  })
+
+  const taskFilteredConversations = computed(() => {
+    return sourceFilteredConversations.value.filter(conv => matchesTaskFilter(conv, selectedTaskFilter.value))
   })
 
   /**
-   * 从当前来源候选对话中提取所有不重复的 cwd，按字母排序
+   * 从当前候选对话中提取最近目录，并与手动打开目录合并，最多展示 10 个
    */
   const availableCwds = computed(() => {
-    const cwdSet = new Set()
-    for (const conv of sourceFilteredConversations.value) {
-      if (conv.cwd) cwdSet.add(conv.cwd)
-    }
-    return Array.from(cwdSet).sort()
+    return mergeRecentCwds(
+      recentCwds.value,
+      getConversationCwdsByRecency(taskFilteredConversations.value)
+    )
   })
+
+  const selectCwd = (cwd) => {
+    const normalized = normalizeCwd(cwd)
+    if (!normalized) {
+      selectedCwd.value = null
+      return
+    }
+
+    const nextRecentCwds = uniqueCwds([normalized, ...recentCwds.value]).slice(0, RECENT_CWD_LIMIT)
+    recentCwds.value = nextRecentCwds
+    saveRecentCwds(nextRecentCwds)
+    selectedCwd.value = normalized
+  }
 
   watch(availableCwds, (nextCwds) => {
     if (selectedCwd.value && !nextCwds.includes(selectedCwd.value)) {
@@ -203,7 +326,7 @@ export function useAgentPanel() {
    * 按 selectedCwd 过滤后的对话列表
    */
   const filteredConversations = computed(() => {
-    return sourceFilteredConversations.value.filter(conv => {
+    return taskFilteredConversations.value.filter(conv => {
       return !selectedCwd.value || conv.cwd === selectedCwd.value
     })
   })
@@ -241,7 +364,9 @@ export function useAgentPanel() {
     loading,
     selectedCwd,
     selectedSource,
+    selectedTaskFilter,
     availableCwds,
+    selectCwd,
     groupedConversations,
     loadConversations,
     createConversation,
