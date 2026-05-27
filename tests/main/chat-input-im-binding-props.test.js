@@ -1,0 +1,33 @@
+import { describe, expect, it } from 'vitest'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const chatInputPath = path.resolve(__dirname, '../../src/renderer/pages/main/components/agent/ChatInput.vue')
+const agentChatTabPath = path.resolve(__dirname, '../../src/renderer/pages/main/components/AgentChatTab.vue')
+const chatInputToolbarPath = path.resolve(__dirname, '../../src/renderer/pages/main/components/agent/ChatInputToolbar.vue')
+const tabManagementPath = path.resolve(__dirname, '../../src/renderer/composables/useTabManagement.js')
+
+describe('chat input IM binding props', () => {
+  it('passes session IM channel from the active tab into the toolbar', () => {
+    const agentChatTabSource = fs.readFileSync(agentChatTabPath, 'utf-8')
+    const chatInputSource = fs.readFileSync(chatInputPath, 'utf-8')
+    const toolbarSource = fs.readFileSync(chatInputToolbarPath, 'utf-8')
+
+    expect(agentChatTabSource).toContain(':session-im-channel="props.sessionImChannel || null"')
+    expect(chatInputSource).toContain('sessionImChannel:')
+    expect(chatInputSource).toContain(':session-im-channel="sessionImChannel"')
+    expect(toolbarSource).toContain('sessionImChannel: { type: String, default: null }')
+    expect(toolbarSource).toContain('return !resolvedImBindingSource.value || resolvedImBindingSource.value === \'dingtalk\'')
+    expect(toolbarSource).toContain('return !resolvedImBindingSource.value || resolvedImBindingSource.value === \'weixin\'')
+    expect(toolbarSource).toContain('return !resolvedImBindingSource.value || resolvedImBindingSource.value === \'feishu\'')
+  })
+
+  it('preserves IM channel when opening persisted agent sessions as tabs', () => {
+    const tabManagementSource = fs.readFileSync(tabManagementPath, 'utf-8')
+
+    expect(tabManagementSource).toContain('existingTab.imChannel = agentSession.imChannel || null')
+    expect(tabManagementSource).toContain('imChannel: agentSession.imChannel || null')
+  })
+})

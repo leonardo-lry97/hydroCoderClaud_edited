@@ -292,6 +292,7 @@ export function useTabManagement() {
       if (agentSession.source) {
         existingTab.sessionSource = agentSession.source
       }
+      existingTab.imChannel = agentSession.imChannel || null
       existingTab.apiProfileId = agentSession.apiProfileId || null
       existingTab.modelId = agentSession.modelId || null
       existingTab.cwd = agentSession.cwd || existingTab.cwd || null
@@ -314,6 +315,7 @@ export function useTabManagement() {
       sessionSource: agentSession.source || 'manual',
       title: agentSession.title || t('agent.chat'),
       status: agentSession.status || 'idle',
+      imChannel: agentSession.imChannel || null,
       apiProfileId: agentSession.apiProfileId || null,
       modelId: agentSession.modelId || null,
       cwd: agentSession.cwd || null

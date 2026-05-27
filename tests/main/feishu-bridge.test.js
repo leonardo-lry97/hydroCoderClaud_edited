@@ -3751,12 +3751,13 @@ describe('FeishuEventClient', () => {
 })
 
 describe('FeishuMessageAPI', () => {
-  it('loads user display names through the basic_batch endpoint', async () => {
+  it('loads user display names through the basicBatch endpoint', async () => {
     const api = new FeishuMessageAPI()
     api.setCredentials('app-id', 'app-secret')
-    const batchGetIdSpy = vi.spyOn(api._client.contact.v3.user, 'batchGetId').mockResolvedValue({
+    const basicBatchSpy = vi.spyOn(api._client.contact.v3.user, 'basicBatch').mockResolvedValue({
       data: {
         users: [{
+          user_id: 'ou_xxx',
           name: '张三',
           en_name: 'San Zhang'
         }]
@@ -3765,7 +3766,7 @@ describe('FeishuMessageAPI', () => {
 
     const user = await api.getUserInfo('ou_xxx')
 
-    expect(batchGetIdSpy).toHaveBeenCalledWith({
+    expect(basicBatchSpy).toHaveBeenCalledWith({
       params: { user_id_type: 'open_id' },
       data: { user_ids: ['ou_xxx'] }
     })
@@ -3779,7 +3780,7 @@ describe('FeishuMessageAPI', () => {
     const api = new FeishuMessageAPI()
     api.setCredentials('app-id', 'app-secret')
 
-    const userListSpy = vi.spyOn(api._client.contact.v3.user, 'list').mockImplementation(async ({ path, params }) => {
+    const userListSpy = vi.spyOn(api._client.contact.v3.user, 'findByDepartment').mockImplementation(async ({ params }) => {
       const deptUsers = {
         '0': { items: [] },
         'od_sales': { items: [
@@ -3794,7 +3795,7 @@ describe('FeishuMessageAPI', () => {
           { open_id: 'ou_eng', nickname: '工程师' }
         ]}
       }
-      return { data: deptUsers[path.department_id] || { items: [] } }
+      return { data: deptUsers[params.department_id] || { items: [] } }
     })
 
     const deptChildrenSpy = vi.spyOn(api._client.contact.v3.department, 'children').mockImplementation(async ({ path }) => {
@@ -3809,7 +3810,13 @@ describe('FeishuMessageAPI', () => {
 
     const users = await api.listUsers({ limit: 10 })
 
-    expect(userListSpy).toHaveBeenCalled()
+    expect(userListSpy).toHaveBeenCalledWith({
+      params: expect.objectContaining({
+        department_id: '0',
+        department_id_type: 'open_department_id',
+        user_id_type: 'open_id'
+      })
+    })
     expect(deptChildrenSpy).toHaveBeenCalled()
     expect(users.map((user) => user.openId)).toEqual([
       'ou_dup',

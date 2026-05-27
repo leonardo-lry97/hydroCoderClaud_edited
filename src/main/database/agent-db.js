@@ -274,7 +274,7 @@ function withAgentOperations(BaseClass) {
     }
 
     /**
-     * 按 IM 身份查询历史会话
+     * 按 IM 身份查询历史会话（仅使用新 IM 字段）
      * @param {string} imType — IM 类型（dingtalk / weixin / feishu / enterprise-weixin）
      * @param {string} userId — IM 用户标识
      * @param {string} channelId — IM 通道标识
@@ -284,11 +284,11 @@ function withAgentOperations(BaseClass) {
     getImSessionsByIdentity(imType, userId, channelId, limit = 5) {
       return this.db.prepare(`
         SELECT * FROM agent_conversations
-        WHERE (type = ? OR source = ?)
-          AND (im_user_id = ? OR staff_id = ?)
-          AND (im_chat_id = ? OR conversation_id = ?)
+        WHERE im_channel = ?
+          AND im_user_id = ?
+          AND im_chat_id = ?
         ORDER BY updated_at DESC LIMIT ?
-      `).all(imType, imType, userId, userId, channelId, channelId, limit)
+      `).all(imType, userId, channelId, limit)
     }
 
     /**
@@ -305,17 +305,16 @@ function withAgentOperations(BaseClass) {
 
     /**
      * 查询指定 IM 渠道特定用户+会话的历史对话列表
-     * 复用 staff_id / conversation_id 字段存储外部 IM 身份。
-     * 为兼容“普通 chat 会话后绑定 IM 渠道”的场景，按 type 或 source 任一命中即返回。
+     * 仅按 im_channel / im_user_id / im_chat_id 匹配；旧字段迁移另行处理。
      */
     getImSessionsByType(type, staffId, conversationId, limit = 5) {
       return this.db.prepare(`
         SELECT * FROM agent_conversations
-        WHERE (type = ? OR source = ?)
-          AND (im_user_id = ? OR staff_id = ?)
-          AND (im_chat_id = ? OR conversation_id = ?)
+        WHERE im_channel = ?
+          AND im_user_id = ?
+          AND im_chat_id = ?
         ORDER BY updated_at DESC LIMIT ?
-      `).all(type, type, staffId, staffId, conversationId, conversationId, limit)
+      `).all(type, staffId, conversationId, limit)
     }
 
     /**
@@ -323,9 +322,10 @@ function withAgentOperations(BaseClass) {
      */
     updateDingTalkMetadata(sessionId, staffId, conversationId) {
       this.db.prepare(`
-        UPDATE agent_conversations SET staff_id = ?, conversation_id = ?, updated_at = ?
+        UPDATE agent_conversations
+        SET staff_id = ?, conversation_id = ?, im_user_id = ?, im_chat_id = ?, updated_at = ?
         WHERE session_id = ?
-      `).run(staffId, conversationId, Date.now(), sessionId)
+      `).run(staffId, conversationId, staffId, conversationId, Date.now(), sessionId)
     }
 
     /**

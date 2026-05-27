@@ -14,6 +14,7 @@
         :session-id="sessionId"
         :session-type="sessionType"
         :session-source="sessionSource"
+        :session-im-channel="sessionImChannel"
         :draft-text="inputText"
         :dingtalk-notify-api="dingtalkNotifyApi"
         :weixin-notify-api="weixinNotifyApi"
@@ -211,6 +212,10 @@ const props = defineProps({
   sessionSource: {
     type: String,
     default: 'manual'
+  },
+  sessionImChannel: {
+    type: String,
+    default: null
   },
   dingtalkNotifyApi: {
     type: Object,

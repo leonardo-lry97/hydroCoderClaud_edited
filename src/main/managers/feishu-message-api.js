@@ -81,12 +81,26 @@ class FeishuMessageAPI {
    */
   async getUserInfo(userId) {
     this._assertReady()
-    const r = await this._client.contact.v3.user.batchGetId({
+    const normalizedUserId = typeof userId === 'string' ? userId.trim() : ''
+    if (!normalizedUserId) return null
+
+    const r = await this._client.contact.v3.user.basicBatch({
       params: { user_id_type: 'open_id' },
-      data: { user_ids: [userId] },
+      data: { user_ids: [normalizedUserId] },
     })
-    const user = Array.isArray(r?.data?.users) ? r.data.users[0] : (r?.data?.user || r?.data || null)
-    return user
+    const user = Array.isArray(r?.data?.users) ? r.data.users[0] : null
+    if (user) {
+      return {
+        ...user,
+        open_id: user.open_id || normalizedUserId,
+      }
+    }
+
+    const detail = await this._client.contact.v3.user.get({
+      path: { user_id: normalizedUserId },
+      params: { user_id_type: 'open_id' },
+    })
+    return detail?.data?.user || detail?.data || null
   }
 
   /**
@@ -147,10 +161,9 @@ class FeishuMessageAPI {
         }
         if (userPageToken) params.page_token = userPageToken
 
-        const r = await this._client.contact.v3.user.list({
-          path: { department_id: departmentId },
-          params,
-        })
+        params.department_id = departmentId
+
+        const r = await this._client.contact.v3.user.findByDepartment({ params })
         const batch = Array.isArray(r?.data?.items) ? r.data.items : []
         for (const item of batch) {
           const user = normalizeUser(item)
