@@ -256,6 +256,53 @@ describe('FeishuBridge', () => {
     expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_reply')).toBe(second.id)
   })
 
+  it('switches active Feishu replies when the old inbound session only has a chat map', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
+
+    const inbound = manager.create({ type: 'chat', source: 'im-inbound', imChannel: 'feishu', title: '旧入站会话', cwd: tempDir })
+    const desktop = manager.create({ type: 'chat', source: 'manual', title: '新桌面会话', cwd: tempDir })
+
+    bridge._sessionMapper.sessionMap.set('ou_target:oc_reply', inbound.id)
+    bridge._sessionIdentities.set(inbound.id, {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+    expect(bridge._targetSessionMap.get('ou_target')).toBeUndefined()
+
+    await bridge.sendTextToTarget({
+      sessionId: desktop.id,
+      openId: 'ou_target',
+      displayName: '张三',
+      text: '从新桌面会话发送'
+    })
+
+    expect(bridge._targetSessionMap.get('ou_target')).toBe(desktop.id)
+    expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_reply')).toBeUndefined()
+    expect(bridge._sessionIdentities.get(inbound.id)).toBeUndefined()
+
+    const reboundSessionId = await bridge._ensureSession(
+      {
+        userId: 'ou_target',
+        chatId: 'oc_reply',
+        chatType: 'p2p',
+        nickname: '张三',
+        chatName: '张三'
+      },
+      { text: '回复新桌面会话', images: [] },
+      'ou_target',
+      'oc_reply',
+      'p2p'
+    )
+
+    expect(reboundSessionId).toBe(desktop.id)
+    expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_reply')).toBe(desktop.id)
+  })
+
   it('only clears the old p2p map key when rebinding the same Feishu user to a newer desktop session', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)

@@ -1153,6 +1153,8 @@ class FeishuBridge {
       this._targetSessionMap.delete(previousTarget.openId)
     }
 
+    this._clearP2PSessionMapBindingsForSender(resolvedOpenId, sessionId)
+
     const previousSessionId = this._targetSessionMap.get(resolvedOpenId)
     if (previousSessionId && previousSessionId !== sessionId) {
       this._clearP2PSessionMapBinding(previousSessionId, resolvedOpenId)
@@ -1215,6 +1217,16 @@ class FeishuBridge {
     const mapKey = this._sessionMapper.buildKey({ userId: senderId, chatId: identity.chatId })
     if (this._sessionMapper.sessionMap.get(mapKey) === sessionId) {
       this._sessionMapper.sessionMap.delete(mapKey)
+    }
+  }
+
+  _clearP2PSessionMapBindingsForSender(senderId, keepSessionId = null) {
+    if (!senderId) return
+    for (const [sessionId, identity] of this._sessionIdentities.entries()) {
+      if (sessionId === keepSessionId) continue
+      if (!identity || identity.chatType !== 'p2p' || identity.senderId !== senderId) continue
+      this._clearP2PSessionMapBinding(sessionId, senderId)
+      this._sessionIdentities.delete(sessionId)
     }
   }
 
