@@ -14,6 +14,23 @@ const { ImFrontendNotifier } = require('./im-frontend-notifier')
 const { FeishuEventClient } = require('./feishu-event-client')
 const { FeishuMessageAPI } = require('./feishu-message-api')
 const { extractImagePaths, normalizePath, formatRelativeTime, IMAGE_EXTENSIONS, IMAGE_MAX_SIZE } = require('./im-utils')
+const {
+  buildHistoryChoiceMenuText,
+  buildActiveSessionsText,
+  buildStatusText,
+  buildCommandHelpText,
+} = require('./im-command-presenter')
+const {
+  buildHistoryChoiceCard,
+  buildSessionsCard,
+  buildHelpCard,
+  buildStatusCard,
+  buildResultCard,
+  buildCommandButton,
+  chunkCardActions,
+  attachCardContext,
+  buildCardContextValue,
+} = require('./im-card-renderers/feishu-card-renderer')
 
 // 图片相关常量（与钉钉保持一致）
 const FEISHU_MSG_ID_TTL = 10 * 60 * 1000
@@ -1595,7 +1612,7 @@ class FeishuBridge {
   // ─── 辅助 ───
 
   _getHelpText() {
-    return [
+    return buildCommandHelpText([
       '飞书 Agent 桥接命令:',
       '/help    - 显示帮助',
       '/status  - 查看连接状态',
@@ -1604,7 +1621,7 @@ class FeishuBridge {
       '/new [目录] - 创建新会话（可选：目录名或绝对路径）',
       '/resume [编号] - 恢复历史会话',
       '/rename <名称> - 重命名当前会话',
-    ].join('\n')
+    ])
   }
 
   _getActiveSessionsByChat(chatId) {
@@ -1636,44 +1653,34 @@ class FeishuBridge {
   }
 
   _buildActiveSessionsText({ sessionId, chatId }) {
-    const activeSessions = this._getActiveSessionsByChat(chatId)
-    if (activeSessions.length === 0) return '暂无活跃会话'
-
-    const lines = ['活跃会话：', '']
-    activeSessions.forEach((session, index) => {
-      const marker = session.id === sessionId ? '✅ ' : ''
-      const dir = session.cwd ? this._basename(session.cwd) : '-'
-      const profileName = session.apiProfileId
-        ? (this._config?.getAPIProfile?.(session.apiProfileId)?.name || '未知配置')
-        : '默认配置'
-      lines.push(`${index + 1}. ${marker}${session.title || session.id.substring(0, 8)} (${dir}) ${profileName}`)
+    return buildActiveSessionsText({
+      activeSessions: this._getActiveSessionsByChat(chatId),
+      currentSessionId: sessionId,
+      getDirName: (rawPath) => this._basename(rawPath),
+      getProfileName: (profileId) => profileId
+        ? (this._config?.getAPIProfile?.(profileId)?.name || '未知配置')
+        : '默认配置',
     })
-    lines.push('', '使用 /close 关闭当前会话')
-    return lines.join('\n')
   }
 
   _buildStatusText({ mapKey, chatId }) {
     const activeSessions = this._getActiveSessionsByChat(chatId)
-    const streaming = activeSessions.filter(session => session.status === 'streaming').length
-    const idle = activeSessions.filter(session => session.status === 'idle').length
-    const lines = ['系统状态', `├─ 飞书桥接: ${this._eventClient.connected ? '已连接' : '未连接'}`]
-
+    let currentSession = null
     if (mapKey) {
       const currentSessionId = this._sessionMapper.sessionMap.get(mapKey)
       if (currentSessionId) {
-        const session = this._agentSessionManager.sessions.get(currentSessionId)
-        if (session?.queryGenerator) {
-          const profileName = session.apiProfileId
-            ? (this._config?.getAPIProfile?.(session.apiProfileId)?.name || '未知配置')
-            : '默认配置'
-          lines.push(`├─ 当前会话: ${session.title} (${profileName})`)
-        }
+        currentSession = this._agentSessionManager.sessions.get(currentSessionId) || null
       }
     }
-
-    lines.push(`├─ 执行中: ${streaming} 个 / 空闲: ${idle} 个`)
-    lines.push(`└─ 总会话数: ${activeSessions.length} 个`)
-    return lines.join('\n')
+    return buildStatusText({
+      bridgeLabel: '飞书桥接',
+      connected: !!this._eventClient.connected,
+      activeSessions,
+      currentSession,
+      getProfileName: (profileId) => profileId
+        ? (this._config?.getAPIProfile?.(profileId)?.name || '未知配置')
+        : '默认配置',
+    })
   }
 
   async _sendSessionsMenu(receiveIdType, receiveId, { sessionId, chatId, context = null }) {
@@ -1782,291 +1789,96 @@ class FeishuBridge {
   }
 
   _buildHistoryChoiceMenuText(sessions, currentSessionId = null) {
-    const displaySessions = sessions.slice(0, 10)
-    const lines = ['您有以下历史会话，请回复数字选择：', '']
-
-    displaySessions.forEach((row, index) => {
-      const timeStr = this._formatRelativeTime(row.updated_at)
-      const dir = row.cwd ? this._basename(row.cwd) : '-'
-      const profileName = row.api_profile_id
-        ? (this._config?.getAPIProfile?.(row.api_profile_id)?.name || '未知配置')
-        : '默认配置'
-      const liveSession = this._agentSessionManager.sessions.get(row.session_id)
-      const marker = currentSessionId && row.session_id === currentSessionId
-        ? '✅ '
-        : (liveSession?.queryGenerator ? '🔵 ' : '⭕ ')
-      lines.push(`${index + 1}. ${marker}[${timeStr}] ${row.title || '(无标题)'} (${dir}) ${profileName}`)
+    return buildHistoryChoiceMenuText({
+      sessions,
+      currentSessionId,
+      maxSessions: FEISHU_CARD_SESSION_LIMIT,
+      getDirName: (rawPath) => this._basename(rawPath),
+      getProfileName: (profileId) => profileId
+        ? (this._config?.getAPIProfile?.(profileId)?.name || '未知配置')
+        : '默认配置',
+      isSessionActivated: (sessionId) => !!this._agentSessionManager.sessions.get(sessionId)?.queryGenerator,
     })
-
-    if (sessions.length > displaySessions.length) {
-      lines.push('', `（仅显示最近 ${displaySessions.length} 条，共 ${sessions.length} 条）`)
-    }
-
-    lines.push('', '回复 0 开始全新会话')
-    return lines.join('\n')
   }
 
   _buildHistoryChoiceCard(sessions, currentSessionId = null, context = null) {
-    const displaySessions = sessions.slice(0, FEISHU_CARD_SESSION_LIMIT)
-    const actionContext = context ? {
-      senderId: context.senderId || context.userId || null,
-      senderName: context.senderName || context.nickname || null,
-      chatId: context.chatId || null,
-      chatType: context.chatType || 'p2p',
-      chatName: context.chatName || null,
-    } : null
-    const elements = [
-      {
-        tag: 'markdown',
-        content: displaySessions.map((row, index) => {
-          const timeStr = this._formatRelativeTime(row.updated_at)
-          const dir = row.cwd ? this._basename(row.cwd) : '-'
-          const profileName = row.api_profile_id
-            ? (this._config?.getAPIProfile?.(row.api_profile_id)?.name || '未知配置')
-            : '默认配置'
-          const liveSession = this._agentSessionManager.sessions.get(row.session_id)
-          const marker = currentSessionId && row.session_id === currentSessionId
-            ? '✅'
-            : (liveSession?.queryGenerator ? '🔵' : '⭕')
-          return `${index + 1}. ${marker} [${timeStr}] ${row.title || '(无标题)'} (${dir}) ${profileName}`
-        }).join('\n')
-      },
-      {
-        tag: 'action',
-        actions: [
-          {
-            tag: 'button',
-            type: 'primary',
-            text: {
-              tag: 'plain_text',
-              content: '新建会话'
-            },
-            value: {
-              intent: 'new',
-              source: 'history-choice',
-              ...(actionContext || {})
-            }
-          },
-          {
-            tag: 'button',
-            type: 'default',
-            text: {
-              tag: 'plain_text',
-              content: '查看活跃会话'
-            },
-            value: {
-              intent: 'sessions'
-            }
-          }
-        ]
-      }
-    ]
-
-    const resumeActions = displaySessions.map((row, index) => ({
-      tag: 'button',
-      type: currentSessionId && row.session_id === currentSessionId ? 'primary' : 'default',
-      text: {
-        tag: 'plain_text',
-        content: `恢复 ${index + 1}`
-      },
-      value: {
-        intent: 'resume',
-        index: index + 1,
-        title: row.title || '',
-        source: 'history-choice',
-        ...(actionContext || {})
-      }
-    }))
-    elements.splice(1, 0, ...this._chunkCardActions(resumeActions))
-
-    if (sessions.length > displaySessions.length) {
-      elements.splice(1, 0, {
-        tag: 'note',
-        elements: [
-          {
-            tag: 'plain_text',
-            content: `仅显示最近 ${displaySessions.length} 条，共 ${sessions.length} 条`
-          }
-        ]
-      })
-    }
-
-    return {
-      config: { wide_screen_mode: true },
-      header: {
-        title: {
-          tag: 'plain_text',
-          content: '历史会话'
-        }
-      },
-      elements
-    }
+    return buildHistoryChoiceCard({
+      sessions,
+      currentSessionId,
+      context,
+      maxSessions: FEISHU_CARD_SESSION_LIMIT,
+      getDirName: (rawPath) => this._basename(rawPath),
+      getProfileName: (profileId) => profileId
+        ? (this._config?.getAPIProfile?.(profileId)?.name || '未知配置')
+        : '默认配置',
+      isSessionActivated: (sessionId) => !!this._agentSessionManager.sessions.get(sessionId)?.queryGenerator,
+      normalizeDisplayName: (value, fallbackId) => this._normalizeFeishuDisplayName(value, fallbackId),
+    })
   }
 
   _buildSessionsCard(activeSessions, currentSessionId = null, options = {}) {
-    const displaySessions = activeSessions.slice(0, FEISHU_CARD_SESSION_LIMIT)
-    const context = options.context || null
-    const elements = []
-
-    if (options.summary) {
-      elements.push({
-        tag: 'markdown',
-        content: options.summary
-      })
-    }
-
-    elements.push(
-      {
-        tag: 'markdown',
-        content: displaySessions.map((session, index) => {
-          const dir = session.cwd ? this._basename(session.cwd) : '-'
-          const profileName = session.apiProfileId
-            ? (this._config?.getAPIProfile?.(session.apiProfileId)?.name || '未知配置')
-            : '默认配置'
-          const marker = session.id === currentSessionId ? '✅' : '🔵'
-          return `${index + 1}. ${marker} ${session.title || session.id.substring(0, 8)} (${dir}) ${profileName}`
-        }).join('\n')
-      },
-      {
-        tag: 'action',
-        actions: [
-          this._buildCommandButton('新建会话', { intent: 'new', ...(context || {}) }, 'primary'),
-          this._buildCommandButton('查看状态', { intent: 'status' }),
-          this._buildCommandButton('查看帮助', { intent: 'help' })
-        ]
-      }
-    )
-
-    const closeActions = displaySessions.map((session, index) => this._buildCommandButton(
-      `关闭 ${index + 1}`,
-      {
-        intent: 'close',
-        index: index + 1,
-        title: session.title || ''
-      },
-      session.id === currentSessionId ? 'primary' : 'default'
-    ))
-    elements.splice(options.summary ? 2 : 1, 0, ...this._chunkCardActions(closeActions))
-
-    if (activeSessions.length > displaySessions.length) {
-      elements.splice(options.summary ? 2 : 1, 0, {
-        tag: 'note',
-        elements: [
-          {
-            tag: 'plain_text',
-            content: `仅显示最近 ${displaySessions.length} 条，共 ${activeSessions.length} 条`
-          }
-        ]
-      })
-    }
-
-    return {
-      config: { wide_screen_mode: true },
-      header: {
-        title: {
-          tag: 'plain_text',
-          content: options.title || '活跃会话'
-        }
-      },
-      elements
-    }
+    return buildSessionsCard({
+      activeSessions,
+      currentSessionId,
+      title: options.title || '活跃会话',
+      summary: options.summary || null,
+      context: options.context || null,
+      maxSessions: FEISHU_CARD_SESSION_LIMIT,
+      getDirName: (rawPath) => this._basename(rawPath),
+      getProfileName: (profileId) => profileId
+        ? (this._config?.getAPIProfile?.(profileId)?.name || '未知配置')
+        : '默认配置',
+      normalizeDisplayName: (value, fallbackId) => this._normalizeFeishuDisplayName(value, fallbackId),
+    })
   }
 
   _buildHelpCard(context = null) {
-    return this._buildResultCard({
-      title: '飞书命令帮助',
+    return buildHelpCard({
       summary: this._getHelpText(),
       context,
-      actions: [
-        this._buildCommandButton('新建会话', { intent: 'new', ...(context || {}) }, 'primary'),
-        this._buildCommandButton('活跃会话', { intent: 'sessions' }),
-        this._buildCommandButton('查看状态', { intent: 'status' }),
-        this._buildCommandButton('恢复历史会话', { command: 'resume' })
-      ]
+      normalizeDisplayName: (value, fallbackId) => this._normalizeFeishuDisplayName(value, fallbackId),
     })
   }
 
   _buildStatusCard(statusText, context = null) {
-    return this._buildResultCard({
-      title: '系统状态',
+    return buildStatusCard({
       summary: statusText,
       context,
-      actions: [
-        this._buildCommandButton('活跃会话', { intent: 'sessions' }, 'primary'),
-        this._buildCommandButton('新建会话', { intent: 'new', ...(context || {}) }),
-        this._buildCommandButton('查看帮助', { intent: 'help' })
-      ]
+      normalizeDisplayName: (value, fallbackId) => this._normalizeFeishuDisplayName(value, fallbackId),
     })
   }
 
   _buildResultCard({ title, summary, actions = [], context = null }) {
-    const actionsWithContext = actions.map(action => this._attachCardContext(action, context))
-    return {
-      config: { wide_screen_mode: true },
-      header: {
-        title: {
-          tag: 'plain_text',
-          content: title
-        }
-      },
-      elements: [
-        {
-          tag: 'markdown',
-          content: summary
-        },
-        {
-          tag: 'action',
-          actions: actionsWithContext
-        }
-      ]
-    }
+    return buildResultCard({
+      title,
+      summary,
+      actions,
+      context,
+      normalizeDisplayName: (value, fallbackId) => this._normalizeFeishuDisplayName(value, fallbackId),
+    })
   }
 
   _attachCardContext(action, context = null) {
-    if (!context || !action || typeof action !== 'object') return action
-    const value = action.value && typeof action.value === 'object'
-      ? { ...action.value, ...this._buildCardContextValue(context) }
-      : action.value
-    return {
-      ...action,
-      value,
-    }
+    return attachCardContext(
+      action,
+      context,
+      (value, fallbackId) => this._normalizeFeishuDisplayName(value, fallbackId)
+    )
   }
 
   _buildCardContextValue(context = null) {
-    if (!context || typeof context !== 'object') return {}
-    const senderName = this._normalizeFeishuDisplayName(context.senderName || context.nickname || null, context.senderId || context.userId || null)
-    const chatName = this._normalizeFeishuDisplayName(context.chatName || null, context.chatId || null)
-    return {
-      senderId: context.senderId || context.userId || null,
-      senderName: senderName || null,
-      chatId: context.chatId || null,
-      chatType: context.chatType || 'p2p',
-      chatName: chatName || null,
-    }
+    return buildCardContextValue(
+      context,
+      (value, fallbackId) => this._normalizeFeishuDisplayName(value, fallbackId)
+    )
   }
 
   _buildCommandButton(label, value, type = 'default') {
-    return {
-      tag: 'button',
-      type,
-      text: {
-        tag: 'plain_text',
-        content: label
-      },
-      value
-    }
+    return buildCommandButton(label, value, type)
   }
 
   _chunkCardActions(actions, chunkSize = 5) {
-    const chunks = []
-    for (let index = 0; index < actions.length; index += chunkSize) {
-      chunks.push({
-        tag: 'action',
-        actions: actions.slice(index, index + chunkSize)
-      })
-    }
-    return chunks
+    return chunkCardActions(actions, chunkSize)
   }
 
   _formatRelativeTime(timestamp) {
