@@ -115,7 +115,7 @@ class WeixinBridge {
     const userMessage = images.length > 0 ? { text, images } : text
     await this.agentSessionManager.sendMessage(session.id, userMessage, {
       meta: {
-        source: 'weixin',
+        source: 'im-inbound',
         senderNick,
         accountId: message.accountId,
         targetId: message.targetId,
@@ -127,7 +127,7 @@ class WeixinBridge {
 
     const storedMessage = [...(this.agentSessionManager.sessions.get(session.id)?.messages || [])]
       .reverse()
-      .find(item => item.role === 'user' && item.source === 'weixin' && item.content === (text || '[图片]'))
+      .find(item => item.role === 'user' && item.source === 'im-inbound' && item.content === (text || '[图片]'))
 
     this._notifyFrontend('weixin:messageReceived', {
       sessionId: session.id,

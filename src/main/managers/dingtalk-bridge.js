@@ -519,7 +519,7 @@ class DingTalkBridge {
 
     // 发送到 Agent（userMessage 可以是 string 或 { text, images }）
     // 附带钉钉元数据，用于持久化来源信息
-    const meta = { source: 'dingtalk', senderNick, conversationId }
+    const meta = { source: 'im-inbound', senderNick, conversationId }
     try {
       await this.agentSessionManager.sendMessage(sessionId, userMessage, { meta })
     } catch (err) {

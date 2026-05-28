@@ -81,6 +81,14 @@ describe('WeixinBridge', () => {
       }
       if (userMessage?.images?.length) message.images = userMessage.images
       session.messages.push(message)
+      manager.emit('userMessage', {
+        sessionId,
+        sessionType: session.type,
+        imChannel: session.imChannel,
+        content: text,
+        images: userMessage?.images || null,
+        source: meta.source || null
+      })
     })
   }
 
@@ -97,7 +105,7 @@ describe('WeixinBridge', () => {
       '收到请回复',
       {
         meta: expect.objectContaining({
-          source: 'weixin',
+          source: 'im-inbound',
           senderNick: '雷斯林',
           accountId: 'acc-1',
           targetId: 'acc-1:user-a',
@@ -117,7 +125,7 @@ describe('WeixinBridge', () => {
     expect(session.messages[0]).toMatchObject({
       role: 'user',
       content: '收到请回复',
-      source: 'weixin',
+      source: 'im-inbound',
       senderNick: '雷斯林'
     })
 
@@ -178,7 +186,7 @@ describe('WeixinBridge', () => {
       expect.any(String),
       { text: '', images },
       expect.objectContaining({
-        meta: expect.objectContaining({ source: 'weixin' })
+        meta: expect.objectContaining({ source: 'im-inbound' })
       })
     )
     const session = Array.from(manager.sessions.values())[0]
@@ -213,7 +221,7 @@ describe('WeixinBridge', () => {
     expect(originalSession.messages[0]).toMatchObject({
       role: 'user',
       content: '我收到了',
-      source: 'weixin',
+      source: 'im-inbound',
       senderNick: '雷斯林'
     })
   })

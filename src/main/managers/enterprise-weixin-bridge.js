@@ -230,7 +230,11 @@ class EnterpriseWeixinBridge {
     const events = this._agentSessionManager
 
     this._agentListeners = {
-      userMessage: (sessionId, message) => {
+      userMessage: (payload, legacyMessage) => {
+        const isCurrentPayload = typeof payload === 'object' && payload !== null
+        const sessionId = isCurrentPayload ? payload.sessionId : payload
+        const message = isCurrentPayload ? payload : legacyMessage
+        if (message?.source === 'im-inbound') return
         const boundSessionId = this._isSessionBound(sessionId)
         if (!boundSessionId) return
         // 桌面端介入
@@ -379,7 +383,7 @@ class EnterpriseWeixinBridge {
       meta: { msgId, identity },
     })
 
-    await this._agentSessionManager.sendMessage(sessionId, text, { meta: { source: this._imType } })
+    await this._agentSessionManager.sendMessage(sessionId, text, { meta: { source: 'im-inbound' } })
   }
 
   // ─── 主动发送 ───

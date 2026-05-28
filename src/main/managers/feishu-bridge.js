@@ -1079,7 +1079,7 @@ class FeishuBridge {
 
     try {
       await this._agentSessionManager.sendMessage(sessionId, message, {
-        meta: { source: 'feishu', senderNick: identity.senderName || senderId, feishuChatId: chatId },
+        meta: { source: 'im-inbound', senderNick: identity.senderName || senderId, feishuChatId: chatId },
       })
       await donePromise
     } catch (err) {
