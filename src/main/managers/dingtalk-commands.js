@@ -7,6 +7,24 @@
 
 const fs = require('fs')
 const path = require('path')
+const {
+  buildActiveSessionsText,
+  buildStatusText,
+  buildCommandHelpText,
+} = require('./im-command-presenter')
+
+function buildDingTalkCommandContext(context = {}, webhook = null) {
+  return {
+    mapKey: context?.mapKey || '',
+    senderStaffId: context?.senderStaffId || '',
+    senderNick: context?.senderNick || '',
+    conversationId: context?.conversationId || '',
+    conversationTitle: context?.conversationTitle || '',
+    conversationType: context?.conversationType || '',
+    robotCode: context?.robotCode || '',
+    sessionWebhook: webhook || null,
+  }
+}
 
 module.exports = {
   // ============================================================
@@ -35,11 +53,12 @@ module.exports = {
     }
 
     console.log('[DingTalk] _handleCommand: executing command:', cmd, 'args:', args)
+    const commandContext = buildDingTalkCommandContext(context, webhook)
     let reply
     switch (cmd) {
-      case 'help':     reply = this._cmdHelp(); break
-      case 'status':   reply = this._cmdStatus(context); break
-      case 'sessions': reply = this._cmdSessions(context); break
+      case 'help':     reply = this._cmdHelp(commandContext); break
+      case 'status':   reply = this._cmdStatus(commandContext); break
+      case 'sessions': reply = this._cmdSessions(commandContext); break
       case 'close':    reply = await this._cmdClose(args, context); break
       case 'new':      reply = await this._cmdNew(args, context, webhook); break
       case 'resume':   reply = await this._cmdResume(args, context, webhook); break
@@ -53,8 +72,8 @@ module.exports = {
     }
   },
 
-  _cmdHelp() {
-    return [
+  _cmdHelp(_context = null) {
+    return buildCommandHelpText([
       '📋 可用命令：',
       '',
       '/help — 显示此帮助',
@@ -66,7 +85,7 @@ module.exports = {
       '/close [编号] — 关闭会话（不带编号关闭当前会话，带编号关闭指定会话）',
       '',
       '💬 不带 / 的消息直接发给当前 Agent 会话'
-    ].join('\n\n')
+    ])
   },
 
   async _cmdResume(args, { mapKey, senderStaffId, senderNick, conversationId, conversationTitle, conversationType, robotCode }, webhook) {
@@ -224,33 +243,24 @@ module.exports = {
 
   _cmdStatus(context) {
     const activeSessions = this._getActiveSessionsByConversation(context?.conversationId)
-    const streaming = activeSessions.filter(s => s.status === 'streaming').length
-    const idle = activeSessions.filter(s => s.status === 'idle').length
-
-    const lines = ['📊 系统状态', `├─ 钉钉桥接: ✅ 已连接`]
-
-    // 获取当前用户连接的会话（必须有 queryGenerator 才算真正激活）
+    let currentSession = null
     if (context?.mapKey) {
       const sessionId = this.sessionMap.get(context.mapKey)
       console.log(`[DingTalk] /status: mapKey=${context.mapKey}, sessionId=${sessionId}`)
       if (sessionId) {
-        const session = this.agentSessionManager.sessions.get(sessionId)
-        console.log(`[DingTalk] /status: session found, title=${session?.title}, hasQueryGenerator=${!!session?.queryGenerator}`)
-        if (session && session.queryGenerator) {
-          const config = this.configManager.getConfig()
-          const profiles = config?.apiProfiles || []
-          const defaultId = config?.defaultProfileId
-          const current = profiles.find(p => p.id === defaultId)
-          const apiName = current?.name || '未配置'
-          lines.push(`├─ 当前会话: ${session.title} (${apiName})`)
-        }
+        currentSession = this.agentSessionManager.sessions.get(sessionId) || null
+        console.log(`[DingTalk] /status: session found, title=${currentSession?.title}, hasQueryGenerator=${!!currentSession?.queryGenerator}`)
       }
     }
-
-    lines.push(`├─ 执行中: ${streaming} 个 / 空闲: ${idle} 个`)
-    lines.push(`└─ 总会话数: ${activeSessions.length} 个`)
-
-    return lines.join('\n\n')
+    return buildStatusText({
+      bridgeLabel: '钉钉桥接',
+      connected: true,
+      activeSessions,
+      currentSession,
+      getProfileName: (profileId) => profileId
+        ? (this.configManager?.getAPIProfile(profileId)?.name || '未知配置')
+        : '默认配置',
+    })
   },
 
   _cmdSessions(context) {
@@ -265,19 +275,14 @@ module.exports = {
 
     // 获取当前会话 ID
     const currentSessionId = context?.mapKey ? this._resolveActiveSessionId(context.mapKey) : null
-
-    const lines = ['📋 活跃会话：', '']
-    activeSessions.forEach((s, i) => {
-      const dir = s.cwd ? path.basename(s.cwd) : '-'
-      const profileName = s.apiProfileId
-        ? (this.configManager?.getAPIProfile(s.apiProfileId)?.name || '未知配置')
-        : '默认配置'
-      // 标记当前连接的会话
-      const marker = (currentSessionId && s.id === currentSessionId) ? '✅ ' : ''
-      lines.push(`${i + 1}. ${marker}${s.title || s.id.substring(0, 8)} (${dir}) ${profileName}`)
+    return buildActiveSessionsText({
+      activeSessions,
+      currentSessionId,
+      getDirName: (cwd) => path.basename(cwd),
+      getProfileName: (profileId) => profileId
+        ? (this.configManager?.getAPIProfile(profileId)?.name || '未知配置')
+        : '默认配置',
     })
-    lines.push('', '使用 /close 关闭当前会话')
-    return lines.join('\n\n')
   },
 
   async _cmdClose(args, context) {
@@ -311,8 +316,8 @@ module.exports = {
 
       // 关闭后自动显示剩余会话列表
       const closeMsg = `✅ 会话 ${index} 已关闭：${targetSession.title || targetSession.id.substring(0, 8)}`
-      const sessionsList = this._cmdSessions(context)
-      return `${closeMsg}\n\n${sessionsList}`
+      const sessionsList = await this._cmdSessions(buildDingTalkCommandContext(context, context?.sessionWebhook))
+      return sessionsList ? `${closeMsg}\n\n${sessionsList}` : closeMsg
     }
 
     // 不带编号：关闭当前连接的会话
@@ -331,8 +336,8 @@ module.exports = {
 
     // 关闭后自动显示剩余会话列表
     const closeMsg = '✅ 会话已关闭'
-    const sessionsList = this._cmdSessions(context)
-    return `${closeMsg}\n\n${sessionsList}`
+    const sessionsList = await this._cmdSessions(buildDingTalkCommandContext(context, context?.sessionWebhook))
+    return sessionsList ? `${closeMsg}\n\n${sessionsList}` : closeMsg
   },
 
   async _cmdNew(args, { mapKey, senderStaffId, senderNick, conversationId, conversationTitle, robotCode, conversationType }, webhook) {

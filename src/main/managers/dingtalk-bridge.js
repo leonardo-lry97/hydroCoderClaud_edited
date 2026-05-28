@@ -7,6 +7,9 @@ const { DWClient } = require('dingtalk-stream-sdk-nodejs')
 const fs = require('fs')
 const path = require('path')
 const { ImFrontendNotifier } = require('./im-frontend-notifier')
+const {
+  buildHistoryChoiceMenuText,
+} = require('./im-command-presenter')
 
 const imageMixin = require('./dingtalk-image')
 const commandsMixin = require('./dingtalk-commands')
@@ -1024,38 +1027,20 @@ class DingTalkBridge {
    * 向钉钉用户发送历史会话选择菜单
    */
   async _sendChoiceMenu(webhook, sessions, currentSessionId = null) {
-    const MAX_SESSIONS = 10
-    const displaySessions = sessions.slice(0, MAX_SESSIONS)
-    const lines = ['您有以下历史会话，请回复数字选择：\n']
-    displaySessions.forEach((row, i) => {
-      const timeStr = this._formatRelativeTime(row.updated_at)
-      const dir = row.cwd ? path.basename(row.cwd) : '-'
-      const profileName = row.api_profile_id
-        ? (this.configManager?.getAPIProfile(row.api_profile_id)?.name || '未知配置')
-        : '默认配置'
-
-      // 判断会话状态并添加标记
-      let marker = ''
-      const session = this.agentSessionManager.sessions.get(row.session_id)
-      if (currentSessionId && row.session_id === currentSessionId) {
-        // 当前连接的会话
-        marker = '✅ '
-      } else if (session && session.queryGenerator) {
-        // 激活但未连接的会话
-        marker = '🔵 '
-      } else {
-        // 未激活的会话
-        marker = '⭕ '
-      }
-
-      lines.push(`${i + 1}. ${marker}[${timeStr}] ${row.title} (${dir}) ${profileName}`)
+    const text = buildHistoryChoiceMenuText({
+      sessions,
+      currentSessionId,
+      maxSessions: 10,
+      getDirName: (cwd) => path.basename(cwd),
+      getProfileName: (profileId) => profileId
+        ? (this.configManager?.getAPIProfile(profileId)?.name || '未知配置')
+        : '默认配置',
+      isSessionActivated: (sessionId) => {
+        const session = this.agentSessionManager.sessions.get(sessionId)
+        return !!(session && session.queryGenerator)
+      },
     })
-    if (sessions.length > MAX_SESSIONS) {
-      lines.push(`\n（仅显示最近 ${MAX_SESSIONS} 条，共 ${sessions.length} 条）`)
-    }
-    // 0 单独放在列表外，避免钉钉 Markdown 将 "0." 续接为有序列表编号
-    lines.push('\n回复 0 开始全新会话')
-    await this._replyToDingTalk(webhook, lines.join('\n'))
+    await this._replyToDingTalk(webhook, text)
   }
 
   /**
@@ -1448,8 +1433,6 @@ class DingTalkBridge {
       console.error('[DingTalk] Reply error:', err.message)
     }
   }
-
-
 
   /**
    * 获取钉钉 access token（带缓存，提前 5 分钟过期）
