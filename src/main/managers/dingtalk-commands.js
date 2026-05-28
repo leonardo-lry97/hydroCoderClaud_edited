@@ -93,7 +93,7 @@ module.exports = {
       if (Array.isArray(allRows) && allRows.length > 0) {
         sessions = allRows
           .filter(row => row?.status !== 'closed')
-          .filter(row => row?.type === 'dingtalk' || row?.source === 'dingtalk')
+          .filter(row => row?.im_channel === 'dingtalk')
           .filter(row => row?.staff_id === senderStaffId)
           .filter(row => row?.conversation_id === conversationId)
           .sort((a, b) => (b?.updated_at || 0) - (a?.updated_at || 0))
@@ -203,7 +203,7 @@ module.exports = {
     const db = this.agentSessionManager.sessionDatabase
 
     return allSessions.filter(s => {
-      const belongsToDingTalk = s.type === 'dingtalk' || s.source === 'dingtalk'
+      const belongsToDingTalk = s.imChannel === 'dingtalk'
       if (!belongsToDingTalk || !s.queryGenerator) return false
       if (!conversationId) return true
 

@@ -259,7 +259,8 @@ describe('DingTalkBridge', () => {
       type: 'chat',
       title: '桌面会话',
       cwd: tempDir,
-      source: 'dingtalk',
+      source: 'im-inbound',
+      im_channel: 'dingtalk',
       status: 'idle',
       staff_id: 'staff-1',
       conversation_id: '',
@@ -274,7 +275,8 @@ describe('DingTalkBridge', () => {
       {
         session_id: session.id,
         type: 'chat',
-        source: 'dingtalk',
+        source: 'im-inbound',
+        im_channel: 'dingtalk',
         title: '桌面会话',
         staff_id: 'staff-1',
         conversation_id: '',
@@ -502,7 +504,8 @@ describe('DingTalkBridge', () => {
       {
         session_id: session.id,
         type: 'chat',
-        source: 'dingtalk',
+        source: 'im-inbound',
+        im_channel: 'dingtalk',
         title: '桌面会话',
         staff_id: 'staff-1',
         conversation_id: 'conv-1',
@@ -576,7 +579,8 @@ describe('DingTalkBridge', () => {
         staff_id: 'staff-1',
         conversation_id: 'conv-1',
         type: 'chat',
-        source: 'dingtalk',
+        source: 'im-inbound',
+        im_channel: 'dingtalk',
         updated_at: Date.now()
       }
     ])
@@ -643,5 +647,55 @@ describe('DingTalkBridge', () => {
         conversationType: '2'
       })
     )
+  })
+
+  it('counts active dingtalk sessions by imChannel in /status', () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({
+      type: 'chat',
+      source: 'im-inbound',
+      imChannel: 'dingtalk',
+      title: '钉钉 · 张三',
+      cwdSubDir: 'dingtalk',
+      meta: { conversationId: 'conv-1' }
+    })
+    const session = manager.sessions.get(created.id)
+    session.queryGenerator = {}
+    session.status = 'idle'
+    bridge.sessionMap.set('staff-1:conv-1', session.id)
+
+    const text = bridge._cmdStatus({
+      mapKey: 'staff-1:conv-1',
+      conversationId: 'conv-1'
+    })
+
+    expect(text).toContain('执行中: 0 个 / 空闲: 1 个')
+    expect(text).toContain('总会话数: 1 个')
+    expect(text).toContain('当前会话: 钉钉 · 张三')
+  })
+
+  it('lists active dingtalk sessions by imChannel in /sessions', () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({
+      type: 'chat',
+      source: 'im-inbound',
+      imChannel: 'dingtalk',
+      title: '钉钉 · 李四',
+      cwdSubDir: 'dingtalk',
+      meta: { conversationId: 'conv-2' }
+    })
+    const session = manager.sessions.get(created.id)
+    session.queryGenerator = {}
+    session.status = 'idle'
+    bridge.sessionMap.set('staff-2:conv-2', session.id)
+
+    const text = bridge._cmdSessions({
+      mapKey: 'staff-2:conv-2',
+      conversationId: 'conv-2'
+    })
+
+    expect(text).not.toContain('暂无活跃会话')
+    expect(text).toContain('钉钉 · 李四')
+    expect(text).toContain('使用 /close 关闭当前会话')
   })
 })
