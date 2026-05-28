@@ -1,115 +1,111 @@
 <template>
   <div class="settings-page" :style="cssVars">
-    <!-- Header -->
-    <div v-if="!embedded" class="settings-header">
-      <h1>{{ t('dingtalkSettings.title') }}</h1>
-      <n-space>
+    <template v-if="configLoaded">
+      <div v-if="!embedded" class="settings-header">
+        <h1>{{ t('dingtalkSettings.title') }}</h1>
+        <n-space>
+          <n-tag :type="statusType" size="small" round>
+            {{ statusText }}
+          </n-tag>
+        </n-space>
+      </div>
+      <div v-else class="embedded-header">
+        <div>
+          <div class="embedded-title">{{ t('dingtalkSettings.title') }}</div>
+          <div class="embedded-subtitle">{{ t('dingtalkSettings.embeddedSubtitle') }}</div>
+        </div>
         <n-tag :type="statusType" size="small" round>
           {{ statusText }}
         </n-tag>
-      </n-space>
-    </div>
-    <div v-else class="embedded-header">
-      <div>
-        <div class="embedded-title">{{ t('dingtalkSettings.title') }}</div>
-        <div class="embedded-subtitle">{{ t('dingtalkSettings.embeddedSubtitle') }}</div>
       </div>
-      <n-tag :type="statusType" size="small" round>
-        {{ statusText }}
-      </n-tag>
-    </div>
 
-    <!-- Description -->
-    <n-alert type="info" :show-icon="true" style="margin-bottom: 16px;">
-      {{ t('dingtalkSettings.description') }}
-    </n-alert>
+      <n-alert type="info" :show-icon="true" style="margin-bottom: 16px;">
+        {{ t('dingtalkSettings.description') }}
+      </n-alert>
 
-    <!-- Enable Switch -->
-    <n-card :title="t('dingtalkSettings.basicConfig')" class="settings-section">
-      <template #header-extra>
-        <n-button text type="primary" size="small" @click="openGuide">
-          {{ t('dingtalkSettings.viewGuide') }}
-        </n-button>
-      </template>
-      <n-form-item :label="t('dingtalkSettings.enableBridge')">
-        <n-switch v-model:value="formData.enabled" />
-        <template #feedback>{{ t('dingtalkSettings.enableHint') }}</template>
-      </n-form-item>
+      <n-card :title="t('dingtalkSettings.basicConfig')" class="settings-section">
+        <template #header-extra>
+          <n-button text type="primary" size="small" @click="openGuide">
+            {{ t('dingtalkSettings.viewGuide') }}
+          </n-button>
+        </template>
+        <n-form-item :label="t('dingtalkSettings.enableBridge')">
+          <n-switch v-model:value="formData.enabled" />
+          <template #feedback>{{ t('dingtalkSettings.enableHint') }}</template>
+        </n-form-item>
 
-      <n-form-item :label="t('dingtalkSettings.appKey')">
-        <n-input
-          v-model:value="formData.appKey"
-          :placeholder="t('dingtalkSettings.appKeyPlaceholder')"
-          :disabled="!formData.enabled"
-        />
-        <template #feedback>{{ t('dingtalkSettings.appKeyHint') }}</template>
-      </n-form-item>
+        <n-form-item :label="t('dingtalkSettings.appKey')">
+          <n-input
+            v-model:value="formData.appKey"
+            :placeholder="t('dingtalkSettings.appKeyPlaceholder')"
+            :disabled="!formData.enabled"
+          />
+          <template #feedback>{{ t('dingtalkSettings.appKeyHint') }}</template>
+        </n-form-item>
 
-      <n-form-item :label="t('dingtalkSettings.appSecret')">
-        <n-input
-          v-model:value="formData.appSecret"
-          type="password"
-          show-password-on="click"
-          :placeholder="t('dingtalkSettings.appSecretPlaceholder')"
-          :disabled="!formData.enabled"
-        />
-        <template #feedback>{{ t('dingtalkSettings.appSecretHint') }}</template>
-      </n-form-item>
+        <n-form-item :label="t('dingtalkSettings.appSecret')">
+          <n-input
+            v-model:value="formData.appSecret"
+            type="password"
+            show-password-on="click"
+            :placeholder="t('dingtalkSettings.appSecretPlaceholder')"
+            :disabled="!formData.enabled"
+          />
+          <template #feedback>{{ t('dingtalkSettings.appSecretHint') }}</template>
+        </n-form-item>
 
-      <n-form-item :label="t('dingtalkSettings.robotCode')">
-        <n-input
-          v-model:value="formData.robotCode"
-          :placeholder="t('dingtalkSettings.robotCodePlaceholder')"
-          :disabled="!formData.enabled"
-        />
-        <template #feedback>{{ t('dingtalkSettings.robotCodeHint') }}</template>
-      </n-form-item>
+        <n-form-item :label="t('dingtalkSettings.robotCode')">
+          <n-input
+            v-model:value="formData.robotCode"
+            :placeholder="t('dingtalkSettings.robotCodePlaceholder')"
+            :disabled="!formData.enabled"
+          />
+          <template #feedback>{{ t('dingtalkSettings.robotCodeHint') }}</template>
+        </n-form-item>
+      </n-card>
 
-    </n-card>
+      <n-card :title="t('dingtalkSettings.connectionControl')" class="settings-section">
+        <n-space>
+          <n-button
+            type="primary"
+            :disabled="!canConnect"
+            :loading="connecting"
+            @click="handleConnect"
+          >
+            {{ connected ? t('dingtalkSettings.reconnect') : t('dingtalkSettings.connect') }}
+          </n-button>
+          <n-button
+            :disabled="!connected"
+            @click="handleDisconnect"
+          >
+            {{ t('dingtalkSettings.disconnect') }}
+          </n-button>
+        </n-space>
+        <div v-if="activeSessions > 0" class="session-info">
+          {{ t('dingtalkSettings.activeSessions', { count: activeSessions }) }}
+        </div>
+      </n-card>
 
-    <!-- Connection Control -->
-    <n-card :title="t('dingtalkSettings.connectionControl')" class="settings-section">
-      <n-space>
-        <n-button
-          type="primary"
-          :disabled="!canConnect"
-          :loading="connecting"
-          @click="handleConnect"
-        >
-          {{ connected ? t('dingtalkSettings.reconnect') : t('dingtalkSettings.connect') }}
-        </n-button>
-        <n-button
-          :disabled="!connected"
-          @click="handleDisconnect"
-        >
-          {{ t('dingtalkSettings.disconnect') }}
-        </n-button>
-      </n-space>
-      <div v-if="activeSessions > 0" class="session-info">
-        {{ t('dingtalkSettings.activeSessions', { count: activeSessions }) }}
+      <n-card :title="t('dingtalkSettings.advancedSettings')" class="settings-section">
+        <n-form-item :label="t('dingtalkSettings.maxHistorySessions')">
+          <n-input-number
+            v-model:value="formData.maxHistorySessions"
+            :min="1"
+            :max="20"
+            :disabled="!formData.enabled"
+          />
+          <template #feedback>{{ t('dingtalkSettings.maxHistorySessionsHint') }}</template>
+        </n-form-item>
+      </n-card>
+
+      <div class="settings-footer">
+        <n-space>
+          <n-button v-if="!embedded" @click="handleClose">{{ t('common.close') }}</n-button>
+          <n-button type="primary" @click="handleSave">{{ t('common.save') }}</n-button>
+        </n-space>
       </div>
-    </n-card>
-
-    <!-- Advanced Settings -->
-    <n-card :title="t('dingtalkSettings.advancedSettings')" class="settings-section">
-      <n-form-item :label="t('dingtalkSettings.maxHistorySessions')">
-        <n-input-number
-          v-model:value="formData.maxHistorySessions"
-          :min="1"
-          :max="20"
-          :disabled="!formData.enabled"
-        />
-        <template #feedback>{{ t('dingtalkSettings.maxHistorySessionsHint') }}</template>
-      </n-form-item>
-    </n-card>
-
-    <!-- Footer Buttons -->
-    <div class="settings-footer">
-      <n-space>
-        <n-button v-if="!embedded" @click="handleClose">{{ t('common.close') }}</n-button>
-        <n-button type="primary" @click="handleSave">{{ t('common.save') }}</n-button>
-      </n-space>
-    </div>
+    </template>
+    <div v-else class="loading-state">{{ t('common.loading') }}</div>
   </div>
 </template>
 
@@ -143,6 +139,7 @@ const formData = ref({
 const connected = ref(false)
 const activeSessions = ref(0)
 const connecting = ref(false)
+const configLoaded = ref(false)
 
 // Cleanup listeners
 const cleanups = []
@@ -161,6 +158,7 @@ onMounted(async () => {
   await initLocale()
   await loadConfig()
   await refreshStatus()
+  configLoaded.value = true
 
   // Listen for status changes
   if (window.electronAPI?.onDingTalkStatusChange) {
@@ -299,5 +297,14 @@ const handleClose = () => {
   margin-top: 12px;
   font-size: 13px;
   opacity: 0.7;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  color: var(--text-color-2);
+  font-size: 14px;
 }
 </style>

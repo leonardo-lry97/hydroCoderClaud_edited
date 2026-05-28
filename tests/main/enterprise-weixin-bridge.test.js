@@ -1,0 +1,285 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+
+const { AgentSessionManager } = await import('../../src/main/agent-session-manager.js')
+const { EnterpriseWeixinBridge } = await import('../../src/main/managers/enterprise-weixin-bridge.js')
+
+describe('EnterpriseWeixinBridge', () => {
+  let tempDir
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hydro-enterprise-weixin-bridge-'))
+  })
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  })
+
+  function createHarness() {
+    const sent = []
+    const replies = []
+    const wsClient = {
+      on: vi.fn(),
+      off: vi.fn(),
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      reply: vi.fn(async (_frame, body) => {
+        replies.push(body)
+        return { ok: true }
+      }),
+      replyWelcome: vi.fn(async (_frame, body) => {
+        replies.push(body)
+        return { ok: true }
+      }),
+      replyStreamNonBlocking: vi.fn(async () => ({ ok: true })),
+      sendMessage: vi.fn(async (_chatId, body) => {
+        sent.push(body)
+        return { ok: true }
+      }),
+    }
+
+    const mainWindow = {
+      isDestroyed: () => false,
+      webContents: {
+        isDestroyed: () => false,
+        send: (channel, data) => sent.push({ channel, data }),
+      },
+    }
+    const configManager = {
+      getConfig: () => ({
+        settings: { agent: { outputBaseDir: tempDir } },
+        enterpriseWeixin: {
+          enabled: true,
+          botId: 'bot-id',
+          secret: 'bot-secret',
+          maxHistorySessions: 5,
+        },
+      }),
+      getDefaultProfile: () => ({ id: 'p1', name: '默认配置', baseUrl: 'https://example.com' }),
+      getAPIProfile: () => null,
+    }
+    const manager = new AgentSessionManager(mainWindow, configManager)
+    manager.sessionDatabase = {
+      insertAgentMessage: vi.fn(),
+      createAgentConversation: vi.fn(() => ({ id: 1 })),
+      updateAgentConversation: vi.fn(),
+      updateAgentMessageToolOutput: vi.fn(),
+      updateDingTalkMetadata: vi.fn(),
+      getAgentConversation: vi.fn(() => null),
+      getImSessionsByType: vi.fn(() => []),
+      listAllAgentConversations: vi.fn(() => []),
+    }
+
+    const bridge = new EnterpriseWeixinBridge(configManager, manager, mainWindow)
+    bridge._wsClient = wsClient
+    bridge._connected = true
+    return { bridge, manager, sent, replies, wsClient }
+  }
+
+  function inboundFrame(overrides = {}) {
+    return {
+      headers: { req_id: `req-${Math.random().toString(36).slice(2, 8)}` },
+      body: {
+        msgid: `msg-${Math.random().toString(36).slice(2, 8)}`,
+        msgtype: 'text',
+        chattype: 'single',
+        from: { userid: 'user-a', name: '雷斯林' },
+        text: { content: '收到请回复' },
+        ...overrides,
+      },
+    }
+  }
+
+  function stubSendMessage(manager) {
+    return vi.spyOn(manager, 'sendMessage').mockImplementation(async (sessionId, userMessage, options = {}) => {
+      const meta = options.meta || {}
+      const session = manager.sessions.get(sessionId)
+      const text = typeof userMessage === 'string' ? userMessage : (userMessage?.text || '[图片]')
+      const message = {
+        id: `msg-ext-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        role: 'user',
+        content: text,
+        timestamp: Date.now(),
+        source: meta.source,
+        senderNick: meta.senderNick,
+        meta,
+      }
+      if (userMessage?.images?.length) message.images = userMessage.images
+      session.messages.push(message)
+      manager.emit('userMessage', {
+        sessionId,
+        sessionType: session.type,
+        imChannel: session.imChannel,
+        content: text,
+        images: userMessage?.images || null,
+        source: meta.source || null,
+      })
+      manager.emit('agentResult', sessionId)
+    })
+  }
+
+  it('creates an Enterprise Weixin session and submits inbound text to Agent', async () => {
+    const { bridge, manager, sent } = createHarness()
+    const sendMessage = stubSendMessage(manager)
+
+    await bridge._handleMessage(inboundFrame())
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.any(String),
+      '收到请回复',
+      {
+        meta: expect.objectContaining({
+          source: 'im-inbound',
+          senderNick: '雷斯林',
+          enterpriseWeixinChatId: 'user-a',
+        }),
+      }
+    )
+    expect(manager.sessions.size).toBe(1)
+
+    const session = Array.from(manager.sessions.values())[0]
+    expect(session.type).toBe('chat')
+    expect(session.imChannel).toBe('enterprise-weixin')
+    expect(session.title).toBe('企业微信 · 雷斯林')
+    expect(sent.map(item => item.channel)).toContain('enterprise-weixin:messageReceived')
+  })
+
+  it('shows help text for /help', async () => {
+    const { bridge, replies } = createHarness()
+
+    await bridge._handleMessage(inboundFrame({
+      text: { content: '/help' },
+    }))
+
+    expect(replies.at(-1)).toMatchObject({
+      msgtype: 'text',
+      text: {
+        content: expect.stringContaining('/help'),
+      },
+    })
+  })
+
+  it('reports enterprise weixin status with /status', async () => {
+    const { bridge, manager, replies } = createHarness()
+    const session = manager.create({ type: 'chat', source: 'manual', title: '企业微信测试会话' })
+    session.imChannel = 'enterprise-weixin'
+    bridge._sessionMapper.sessionMap.set('user-a:user-a', session.id)
+    bridge._sessionIdentities.set(session.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+
+    await bridge._handleMessage(inboundFrame({
+      text: { content: '/status' },
+    }))
+
+    expect(replies.at(-1).text.content).toContain('企业微信: 已连接')
+  })
+
+  it('lists active chat sessions for /sessions', async () => {
+    const { bridge, manager, replies } = createHarness()
+    const first = manager.create({ type: 'chat', source: 'manual', title: '会话 A' })
+    const second = manager.create({ type: 'chat', source: 'manual', title: '会话 B' })
+    first.imChannel = 'enterprise-weixin'
+    second.imChannel = 'enterprise-weixin'
+    bridge._sessionMapper.sessionMap.set('user-a:user-a', first.id)
+    bridge._sessionIdentities.set(first.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+    bridge._sessionIdentities.set(second.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+
+    await bridge._handleMessage(inboundFrame({
+      text: { content: '/sessions' },
+    }))
+
+    expect(replies.at(-1).text.content).toContain('活跃会话')
+    expect(replies.at(-1).text.content).toContain('会话 A')
+    expect(replies.at(-1).text.content).toContain('会话 B')
+  })
+
+  it('sends history choice menu when matched history sessions exist', async () => {
+    const { bridge, manager, replies } = createHarness()
+    manager.sessionDatabase.getImSessionsByType.mockReturnValue([
+      { session_id: 'hist-1', title: '历史会话 1', updated_at: Date.now() - 1000 },
+      { session_id: 'hist-2', title: '历史会话 2', updated_at: Date.now() - 2000 },
+    ])
+
+    await bridge._handleMessage(inboundFrame())
+
+    expect(replies.at(-1).text.content).toContain('历史会话')
+    expect(replies.at(-1).text.content).toContain('回复 0')
+  })
+
+  it('resumes selected history session after numeric reply', async () => {
+    const { bridge, manager, replies } = createHarness()
+    const reopened = manager.create({ type: 'chat', source: 'manual', title: '历史会话 1' })
+    reopened.imChannel = 'enterprise-weixin'
+    manager.sessionDatabase.getImSessionsByType.mockReturnValue([
+      { session_id: reopened.id, title: '历史会话 1', updated_at: Date.now() - 1000 },
+    ])
+    stubSendMessage(manager)
+
+    await bridge._handleMessage(inboundFrame({ text: { content: '第一条消息' } }))
+    await bridge._handleMessage(inboundFrame({ text: { content: '1' } }))
+
+    expect(replies.at(-1).text.content).toContain('已恢复历史会话')
+    expect(bridge._sessionMapper.sessionMap.get('user-a:user-a')).toBe(reopened.id)
+  })
+
+  it('creates a new session after choosing 0 from history menu', async () => {
+    const { bridge, manager, replies } = createHarness()
+    manager.sessionDatabase.getImSessionsByType.mockReturnValue([
+      { session_id: 'hist-1', title: '历史会话 1', updated_at: Date.now() - 1000 },
+    ])
+    const enqueueSpy = vi.spyOn(bridge, '_enqueueInboundMessage').mockResolvedValue()
+
+    await bridge._handleMessage(inboundFrame({ text: { content: '我要新开' } }))
+    const beforeCount = manager.sessions.size
+    await bridge._handleMessage(inboundFrame({ text: { content: '0' } }))
+
+    expect(manager.sessions.size).toBe(beforeCount + 1)
+    expect(replies.at(-1).text.content).toContain('正在创建新会话')
+    expect(enqueueSpy).toHaveBeenCalled()
+  })
+
+  it('binds and sends proactive text to a target', async () => {
+    const { bridge, manager, wsClient } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
+
+    const result = await bridge.sendTextToTarget({
+      sessionId: created.id,
+      userId: 'user-b',
+      displayName: 'HydroCoder',
+      text: '任务已完成',
+    })
+
+    expect(result).toEqual({ success: true, targetId: 'user-b' })
+    expect(wsClient.sendMessage).toHaveBeenCalledWith('user-b', {
+      msgtype: 'markdown',
+      markdown: { content: '任务已完成' },
+    })
+    expect(bridge.getSessionBinding(created.id)).toEqual({
+      targetId: 'user-b',
+      userId: 'user-b',
+      displayName: 'HydroCoder',
+    })
+  })
+})

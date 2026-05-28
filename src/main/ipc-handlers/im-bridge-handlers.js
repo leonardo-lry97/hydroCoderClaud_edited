@@ -47,8 +47,12 @@ function setupImBridgeHandlers(ipcMain, bridge, configManager, prefix) {
     const current = configManager.getConfig()
     const configKey = _resolveConfigKey(bridge, prefix)
     current[configKey] = { ...current[configKey], ...config }
-    configManager.saveConfig(current)
-    return bridge.restart()
+    await configManager.save(current)
+    if (current[configKey]?.enabled) {
+      return bridge.restart()
+    }
+    await bridge.stop()
+    return false
   })
 
   // 主动发送文本

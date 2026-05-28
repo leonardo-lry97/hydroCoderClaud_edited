@@ -1,104 +1,107 @@
 <template>
   <div class="settings-page">
-    <div v-if="!embedded" class="settings-header">
-      <h1>飞书桥接设置</h1>
-      <n-space>
+    <template v-if="configLoaded">
+      <div v-if="!embedded" class="settings-header">
+        <h1>飞书桥接设置</h1>
+        <n-space>
+          <n-tag :type="statusType" size="small" round>
+            {{ statusText }}
+          </n-tag>
+        </n-space>
+      </div>
+      <div v-else class="embedded-header">
+        <div>
+          <div class="embedded-title">飞书桥接设置</div>
+          <div class="embedded-subtitle">管理飞书桥接、连接状态和会话工作目录策略。</div>
+        </div>
         <n-tag :type="statusType" size="small" round>
           {{ statusText }}
         </n-tag>
-      </n-space>
-    </div>
-    <div v-else class="embedded-header">
-      <div>
-        <div class="embedded-title">飞书桥接设置</div>
-        <div class="embedded-subtitle">管理飞书桥接、连接状态和会话工作目录策略。</div>
       </div>
-      <n-tag :type="statusType" size="small" round>
-        {{ statusText }}
-      </n-tag>
-    </div>
 
-    <n-alert type="info" :show-icon="true" style="margin-bottom: 16px;">
-      通过飞书机器人桥接，可在手机飞书上与 Agent 对话，并支持桌面主动推送消息到飞书。
-      需要在飞书开放平台创建企业自建应用并启用机器人能力。
-    </n-alert>
+      <n-alert type="info" :show-icon="true" style="margin-bottom: 16px;">
+        通过飞书机器人桥接，可在手机飞书上与 Agent 对话，并支持桌面主动推送消息到飞书。
+        需要在飞书开放平台创建企业自建应用并启用机器人能力。
+      </n-alert>
 
-    <n-card title="基本配置" class="settings-section">
-      <n-form-item label="启用飞书桥接">
-        <n-switch v-model:value="formData.enabled" />
-        <template #feedback>开启后，应用启动时自动连接飞书</template>
-      </n-form-item>
+      <n-card title="基本配置" class="settings-section">
+        <n-form-item label="启用飞书桥接">
+          <n-switch v-model:value="formData.enabled" />
+          <template #feedback>开启后，应用启动时自动连接飞书</template>
+        </n-form-item>
 
-      <n-form-item label="App ID">
-        <n-input
-          v-model:value="formData.appId"
-          placeholder="请输入飞书应用的 App ID"
-          :disabled="!formData.enabled"
-        />
-        <template #feedback>在飞书开放平台 → 应用信息中获取</template>
-      </n-form-item>
+        <n-form-item label="App ID">
+          <n-input
+            v-model:value="formData.appId"
+            placeholder="请输入飞书应用的 App ID"
+            :disabled="!formData.enabled"
+          />
+          <template #feedback>在飞书开放平台 → 应用信息中获取</template>
+        </n-form-item>
 
-      <n-form-item label="App Secret">
-        <n-input
-          v-model:value="formData.appSecret"
-          type="password"
-          show-password-on="click"
-          placeholder="请输入飞书应用的 App Secret"
-          :disabled="!formData.enabled"
-        />
-        <template #feedback>在飞书开放平台 → 应用信息中获取</template>
-      </n-form-item>
+        <n-form-item label="App Secret">
+          <n-input
+            v-model:value="formData.appSecret"
+            type="password"
+            show-password-on="click"
+            placeholder="请输入飞书应用的 App Secret"
+            :disabled="!formData.enabled"
+          />
+          <template #feedback>在飞书开放平台 → 应用信息中获取</template>
+        </n-form-item>
 
-      <n-form-item label="默认工作目录">
-        <n-input
-          v-model:value="formData.defaultCwd"
-          placeholder="飞书会话的默认工作目录（留空则使用用户目录）"
-          :disabled="!formData.enabled"
-        />
-        <template #feedback>飞书消息创建的 Agent 会话将在此目录下工作</template>
-      </n-form-item>
-    </n-card>
+        <n-form-item label="默认工作目录">
+          <n-input
+            v-model:value="formData.defaultCwd"
+            placeholder="飞书会话的默认工作目录（留空则使用用户目录）"
+            :disabled="!formData.enabled"
+          />
+          <template #feedback>飞书消息创建的 Agent 会话将在此目录下工作</template>
+        </n-form-item>
+      </n-card>
 
-    <n-card title="连接控制" class="settings-section">
-      <n-space>
-        <n-button
-          type="primary"
-          :disabled="!canConnect"
-          :loading="connecting"
-          @click="handleConnect"
-        >
-          {{ connected ? '重新连接' : '连接' }}
-        </n-button>
-        <n-button
-          :disabled="!connected"
-          @click="handleDisconnect"
-        >
-          断开
-        </n-button>
-      </n-space>
-      <div v-if="activeSessions > 0" class="session-info">
-        当前活跃会话: {{ activeSessions }} 个
+      <n-card title="连接控制" class="settings-section">
+        <n-space>
+          <n-button
+            type="primary"
+            :disabled="!canConnect"
+            :loading="connecting"
+            @click="handleConnect"
+          >
+            {{ connected ? '重新连接' : '连接' }}
+          </n-button>
+          <n-button
+            :disabled="!connected"
+            @click="handleDisconnect"
+          >
+            断开
+          </n-button>
+        </n-space>
+        <div v-if="activeSessions > 0" class="session-info">
+          当前活跃会话: {{ activeSessions }} 个
+        </div>
+      </n-card>
+
+      <n-card title="高级设置" class="settings-section">
+        <n-form-item label="历史会话数量">
+          <n-input-number
+            v-model:value="formData.maxHistorySessions"
+            :min="1"
+            :max="20"
+            :disabled="!formData.enabled"
+          />
+          <template #feedback>飞书用户选择历史会话时显示的最大数量（1-20）</template>
+        </n-form-item>
+      </n-card>
+
+      <div class="settings-footer">
+        <n-space>
+          <n-button v-if="!embedded" @click="handleClose">{{ t('common.close') }}</n-button>
+          <n-button type="primary" @click="handleSave">{{ t('common.save') }}</n-button>
+        </n-space>
       </div>
-    </n-card>
-
-    <n-card title="高级设置" class="settings-section">
-      <n-form-item label="历史会话数量">
-        <n-input-number
-          v-model:value="formData.maxHistorySessions"
-          :min="1"
-          :max="20"
-          :disabled="!formData.enabled"
-        />
-        <template #feedback>飞书用户选择历史会话时显示的最大数量（1-20）</template>
-      </n-form-item>
-    </n-card>
-
-    <div class="settings-footer">
-      <n-space>
-        <n-button v-if="!embedded" @click="handleClose">{{ t('common.close') }}</n-button>
-        <n-button type="primary" @click="handleSave">{{ t('common.save') }}</n-button>
-      </n-space>
-    </div>
+    </template>
+    <div v-else class="loading-state">正在加载飞书配置...</div>
   </div>
 </template>
 
@@ -126,6 +129,7 @@ const formData = ref({
 const connected = ref(false)
 const activeSessions = ref(0)
 const connecting = ref(false)
+const configLoaded = ref(false)
 
 let cleanupFns = []
 
@@ -213,6 +217,7 @@ const handleClose = () => {
 onMounted(async () => {
   await loadConfig()
   await refreshStatus()
+  configLoaded.value = true
 
   if (window.electronAPI?.onFeishuStatusChange) {
     cleanupFns.push(
@@ -262,5 +267,14 @@ onUnmounted(() => {
   margin-top: 12px;
   font-size: 13px;
   opacity: 0.7;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  color: var(--text-color-2);
+  font-size: 14px;
 }
 </style>
