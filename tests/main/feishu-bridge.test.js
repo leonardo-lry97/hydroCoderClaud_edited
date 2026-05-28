@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { Readable } from 'stream'
 
 const { AgentSessionManager } = await import('../../src/main/agent-session-manager.js')
 const { FeishuBridge } = await import('../../src/main/managers/feishu-bridge.js')
@@ -3872,6 +3873,54 @@ describe('FeishuEventClient', () => {
 })
 
 describe('FeishuMessageAPI', () => {
+  it('returns image_key from the SDK top-level upload response', async () => {
+    const api = new FeishuMessageAPI()
+    api.setCredentials('app-id', 'app-secret')
+    const createSpy = vi.spyOn(api._client.im.v1.image, 'create').mockResolvedValue({
+      image_key: 'img_top_level'
+    })
+
+    const imageKey = await api.uploadImage(Buffer.from('pngdata'))
+
+    expect(imageKey).toBe('img_top_level')
+    expect(createSpy).toHaveBeenCalledWith({
+      data: {
+        image_type: 'message',
+        image: expect.any(Buffer)
+      }
+    })
+  })
+
+  it('keeps the nested upload response fallback for alternate clients', async () => {
+    const api = new FeishuMessageAPI()
+    api.setCredentials('app-id', 'app-secret')
+    vi.spyOn(api._client.im.v1.image, 'create').mockResolvedValue({
+      data: { image_key: 'img_nested' }
+    })
+
+    await expect(api.uploadImage(Buffer.from('pngdata'))).resolves.toBe('img_nested')
+  })
+
+  it('downloads message images from the SDK stream wrapper', async () => {
+    const api = new FeishuMessageAPI()
+    api.setCredentials('app-id', 'app-secret')
+    const getSpy = vi.spyOn(api._client.im.v1.messageResource, 'get').mockResolvedValue({
+      headers: { 'content-type': 'image/png; charset=utf-8' },
+      getReadableStream: () => Readable.from([Buffer.from('image-bytes')])
+    })
+
+    const image = await api.downloadImage('img_1', 'om_1')
+
+    expect(getSpy).toHaveBeenCalledWith({
+      path: { message_id: 'om_1', file_key: 'img_1' },
+      params: { type: 'image' }
+    })
+    expect(image).toEqual({
+      base64: Buffer.from('image-bytes').toString('base64'),
+      mediaType: 'image/png'
+    })
+  })
+
   it('loads user display names through the basicBatch endpoint', async () => {
     const api = new FeishuMessageAPI()
     api.setCredentials('app-id', 'app-secret')

@@ -9,7 +9,6 @@
 
 const { Client } = require('@larksuiteoapi/node-sdk')
 const fs = require('fs')
-const path = require('path')
 
 const MAX_TEXT_LENGTH = 6000
 
@@ -240,18 +239,16 @@ class FeishuMessageAPI {
    */
   async uploadImage(source, imageType = 'message') {
     this._assertReady()
-    let buffer, fileName
+    let buffer
     if (Buffer.isBuffer(source)) {
       buffer = source
-      fileName = 'image.png'
     } else {
       buffer = fs.readFileSync(source)
-      fileName = path.basename(source)
     }
     const r = await this._client.im.v1.image.create({
       data: { image_type: imageType, image: buffer },
     })
-    return r?.data?.image_key || null
+    return r?.image_key || r?.data?.image_key || null
   }
 
   /**
@@ -266,8 +263,7 @@ class FeishuMessageAPI {
       path: { message_id: messageId, file_key: imageKey },
       params: { type: 'image' },
     })
-    // SDK unwraps binary response into r.data
-    const buf = Buffer.isBuffer(r?.data) ? r.data : (r?.data ? Buffer.from(r.data) : Buffer.alloc(0))
+    const buf = await this._binaryResponseToBuffer(r)
     const contentType = r?.headers?.['content-type'] || 'image/jpeg'
     const mediaType = String(contentType).split(';')[0].trim() || 'image/jpeg'
     return { base64: buf.toString('base64'), mediaType }
@@ -325,6 +321,36 @@ class FeishuMessageAPI {
     if (!text) return ''
     if (text.length <= this._maxTextLength) return text
     return text.substring(0, this._maxTextLength) + '\n\n...（内容过长，已截断）'
+  }
+
+  /** @private */
+  async _binaryResponseToBuffer(response) {
+    if (!response) return Buffer.alloc(0)
+    if (Buffer.isBuffer(response)) return response
+    if (response instanceof Uint8Array) return Buffer.from(response)
+    if (typeof response.getReadableStream === 'function') {
+      return this._readableToBuffer(response.getReadableStream())
+    }
+    const data = response.data
+    if (Buffer.isBuffer(data)) return data
+    if (data instanceof Uint8Array) return Buffer.from(data)
+    if (data && typeof data.getReadableStream === 'function') {
+      return this._readableToBuffer(data.getReadableStream())
+    }
+    if (data && typeof data !== 'string' && typeof data[Symbol.asyncIterator] === 'function') {
+      return this._readableToBuffer(data)
+    }
+    if (data instanceof ArrayBuffer) return Buffer.from(data)
+    return data ? Buffer.from(data) : Buffer.alloc(0)
+  }
+
+  /** @private */
+  async _readableToBuffer(stream) {
+    const chunks = []
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    }
+    return Buffer.concat(chunks)
   }
 }
 
