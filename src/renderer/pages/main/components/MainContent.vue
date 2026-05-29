@@ -614,6 +614,7 @@ const setupSessionListeners = () => {
             const tab = ensureAgentTab({
               id: data.sessionId,
               type: imType,
+              imChannel: imType,
               title: data.title || defaultTitle,
             })
             if (tab) {

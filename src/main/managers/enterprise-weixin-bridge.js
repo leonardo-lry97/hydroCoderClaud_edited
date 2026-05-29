@@ -48,6 +48,8 @@ class EnterpriseWeixinBridge {
     this._connected = false
     this._sessionDatabase = agentSessionManager.sessionDatabase
     this._startPromise = null
+    this._contactAccessToken = null
+    this._contactAccessTokenExpiresAt = 0
 
     this._notifier = new ImFrontendNotifier(mainWindow, this._imType)
     this._replyCollector = new ImReplyCollector({ maxTextLength: MAX_TEXT_LENGTH })
@@ -177,6 +179,8 @@ class EnterpriseWeixinBridge {
     this._pendingInboundMessages.clear()
     this._activeSendChunks.clear()
     this._desktopPendingImagePaths.clear()
+    this._contactAccessToken = null
+    this._contactAccessTokenExpiresAt = 0
 
     if (this._wsClient) {
       try { this._wsClient.disconnect() } catch {}
@@ -549,7 +553,7 @@ class EnterpriseWeixinBridge {
     })
 
     if (result.action === 'resume') {
-      await this._sendTextReply(frame, result.wasActivated ? '已连接到当前会话' : '会话恢复中，请等待信息返回后，即可开始聊天')
+      await this._sendTextReply(frame, result.wasActivated ? '已连接到当前会话' : this._buildSessionActivatingText())
     } else if (result.action === 'new') {
       await this._sendTextReply(frame, this._buildSessionCreatingText())
     }
@@ -601,6 +605,43 @@ class EnterpriseWeixinBridge {
         await this._sendTextReply(context.frame, this._buildSessionsMenuText(chatId, sessionId))
         return
 
+      case '/close': {
+        const activeSessions = this._getActiveSessionsByChat(chatId)
+        let targetSessionId = sessionId
+        if (args.length > 0) {
+          const selectedIndex = Number.parseInt(args[0], 10)
+          if (Number.isNaN(selectedIndex) || selectedIndex < 1 || selectedIndex > activeSessions.length) {
+            await this._sendTextReply(
+              context.frame,
+              `编号错误：请输入 1-${activeSessions.length} 之间的数字\n\n使用 /sessions 查看会话列表`
+            )
+            return
+          }
+          targetSessionId = activeSessions[selectedIndex - 1]?.id || null
+        }
+
+        if (!targetSessionId) {
+          await this._sendTextReply(context.frame, '当前没有连接会话，无需关闭\n\n发送任意消息可开始新会话')
+          return
+        }
+
+        const targetSession = this._agentSessionManager.sessions.get(targetSessionId)
+        if (targetSession?.status === 'streaming') {
+          await this._sendTextReply(context.frame, 'AI 正在响应中，请等待完成后再关闭')
+          return
+        }
+
+        await this._agentSessionManager.close(targetSessionId)
+        this._clearSessionIdentity(targetSessionId)
+        this._notifier.notifySessionClosed({ sessionId: targetSessionId })
+
+        const closeText = args.length > 0
+          ? `会话 ${args[0]} 已关闭：${targetSession?.title || targetSessionId.substring(0, 8)}`
+          : '会话已关闭'
+        await this._sendTextReply(context.frame, closeText)
+        return
+      }
+
       case '/new': {
         if (currentSession?.status === 'streaming') {
           await this._sendTextReply(context.frame, 'AI 正在响应中，请等待完成后再操作')
@@ -625,6 +666,96 @@ class EnterpriseWeixinBridge {
         })
         this._notifier.notifySessionCreated({ sessionId: newId, nickname: identity.nickname || identity.userId })
         await this._sendTextReply(context.frame, this._buildSessionCreatingText())
+        return
+      }
+
+      case '/resume': {
+        if (currentSession?.status === 'streaming') {
+          await this._sendTextReply(context.frame, 'AI 正在响应中，请等待完成后再操作')
+          return
+        }
+
+        let currentSessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
+        if (!currentSessionId && identity.chatType === 'single') {
+          currentSessionId = this._findBoundSessionIdByUserId(identity.userId)
+          if (currentSessionId) {
+            this._sessionMapper.sessionMap.set(mapKey, currentSessionId)
+          }
+        }
+
+        const history = await this._sessionMapper._queryHistorySessions(identity)
+        if (!history || history.length === 0) {
+          await this._sendTextReply(context.frame, '没有历史会话记录\n\n发送任意消息可开始新会话')
+          return
+        }
+
+        if (args.length > 0) {
+          const selectedIndex = Number.parseInt(args[0], 10)
+          if (Number.isNaN(selectedIndex) || selectedIndex < 1 || selectedIndex > history.length) {
+            await this._sendTextReply(context.frame, `编号错误：请输入 1-${history.length} 之间的数字`)
+            return
+          }
+
+          this._sessionMapper.clearPendingChoice(mapKey)
+          this._sessionMapper._pendingChoices.set(mapKey, {
+            sessions: history,
+            resolve: () => {},
+            timer: setTimeout(() => {
+              this._sessionMapper._pendingChoices.delete(mapKey)
+            }, HISTORY_CHOICE_TIMEOUT),
+            options: {
+              timeoutMs: HISTORY_CHOICE_TIMEOUT,
+              menuBuilder: (sessions) => this._buildHistoryChoiceMenu(sessions, currentSessionId),
+            },
+          })
+          const result = await this._sessionMapper.handleChoice(mapKey, String(selectedIndex), identity)
+          if (!result?.sessionId) {
+            await this._sendTextReply(context.frame, '无法恢复该会话，可能已被删除\n\n发送任意消息可开始新会话')
+            return
+          }
+
+          this._sessionIdentities.set(result.sessionId, {
+            userId: identity.userId,
+            senderId: identity.userId,
+            senderName: identity.nickname || identity.userId,
+            chatId: identity.chatId,
+            chatType: identity.chatType,
+            chatName: identity.channelName || identity.nickname || identity.userId,
+          })
+          this._notifier.notifySessionCreated({ sessionId: result.sessionId, nickname: identity.nickname || identity.userId })
+          await this._sendTextReply(
+            context.frame,
+            result.wasActivated
+              ? this._buildSessionSwitchedText(result.selectedSession?.title || result.sessionId)
+              : this._buildSessionActivatingText()
+          )
+          return
+        }
+
+        await this._sessionMapper.initPendingChoice(
+          mapKey,
+          history,
+          (menuText) => this._sendTextReply(context.frame, menuText),
+          {
+            timeoutMs: HISTORY_CHOICE_TIMEOUT,
+            menuBuilder: (sessions) => this._buildHistoryChoiceMenu(sessions, currentSessionId),
+          }
+        )
+        return
+      }
+
+      case '/rename': {
+        if (!sessionId) {
+          await this._sendTextReply(context.frame, '当前没有活跃会话，无法重命名')
+          return
+        }
+        const newTitle = args.join(' ').trim()
+        if (!newTitle) {
+          await this._sendTextReply(context.frame, '请提供新名称，例如：/rename 我的项目')
+          return
+        }
+        this._agentSessionManager.rename(sessionId, newTitle)
+        await this._sendTextReply(context.frame, `会话已重命名为：${newTitle}`)
         return
       }
 
@@ -733,7 +864,10 @@ class EnterpriseWeixinBridge {
       '/help    - 显示帮助',
       '/status  - 查看连接状态',
       '/sessions - 查看当前聊天下的活跃会话',
+      '/close [编号] - 关闭当前会话或指定会话',
       '/new     - 新建会话',
+      '/resume [编号] - 恢复历史会话',
+      '/rename <名称> - 重命名当前会话',
       '',
       '回复数字可选择历史会话，回复 0 开始全新会话',
     ])
@@ -762,9 +896,10 @@ class EnterpriseWeixinBridge {
     })
   }
 
-  _buildHistoryChoiceMenu(sessions) {
+  _buildHistoryChoiceMenu(sessions, currentSessionId = null) {
     return buildHistoryChoiceMenuText({
       sessions,
+      currentSessionId,
       maxSessions: this._getConfig().maxHistorySessions || DEFAULT_HISTORY_LIMIT,
       getDirName: (cwd) => this._getDirName(cwd),
       getProfileName: (profileId) => this._getProfileName(profileId),
@@ -774,6 +909,14 @@ class EnterpriseWeixinBridge {
 
   _buildSessionCreatingText() {
     return '正在创建新会话，请继续发送消息'
+  }
+
+  _buildSessionSwitchedText(title) {
+    return `已切换到会话：${title}`
+  }
+
+  _buildSessionActivatingText() {
+    return '已恢复历史会话，请继续发送消息'
   }
 
   _getDirName(cwd) {
@@ -953,6 +1096,16 @@ class EnterpriseWeixinBridge {
     if (!text.trim() && images.length === 0) return
 
     const senderNick = identity.nickname || identity.userId
+    const session = this._agentSessionManager.sessions.get(sessionId)
+    if (session) {
+      this._notifier.notifySessionCreated({
+        sessionId,
+        userId: identity.userId,
+        nickname: senderNick,
+        chatId: message.chatId,
+        title: session.title,
+      })
+    }
     const userMessage = images.length > 0 && !text.trim()
       ? { text: '', images }
       : (images.length > 0 ? { text, images } : text)
@@ -1293,23 +1446,128 @@ class EnterpriseWeixinBridge {
   }
 
   listSendableTargets() {
-    const results = []
-    const seen = new Set()
+    return this._listContactTargets()
+  }
 
-    for (const [sessionId, target] of this._sessionTargets.entries()) {
-      if (!target?.userId || seen.has(target.userId)) continue
-      seen.add(target.userId)
-      results.push({
-        id: target.userId,
-        userId: target.userId,
-        displayName: target.displayName || target.userId,
-        name: target.displayName || target.userId,
-        hasContextToken: true,
-        sessionId,
-      })
+  async _listContactTargets() {
+    const token = await this._getContactAccessToken()
+    const departments = await this._listAllContactDepartments(token)
+    const deptIds = departments.length > 0 ? departments.map(item => item.id) : [1]
+    const seenUsers = new Map()
+
+    for (const deptId of deptIds) {
+      const users = await this._listDepartmentContactUsers(token, deptId)
+      for (const user of users) {
+        const userId = String(user.userid || user.userId || '').trim()
+        if (!userId || seenUsers.has(userId)) continue
+        const displayName = String(user.name || user.alias || user.nick || user.nickname || userId).trim() || userId
+        seenUsers.set(userId, {
+          id: userId,
+          userId,
+          targetId: userId,
+          displayName,
+          name: displayName,
+          deptId,
+          hasContextToken: true,
+        })
+      }
     }
 
-    return results
+    return Array.from(seenUsers.values()).sort((a, b) => a.displayName.localeCompare(b.displayName, 'zh-CN'))
+  }
+
+  async _getContactAccessToken() {
+    if (this._contactAccessToken && Date.now() < this._contactAccessTokenExpiresAt) {
+      return this._contactAccessToken
+    }
+
+    const config = this._getConfig()
+    const corpId = typeof config.corpId === 'string' ? config.corpId.trim() : ''
+    const botSecret = typeof config.secret === 'string' ? config.secret.trim() : ''
+    const contactSecret = typeof config.contactSecret === 'string' ? config.contactSecret.trim() : ''
+    if (!corpId) {
+      throw new Error('企业微信未配置 CorpID，无法读取组织成员列表')
+    }
+
+    const secretsToTry = []
+    if (botSecret) {
+      secretsToTry.push({
+        secret: botSecret,
+        label: '机器人 Secret',
+      })
+    }
+    if (contactSecret && contactSecret !== botSecret) {
+      secretsToTry.push({
+        secret: contactSecret,
+        label: '通讯录 Secret',
+      })
+    }
+    if (secretsToTry.length === 0) {
+      throw new Error('企业微信未配置可用 Secret，无法读取组织成员列表')
+    }
+
+    const errors = []
+    for (const candidate of secretsToTry) {
+      const response = await globalThis.fetch(
+        `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(corpId)}&corpsecret=${encodeURIComponent(candidate.secret)}`
+      )
+      if (!response.ok) {
+        const body = await response.text().catch(() => '')
+        errors.push(`${candidate.label}: HTTP ${response.status} ${body.substring(0, 200)}`)
+        continue
+      }
+
+      const result = await response.json()
+      if (result.errcode) {
+        errors.push(`${candidate.label}: ${result.errcode} ${result.errmsg || 'unknown error'}`)
+        continue
+      }
+      if (!result.access_token) {
+        errors.push(`${candidate.label}: 响应缺少 access_token`)
+        continue
+      }
+
+      const expiresIn = Number(result.expires_in || 7200)
+      this._contactAccessToken = result.access_token
+      this._contactAccessTokenExpiresAt = Date.now() + Math.max(expiresIn - 300, 60) * 1000
+      return this._contactAccessToken
+    }
+
+    throw new Error(`企业微信成员列表 access_token 获取失败；已尝试 ${secretsToTry.map(item => item.label).join('、')}。${errors.join('；')}`)
+  }
+
+  async _listAllContactDepartments(token) {
+    const response = await globalThis.fetch(
+      `https://qyapi.weixin.qq.com/cgi-bin/department/list?access_token=${encodeURIComponent(token)}`
+    )
+    if (!response.ok) {
+      throw new Error(`获取企业微信部门列表失败: HTTP ${response.status}`)
+    }
+    const result = await response.json()
+    if (result.errcode) {
+      throw new Error(`获取企业微信部门列表失败: ${result.errcode} ${result.errmsg || 'unknown error'}`)
+    }
+    const list = Array.isArray(result.department) ? result.department : []
+    return list
+      .map(item => ({
+        id: Number(item.id),
+        name: item.name || '',
+      }))
+      .filter(item => Number.isFinite(item.id))
+  }
+
+  async _listDepartmentContactUsers(token, departmentId) {
+    const response = await globalThis.fetch(
+      `https://qyapi.weixin.qq.com/cgi-bin/user/simplelist?access_token=${encodeURIComponent(token)}&department_id=${encodeURIComponent(departmentId)}&fetch_child=0`
+    )
+    if (!response.ok) {
+      throw new Error(`获取企业微信部门成员失败: HTTP ${response.status}`)
+    }
+    const result = await response.json()
+    if (result.errcode) {
+      throw new Error(`获取企业微信部门成员失败: ${result.errcode} ${result.errmsg || 'unknown error'}`)
+    }
+    return Array.isArray(result.userlist) ? result.userlist : []
   }
 
   _restoreSessionBindings() {
@@ -1346,11 +1604,6 @@ class EnterpriseWeixinBridge {
     this._activeSendChunks.delete(sessionId)
     this._desktopPendingImagePaths.delete(sessionId)
     this._replyCollector.clear(sessionId)
-    try {
-      this._agentSessionManager?.unbindSessionExternalImSource?.(sessionId)
-    } catch (err) {
-      console.warn('[EnterpriseWeixin] Failed to clear persisted IM binding:', err.message)
-    }
     const target = this._sessionTargets.get(sessionId)
     if (target?.userId) {
       this._targetSessionMap.delete(target.userId)

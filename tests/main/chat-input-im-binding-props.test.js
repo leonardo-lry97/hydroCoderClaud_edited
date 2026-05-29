@@ -8,6 +8,7 @@ const chatInputPath = path.resolve(__dirname, '../../src/renderer/pages/main/com
 const agentChatTabPath = path.resolve(__dirname, '../../src/renderer/pages/main/components/AgentChatTab.vue')
 const chatInputToolbarPath = path.resolve(__dirname, '../../src/renderer/pages/main/components/agent/ChatInputToolbar.vue')
 const tabManagementPath = path.resolve(__dirname, '../../src/renderer/composables/useTabManagement.js')
+const mainContentPath = path.resolve(__dirname, '../../src/renderer/pages/main/components/MainContent.vue')
 
 describe('chat input IM binding props', () => {
   it('passes session IM channel from the active tab into the toolbar', () => {
@@ -29,5 +30,12 @@ describe('chat input IM binding props', () => {
 
     expect(tabManagementSource).toContain('existingTab.imChannel = agentSession.imChannel || null')
     expect(tabManagementSource).toContain('imChannel: agentSession.imChannel || null')
+  })
+
+  it('passes IM channel when opening a tab from external IM session-created events', () => {
+    const mainContentSource = fs.readFileSync(mainContentPath, 'utf-8')
+
+    expect(mainContentSource).toContain('const tab = ensureAgentTab({')
+    expect(mainContentSource).toContain('imChannel: imType,')
   })
 })
