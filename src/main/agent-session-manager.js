@@ -1744,6 +1744,33 @@ class AgentSessionManager extends EventEmitter {
     return serializedSession
   }
 
+  unbindSessionExternalImSource(sessionId) {
+    const session = this.sessions.get(sessionId) || null
+    if (session) {
+      session.imChannel = null
+      session.updatedAt = new Date()
+    }
+
+    if (this.sessionDatabase?.setImChannel) {
+      this.sessionDatabase.setImChannel(sessionId, null)
+    }
+
+    if (this.sessionDatabase?.clearImIdentity) {
+      this.sessionDatabase.clearImIdentity(sessionId)
+    }
+
+    if (session) {
+      const serializedSession = this._serializeSession(session)
+      this._safeSend('session:updated', {
+        sessionId: session.id,
+        session: serializedSession
+      })
+      return serializedSession
+    }
+
+    return { id: sessionId, imChannel: null }
+  }
+
   _buildBridgeToolResultMessage(message) {
     const imagePaths = this._collectImageArtifactPaths(message)
     if (imagePaths.length === 0) return message
@@ -2226,6 +2253,7 @@ class AgentSessionManager extends EventEmitter {
     // 从内存 Map 移除
     this.sessions.delete(sessionId)
     console.log(`[AgentSession] Closed session ${sessionId}`)
+    this.emit('agentClosed', sessionId)
   }
 
   /**

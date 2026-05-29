@@ -291,6 +291,10 @@ class EnterpriseWeixinBridge {
     const mgr = this._agentSessionManager
     this._agentListeners = {
       userMessage: ({ sessionId, imChannel, content, images, source }) => {
+        if (!this._isLiveSession(sessionId)) {
+          this._clearSessionIdentity(sessionId)
+          return
+        }
         const hasBinding = this._sessionTargets.has(sessionId)
         if (source !== 'im-inbound' && (imChannel === this._imType || hasBinding)) {
           this._onDesktopIntervention(sessionId, content, images)
@@ -306,6 +310,18 @@ class EnterpriseWeixinBridge {
         this._activeSendChunks.delete(sessionId)
         this._desktopPendingImagePaths.delete(sessionId)
         this._replyCollector.clear(sessionId)
+      },
+      agentInterrupted: (sessionId, details) => {
+        const reason = typeof details?.reason === 'string' ? details.reason : ''
+        if (reason === 'user-cancel' || reason === 'host-cleanup') {
+          this._clearSessionIdentity(sessionId)
+        }
+      },
+      agentDeleted: (sessionId) => {
+        this._clearSessionIdentity(sessionId)
+      },
+      agentClosed: (sessionId) => {
+        this._clearSessionIdentity(sessionId)
       },
     }
     for (const [event, fn] of Object.entries(this._agentListeners)) {
@@ -1328,11 +1344,30 @@ class EnterpriseWeixinBridge {
 
   _clearSessionIdentity(sessionId) {
     this._activeSendChunks.delete(sessionId)
+    this._desktopPendingImagePaths.delete(sessionId)
+    this._replyCollector.clear(sessionId)
+    try {
+      this._agentSessionManager?.unbindSessionExternalImSource?.(sessionId)
+    } catch (err) {
+      console.warn('[EnterpriseWeixin] Failed to clear persisted IM binding:', err.message)
+    }
+    const target = this._sessionTargets.get(sessionId)
+    if (target?.userId) {
+      this._targetSessionMap.delete(target.userId)
+    }
+    this._sessionTargets.delete(sessionId)
     const identity = this._sessionIdentities.get(sessionId)
     if (!identity) return
     if (identity.chatType === 'single' && !this._sessionTargets.has(sessionId)) {
       this._sessionIdentities.delete(sessionId)
     }
+  }
+
+  _isLiveSession(sessionId) {
+    if (!sessionId) return false
+    if (this._agentSessionManager.sessions.has(sessionId)) return true
+    const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
+    return Boolean(row && row.status !== 'closed')
   }
 
   _startMsgIdCleanup() {

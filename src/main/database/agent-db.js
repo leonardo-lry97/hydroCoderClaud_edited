@@ -273,6 +273,14 @@ function withAgentOperations(BaseClass) {
       `).run(imChannel || null, Date.now(), sessionId)
     }
 
+    clearImIdentity(sessionId) {
+      this.db.prepare(`
+        UPDATE agent_conversations
+        SET staff_id = NULL, conversation_id = NULL, im_user_id = NULL, im_chat_id = NULL, updated_at = ?
+        WHERE session_id = ?
+      `).run(Date.now(), sessionId)
+    }
+
     /**
      * 按 IM 身份查询历史会话（仅使用新 IM 字段）
      * @param {string} imType — IM 类型（dingtalk / weixin / feishu / enterprise-weixin）

@@ -70,7 +70,10 @@ describe('EnterpriseWeixinBridge', () => {
       createAgentConversation: vi.fn(() => ({ id: 1 })),
       updateAgentConversation: vi.fn(),
       updateAgentMessageToolOutput: vi.fn(),
+      setImChannel: vi.fn(),
+      clearImIdentity: vi.fn(),
       updateDingTalkMetadata: vi.fn(),
+      closeAgentConversation: vi.fn(),
       getAgentConversation: vi.fn(() => null),
       getImSessionsByType: vi.fn(() => []),
       listAllAgentConversations: vi.fn(() => []),
@@ -330,6 +333,34 @@ describe('EnterpriseWeixinBridge', () => {
         }),
       })
     )
+  })
+
+  it('does not forward desktop messages after the bound session is closed and reopened', async () => {
+    const { bridge, manager, wsClient } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
+
+    await bridge.sendTextToTarget({
+      sessionId: created.id,
+      userId: 'user-a',
+      displayName: '雷斯林',
+      text: '先建立绑定',
+    })
+
+    await manager.close(created.id)
+    manager.reopen(created.id)
+
+    manager.emit('userMessage', {
+      sessionId: created.id,
+      imChannel: 'enterprise-weixin',
+      content: '关闭重开后也不应回发',
+      images: null,
+      source: 'manual',
+    })
+
+    expect(wsClient.sendMessage).toHaveBeenCalledTimes(1)
+    expect(bridge.getSessionBinding(created.id)).toBeNull()
+    expect(manager.sessionDatabase.setImChannel).toHaveBeenCalledWith(created.id, null)
+    expect(manager.sessionDatabase.clearImIdentity).toHaveBeenCalledWith(created.id)
   })
 
   it('downloads inbound image messages and submits base64 images to Agent', async () => {
