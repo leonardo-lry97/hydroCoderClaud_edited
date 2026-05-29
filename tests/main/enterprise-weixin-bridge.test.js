@@ -481,7 +481,10 @@ describe('EnterpriseWeixinBridge', () => {
     })
 
     bridge._onDesktopIntervention(sessionId, '', [
-      { data: `data:image/png;base64,${Buffer.from('desktop-image').toString('base64')}` },
+      {
+        base64: Buffer.from('desktop-image').toString('base64'),
+        mediaType: 'image/png',
+      },
     ])
 
     bridge._onAgentMessage(sessionId, {
@@ -494,5 +497,13 @@ describe('EnterpriseWeixinBridge', () => {
 
     expect(wsClient.uploadMedia).toHaveBeenCalledTimes(2)
     expect(wsClient.sendMediaMessage).toHaveBeenCalledTimes(2)
+    expect(wsClient.uploadMedia).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Buffer),
+      expect.objectContaining({
+        type: 'image',
+        filename: 'desktop-image.png',
+      })
+    )
   })
 })

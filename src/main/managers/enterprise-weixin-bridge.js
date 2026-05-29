@@ -1101,13 +1101,18 @@ class EnterpriseWeixinBridge {
     if (!this._wsClient || typeof this._wsClient.uploadMedia !== 'function') return
 
     for (const image of images) {
-      const dataUrl = typeof image?.data === 'string' ? image.data : (typeof image === 'string' ? image : '')
-      const buffer = this._base64ImageToBuffer(dataUrl)
+      const rawBase64 = typeof image?.base64 === 'string'
+        ? image.base64
+        : (typeof image?.data === 'string' ? image.data : (typeof image === 'string' ? image : ''))
+      const mediaType = typeof image?.mediaType === 'string' && image.mediaType.trim()
+        ? image.mediaType.trim()
+        : this._extractImageMediaType(rawBase64)
+      const buffer = this._base64ImageToBuffer(rawBase64)
       if (!buffer) continue
       try {
         const uploaded = await this._wsClient.uploadMedia(buffer, {
           type: 'image',
-          filename: 'desktop-image.png',
+          filename: `desktop-image.${this._mediaTypeToExt(mediaType)}`,
         })
         const mediaId = uploaded?.media_id
         if (!mediaId) continue
@@ -1126,6 +1131,22 @@ class EnterpriseWeixinBridge {
       return Buffer.from(payload, 'base64')
     } catch {
       return null
+    }
+  }
+
+  _extractImageMediaType(rawValue) {
+    if (typeof rawValue !== 'string' || !rawValue.trim()) return 'image/png'
+    const match = rawValue.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/)
+    return match?.[1] || 'image/png'
+  }
+
+  _mediaTypeToExt(mediaType) {
+    switch (mediaType) {
+      case 'image/jpeg': return 'jpg'
+      case 'image/gif': return 'gif'
+      case 'image/webp': return 'webp'
+      case 'image/bmp': return 'bmp'
+      default: return 'png'
     }
   }
 
