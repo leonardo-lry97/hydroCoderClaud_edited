@@ -1,8 +1,8 @@
 /**
  * 外部 IM 消息注入适配器
  *
- * 统一 useAgentChat 中钉钉/微信/飞书的消息监听模式，
- * 把 onDingTalkMessageReceived / onWeixinMessageReceived / onFeishuMessageReceived
+ * 统一 useAgentChat 中钉钉/微信/飞书/企业微信的消息监听模式，
+ * 把 onDingTalkMessageReceived / onWeixinMessageReceived / onFeishuMessageReceived / onEnterpriseWeixinMessageReceived
  * 归一到同一格式，统一组装 message bubble。
  *
  * 新增 IM 渠道时只需在此文件中添加一条 Listener 配置即可。
@@ -48,6 +48,18 @@ const IM_MESSAGE_LISTENER_CONFIG = {
       content: data.text,
       timestamp: Date.now(),
       source: 'feishu',
+      senderNick: data.senderNick,
+      ...(data.images && data.images.length > 0 ? { images: data.images } : {}),
+    }),
+  },
+  'enterprise-weixin': {
+    channelName: 'onEnterpriseWeixinMessageReceived',
+    normalize: (data) => ({
+      id: `msg-ewx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      role: MessageRole.USER,
+      content: data.text,
+      timestamp: Date.now(),
+      source: 'enterprise-weixin',
       senderNick: data.senderNick,
       ...(data.images && data.images.length > 0 ? { images: data.images } : {}),
     }),

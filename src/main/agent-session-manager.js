@@ -756,7 +756,7 @@ class AgentSessionManager extends EventEmitter {
     return this._serializeSession(session)
   }
 
-  appendExternalUserMessage(sessionId, { content, source, senderNick, meta } = {}) {
+  appendExternalUserMessage(sessionId, { content, source, senderNick, meta, images } = {}) {
     const session = this.sessions.get(sessionId)
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`)
@@ -776,6 +776,7 @@ class AgentSessionManager extends EventEmitter {
 
     if (source) message.source = source
     if (senderNick) message.senderNick = senderNick
+    if (Array.isArray(images) && images.length > 0) message.images = images
     if (meta && typeof meta === 'object') message.meta = meta
 
     this._storeMessage(session, message)

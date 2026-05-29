@@ -492,6 +492,7 @@ let cleanupDingtalkSession = null
 let cleanupDingtalkSessionClosed = null
 let cleanupWeixinSession = null
 let cleanupFeishuSession = null
+let cleanupEnterpriseWeixinSession = null
 let cleanupFeishuSessionClosed = null
 let cleanupAgentStatus = null
 let cleanupScheduledTask = null
@@ -563,6 +564,11 @@ onMounted(() => {
       focusConversationById(data?.sessionId)
     })
   }
+  if (window.electronAPI?.onEnterpriseWeixinSessionCreated) {
+    cleanupEnterpriseWeixinSession = window.electronAPI.onEnterpriseWeixinSessionCreated((data) => {
+      focusConversationById(data?.sessionId)
+    })
+  }
   if (window.electronAPI?.onDingTalkSessionClosed) {
     cleanupDingtalkSessionClosed = window.electronAPI.onDingTalkSessionClosed(() => {
       loadConversations()
@@ -590,6 +596,7 @@ onUnmounted(() => {
   if (cleanupDingtalkSessionClosed) cleanupDingtalkSessionClosed()
   if (cleanupWeixinSession) cleanupWeixinSession()
   if (cleanupFeishuSession) cleanupFeishuSession()
+  if (cleanupEnterpriseWeixinSession) cleanupEnterpriseWeixinSession()
   if (cleanupFeishuSessionClosed) cleanupFeishuSessionClosed()
   if (cleanupScheduledTask) cleanupScheduledTask()
   if (cleanupSessionUpdated) cleanupSessionUpdated()

@@ -100,6 +100,7 @@
       :dingtalk-notify-api="props.dingtalkNotifyApi"
       :weixin-notify-api="weixinNotifyApi"
       :feishu-notify-api="feishuNotifyApi"
+      :enterprise-weixin-notify-api="props.enterpriseWeixinNotifyApi"
       v-model:model-value="selectedModel"
       @update:model-value="applyUserSelectedModel"
       @api-profile-selected="handleApiProfileSelected"
@@ -178,6 +179,10 @@ const props = defineProps({
     default: null
   },
   feishuNotifyApi: {
+    type: Object,
+    default: null
+  },
+  enterpriseWeixinNotifyApi: {
     type: Object,
     default: null
   }

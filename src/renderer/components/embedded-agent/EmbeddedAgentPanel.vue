@@ -125,6 +125,7 @@
                 :dingtalk-notify-api="dingtalkNotifyApi"
                 :weixin-notify-api="weixinNotifyApi"
                 :feishu-notify-api="feishuNotifyApi"
+                :enterprise-weixin-notify-api="enterpriseWeixinNotifyApi"
                 @ready="handleReady"
                 @api-profile-selected="handleApiProfileSelected"
                 @model-selected="handleModelSelected"
@@ -246,6 +247,16 @@ const feishuNotifyApi = computed(() => {
     getSessionFeishuBinding: api.getSessionFeishuBinding?.bind(api),
     bindSessionToFeishuTarget: api.bindSessionToFeishuTarget?.bind(api),
     sendFeishuNotifyText: api.sendFeishuNotifyText?.bind(api)
+  }
+})
+const enterpriseWeixinNotifyApi = computed(() => {
+  const api = window.electronAPI || null
+  if (!api) return null
+  return {
+    listEnterpriseWeixinTargets: api.listEnterpriseWeixinTargets?.bind(api),
+    getSessionEnterpriseWeixinBinding: api.getSessionEnterpriseWeixinBinding?.bind(api),
+    bindSessionToEnterpriseWeixinTarget: api.bindSessionToEnterpriseWeixinTarget?.bind(api),
+    sendEnterpriseWeixinText: api.sendEnterpriseWeixinText?.bind(api)
   }
 })
 const apiProfiles = ref([])

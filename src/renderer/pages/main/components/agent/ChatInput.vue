@@ -19,6 +19,7 @@
         :dingtalk-notify-api="dingtalkNotifyApi"
         :weixin-notify-api="weixinNotifyApi"
         :feishu-notify-api="feishuNotifyApi"
+        :enterprise-weixin-notify-api="enterpriseWeixinNotifyApi"
         @update:model-value="$emit('update:modelValue', $event)"
         @api-profile-selected="$emit('api-profile-selected', $event)"
         @toggle-queue="$emit('update:queueEnabled', !queueEnabled)"
@@ -226,6 +227,10 @@ const props = defineProps({
     default: null
   },
   feishuNotifyApi: {
+    type: Object,
+    default: null
+  },
+  enterpriseWeixinNotifyApi: {
     type: Object,
     default: null
   }

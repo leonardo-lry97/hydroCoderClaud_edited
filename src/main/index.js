@@ -558,6 +558,9 @@ if (hasSingleInstanceLock) {
       feishuBridge.start().catch(err => {
         console.error('[Main] Feishu bridge auto-start failed:', err.message)
       })
+      enterpriseWeixinBridge.start().catch(err => {
+        console.error('[Main] Enterprise Weixin bridge auto-start failed:', err.message)
+      })
     }, 3000)
 
     // macOS 特定行为

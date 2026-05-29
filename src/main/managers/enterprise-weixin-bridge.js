@@ -34,6 +34,7 @@ const MSG_ID_TTL = 10 * 60 * 1000
 const DEFAULT_HISTORY_LIMIT = 5
 const HISTORY_CHOICE_TIMEOUT = 10 * 60 * 1000
 const ENTERPRISE_WEIXIN_UNSUPPORTED_MESSAGE_TEXT = '暂不支持该类型的企业微信消息，请发送文本或图片消息'
+const ENTERPRISE_WEIXIN_IMAGE_DIR = 'enterprise-weixin'
 
 class EnterpriseWeixinBridge {
   constructor(configManager, agentSessionManager, mainWindow) {
@@ -46,6 +47,7 @@ class EnterpriseWeixinBridge {
     this._wsClient = null
     this._connected = false
     this._sessionDatabase = agentSessionManager.sessionDatabase
+    this._startPromise = null
 
     this._notifier = new ImFrontendNotifier(mainWindow, this._imType)
     this._replyCollector = new ImReplyCollector({ maxTextLength: MAX_TEXT_LENGTH })
@@ -62,6 +64,7 @@ class EnterpriseWeixinBridge {
     this._targetSessionMap = new Map()
     this._pendingInboundMessages = new Map()
     this._activeSendChunks = new Map()
+    this._desktopPendingImagePaths = new Map()
 
     this._bindAgentEvents()
   }
@@ -121,19 +124,47 @@ class EnterpriseWeixinBridge {
       return false
     }
 
-    this._sessionMapper = this._createSessionMapper(config)
-    this._restoreSessionBindings()
-
-    try {
-      await this._connect(botId, secret)
-      this._startMsgIdCleanup()
-      console.log('[EnterpriseWeixin] Bridge started successfully')
+    if (this._connected && this._wsClient) {
       return true
-    } catch (err) {
-      console.error('[EnterpriseWeixin] Failed to start:', err.message)
-      this._notifier.notifyError({ error: err.message })
-      return false
     }
+
+    if (this._startPromise) {
+      return this._startPromise
+    }
+
+    this._startPromise = (async () => {
+      if (this._wsClient && !this._connected) {
+        await this.stop()
+      }
+
+      this._sessionMapper = this._createSessionMapper(config)
+      this._restoreSessionBindings()
+
+      try {
+        await this._connect(botId, secret)
+        this._startMsgIdCleanup()
+        console.log('[EnterpriseWeixin] Bridge started successfully')
+        return true
+      } catch (err) {
+        try {
+          this._unbindWsEvents()
+          if (this._wsClient) {
+            try { this._wsClient.disconnect() } catch {}
+            this._wsClient = null
+          }
+          this._connected = false
+          this._stopMsgIdCleanup()
+          this._notifier.notifyStatusChange({ connected: false })
+        } catch {}
+        console.error('[EnterpriseWeixin] Failed to start:', err.message)
+        this._notifier.notifyError({ error: err.message })
+        return false
+      } finally {
+        this._startPromise = null
+      }
+    })()
+
+    return this._startPromise
   }
 
   async stop() {
@@ -145,6 +176,7 @@ class EnterpriseWeixinBridge {
     this._processedMsgIds.clear()
     this._pendingInboundMessages.clear()
     this._activeSendChunks.clear()
+    this._desktopPendingImagePaths.clear()
 
     if (this._wsClient) {
       try { this._wsClient.disconnect() } catch {}
@@ -272,6 +304,7 @@ class EnterpriseWeixinBridge {
       },
       agentError: (sessionId) => {
         this._activeSendChunks.delete(sessionId)
+        this._desktopPendingImagePaths.delete(sessionId)
         this._replyCollector.clear(sessionId)
       },
     }
@@ -282,7 +315,8 @@ class EnterpriseWeixinBridge {
 
   async _handleMessage(frame) {
     this._syncSessionDatabase()
-    const message = this._normalizeInboundMessage(frame)
+    const normalizedMessage = this._normalizeInboundMessage(frame)
+    const message = await this._hydrateInboundImages(normalizedMessage)
     if (!message?.msgId) return
 
     if (this._processedMsgIds.has(message.msgId)) return
@@ -316,14 +350,22 @@ class EnterpriseWeixinBridge {
       return
     }
 
-    const currentSessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
+    let currentSessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
+    if (!currentSessionId && identity.chatType === 'single') {
+      currentSessionId = this._findBoundSessionIdByUserId(identity.userId)
+      if (currentSessionId) {
+        this._sessionMapper.sessionMap.set(mapKey, currentSessionId)
+      }
+    }
     const currentSession = currentSessionId ? this._agentSessionManager.sessions.get(currentSessionId) : null
     if (currentSession?.status === 'streaming') {
       await this._sendTextReply(frame, 'AI 正在响应中，请等待完成后再发送下一条消息')
       return
     }
 
-    let ensured = await this._sessionMapper.ensureSession(identity)
+    let ensured = currentSessionId
+      ? { sessionId: currentSessionId, mapKey }
+      : await this._sessionMapper.ensureSession(identity)
     if (ensured?.needsChoice) {
       this._pendingInboundMessages.set(mapKey, { frame, message, identity })
       this._sessionMapper.initPendingChoice(
@@ -427,14 +469,16 @@ class EnterpriseWeixinBridge {
           .filter(item => item?.msgtype === 'text')
           .map(item => item?.text?.content || '')
           .join(''),
-        unsupported: items.some(item => item?.msgtype === 'image'),
+        imageItems: items
+          .filter(item => item?.msgtype === 'image' && item?.image?.url)
+          .map(item => item.image),
       }
     }
 
     if (msgType === MessageType.Image || msgType === 'image') {
       return {
         ...base,
-        unsupported: true,
+        imageItems: body?.image?.url ? [body.image] : [],
       }
     }
 
@@ -489,7 +533,7 @@ class EnterpriseWeixinBridge {
     })
 
     if (result.action === 'resume') {
-      await this._sendTextReply(frame, result.wasActivated ? '已连接到当前会话' : '已恢复历史会话')
+      await this._sendTextReply(frame, result.wasActivated ? '已连接到当前会话' : '会话恢复中，请等待信息返回后，即可开始聊天')
     } else if (result.action === 'new') {
       await this._sendTextReply(frame, this._buildSessionCreatingText())
     }
@@ -577,14 +621,79 @@ class EnterpriseWeixinBridge {
     let sessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
     if (sessionId) return sessionId
 
-    const targetSessionId = this._targetSessionMap.get(identity.userId)
+    const targetSessionId = this._findBoundSessionIdByUserId(identity.userId)
     if (!targetSessionId) return null
-    const valid = await this._sessionMapper._validateSession(targetSessionId)
-    if (!valid) {
-      this._targetSessionMap.delete(identity.userId)
-      return null
-    }
     return targetSessionId
+  }
+
+  _findBoundSessionIdByUserId(userId) {
+    const normalizedUserId = typeof userId === 'string' ? userId.trim() : ''
+    if (!normalizedUserId) return null
+
+    const isSessionAvailable = (sessionId) => {
+      if (!sessionId) return false
+      const liveSession = this._agentSessionManager.sessions.get(sessionId)
+      if (liveSession) return true
+      const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
+      return Boolean(row && row.status !== 'closed')
+    }
+
+    const directSessionId = this._targetSessionMap.get(normalizedUserId)
+    if (isSessionAvailable(directSessionId)) {
+      return directSessionId
+    }
+    if (directSessionId) {
+      this._targetSessionMap.delete(normalizedUserId)
+      this._sessionTargets.delete(directSessionId)
+    }
+
+    for (const [sessionId, target] of this._sessionTargets.entries()) {
+      if (target?.userId !== normalizedUserId) continue
+      if (!isSessionAvailable(sessionId)) {
+        this._sessionTargets.delete(sessionId)
+        continue
+      }
+      this._targetSessionMap.set(normalizedUserId, sessionId)
+      return sessionId
+    }
+
+    for (const [sessionId, session] of this._agentSessionManager.sessions.entries()) {
+      const targetUserId = typeof session?.meta?.staffId === 'string'
+        ? session.meta.staffId.trim()
+        : ''
+      if (targetUserId !== normalizedUserId) continue
+      this._sessionTargets.set(sessionId, {
+        userId: normalizedUserId,
+        displayName: this._sessionTargets.get(sessionId)?.displayName || normalizedUserId,
+      })
+      this._targetSessionMap.set(normalizedUserId, sessionId)
+      return sessionId
+    }
+
+    const rows = this._sessionDatabase?.listAllAgentConversations?.({
+      limit: Math.max(this._getConfig().maxHistorySessions || DEFAULT_HISTORY_LIMIT, 20),
+    })
+    const matched = Array.isArray(rows)
+      ? rows
+        .filter(row => row?.status !== 'closed')
+        .filter(row => row?.im_channel === this._imType)
+        .filter(row => row?.staff_id === normalizedUserId)
+        .filter(row => !row?.conversation_id || row?.conversation_id === normalizedUserId)
+        .sort((a, b) => (b?.updated_at || 0) - (a?.updated_at || 0))[0]
+      : null
+    if (matched) {
+      const fallbackSessionId = matched.session_id || matched.sessionId || matched.id || null
+      if (fallbackSessionId) {
+        this._targetSessionMap.set(normalizedUserId, fallbackSessionId)
+        this._sessionTargets.set(fallbackSessionId, {
+          userId: normalizedUserId,
+          displayName: this._sessionTargets.get(fallbackSessionId)?.displayName || normalizedUserId,
+        })
+        return fallbackSessionId
+      }
+    }
+
+    return null
   }
 
   _getActiveSessionsByChat(chatId) {
@@ -672,9 +781,145 @@ class EnterpriseWeixinBridge {
   async _sendTextReply(frame, content) {
     if (!this._wsClient || !frame?.headers?.req_id) return
     await this._wsClient.reply(frame, {
-      msgtype: 'text',
-      text: { content: String(content || '') },
+      msgtype: 'markdown',
+      markdown: { content: String(content || '') },
     })
+  }
+
+  async _hydrateInboundImages(message) {
+    const imageItems = Array.isArray(message?.imageItems) ? message.imageItems : []
+    if (!this._wsClient || imageItems.length === 0) {
+      return {
+        ...message,
+        images: Array.isArray(message?.images) ? message.images : [],
+        imageItems: [],
+        unsupported: !!message?.unsupported,
+      }
+    }
+
+    const images = Array.isArray(message?.images) ? [...message.images] : []
+    for (const image of imageItems) {
+      const downloadedImage = await this._downloadInboundImage(image)
+      if (downloadedImage) {
+        images.push(downloadedImage)
+      }
+    }
+
+    return {
+      ...message,
+      images,
+      imageItems: [],
+      unsupported: images.length === 0 && !String(message?.text || '').trim(),
+    }
+  }
+
+  async _downloadInboundImage(image) {
+    const url = typeof image?.url === 'string' ? image.url.trim() : ''
+    if (!url || typeof this._wsClient?.downloadFile !== 'function') return null
+
+    try {
+      const { buffer, filename, contentType } = await this._wsClient.downloadFile(url, image?.aeskey)
+      if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) return null
+
+      return {
+        base64: buffer.toString('base64'),
+        mediaType: this._detectInboundImageMediaType(buffer, filename, contentType),
+      }
+    } catch (err) {
+      console.error('[EnterpriseWeixin] Failed to download inbound image:', err.message)
+      return null
+    }
+  }
+
+  _detectInboundImageMediaType(buffer, filename, contentType) {
+    const normalizedContentType = typeof contentType === 'string'
+      ? contentType.split(';')[0].trim().toLowerCase()
+      : ''
+    if (normalizedContentType.startsWith('image/')) {
+      return normalizedContentType
+    }
+
+    if (buffer?.length >= 12) {
+      if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return 'image/png'
+      if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg'
+      if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) return 'image/gif'
+      if (buffer.slice(0, 4).toString('ascii') === 'RIFF' && buffer.slice(8, 12).toString('ascii') === 'WEBP') return 'image/webp'
+      if (buffer[0] === 0x42 && buffer[1] === 0x4d) return 'image/bmp'
+    }
+
+    const ext = path.extname(typeof filename === 'string' ? filename : '').toLowerCase()
+    switch (ext) {
+      case '.png': return 'image/png'
+      case '.jpg':
+      case '.jpeg': return 'image/jpeg'
+      case '.gif': return 'image/gif'
+      case '.webp': return 'image/webp'
+      case '.bmp': return 'image/bmp'
+      default: return 'image/png'
+    }
+  }
+
+  _ensureTempAssetDir() {
+    const rootDir = path.join(os.tmpdir(), 'hydro-desktop-im-assets', ENTERPRISE_WEIXIN_IMAGE_DIR)
+    fs.mkdirSync(rootDir, { recursive: true })
+    return rootDir
+  }
+
+  _resolveDownloadedFilename(filename, url) {
+    const rawName = typeof filename === 'string' ? filename.trim() : ''
+    if (rawName) return path.basename(rawName)
+
+    try {
+      const parsed = new URL(url)
+      const fromPath = path.basename(parsed.pathname || '')
+      if (fromPath) return fromPath
+    } catch {}
+
+    return 'image.bin'
+  }
+
+  async _uploadImageFile(imagePath) {
+    if (!this._wsClient || typeof this._wsClient.uploadMedia !== 'function') return null
+    if (typeof imagePath !== 'string' || !imagePath.trim()) return null
+
+    try {
+      const buffer = await fs.promises.readFile(imagePath)
+      if (!buffer?.length) return null
+      const result = await this._wsClient.uploadMedia(buffer, {
+        type: 'image',
+        filename: path.basename(imagePath) || 'image.png',
+      })
+      return result?.media_id || null
+    } catch (err) {
+      console.error('[EnterpriseWeixin] Failed to upload image:', imagePath, err.message)
+      return null
+    }
+  }
+
+  async _replyImages(frame, imagePaths = []) {
+    if (!this._wsClient || typeof this._wsClient.replyMedia !== 'function') return
+    for (const imagePath of imagePaths) {
+      const mediaId = await this._uploadImageFile(imagePath)
+      if (!mediaId) continue
+      try {
+        await this._wsClient.replyMedia(frame, 'image', mediaId)
+      } catch (err) {
+        console.error('[EnterpriseWeixin] Failed to reply image media:', imagePath, err.message)
+      }
+    }
+  }
+
+  async _sendImagesToChat(chatId, imagePaths = []) {
+    if (!this._wsClient || typeof this._wsClient.sendMediaMessage !== 'function') return
+    for (const imagePath of imagePaths) {
+      const mediaId = await this._uploadImageFile(imagePath)
+      if (!mediaId) continue
+      try {
+        await this._wsClient.sendMediaMessage(chatId, 'image', mediaId)
+      } catch (err) {
+        console.error('[EnterpriseWeixin] Failed to send proactive image media:', imagePath, err.message)
+      }
+    }
   }
 
   _enqueueInboundMessage(sessionId, frame, message, identity) {
@@ -696,7 +941,7 @@ class EnterpriseWeixinBridge {
       ? { text: '', images }
       : (images.length > 0 ? { text, images } : text)
 
-    this._replyCollector.startCollect(sessionId, {
+    const { donePromise } = this._replyCollector.startCollect(sessionId, {
       webhook: frame,
       sendFn: async (_sid, chunk) => {
         if (!chunk) return
@@ -708,20 +953,12 @@ class EnterpriseWeixinBridge {
       content: text || '[图片]',
       source: this._imType,
       senderNick,
+      images,
       meta: {
         msgId: message.msgId,
         identity,
         enterpriseWeixinChatId: message.chatId,
       },
-    })
-
-    const donePromise = new Promise((resolve) => {
-      const originalDone = this._replyCollector.onAgentResult.bind(this._replyCollector)
-      this._replyCollector.onAgentResult = async (sid) => {
-        const result = await originalDone(sid)
-        if (sid === sessionId) resolve(result)
-        return result
-      }
     })
 
     try {
@@ -776,9 +1013,21 @@ class EnterpriseWeixinBridge {
   }
 
   _onAgentMessage(sessionId, message) {
-    const collector = this._replyCollector._collectors?.get(sessionId)
-    if (!collector?.webhook) return
-    this._sendStreamChunk(sessionId, collector.webhook, message)
+    const desktopPending = this._desktopPendingImagePaths.get(sessionId)
+    if (desktopPending) {
+      for (const imagePath of extractImagePaths(message)) {
+        desktopPending.add(imagePath)
+      }
+    }
+
+    this._replyCollector.onAgentMessage(sessionId, message, (chunk) => {
+      const collector = this._replyCollector._collectors?.get(sessionId)
+      if (!collector?.webhook) return
+      return this._sendStreamChunk(sessionId, collector.webhook, {
+        content: [{ type: 'text', text: chunk }],
+      })
+    })
+
     for (const imagePath of extractImagePaths(message)) {
       this._replyCollector.addImagePath(sessionId, imagePath)
     }
@@ -787,21 +1036,49 @@ class EnterpriseWeixinBridge {
   async _onAgentResult(sessionId) {
     const collector = this._replyCollector._collectors?.get(sessionId)
     const frame = collector?.webhook || null
+    const identity = this._sessionIdentities.get(sessionId) || null
     const sendChunk = this._activeSendChunks.get(sessionId)
     if (sendChunk) {
       try {
-        await sendChunk('', true)
+        const finalText = Array.isArray(collector?.chunks) ? collector.chunks.join('') : ''
+        const sentText = collector?.sentText || ''
+        const remaining = finalText.startsWith(sentText) ? finalText.slice(sentText.length) : ''
+        await sendChunk(remaining, true)
       } catch (err) {
         console.error('[EnterpriseWeixin] Stream finish error:', err.message)
       }
       this._activeSendChunks.delete(sessionId)
     }
 
-    const result = await this._replyCollector.onAgentResult(sessionId)
+    const result = await this._replyCollector.onAgentResult(sessionId, async (_sid, data) => {
+      if (!identity || !this._wsClient || !this._connected) return
+
+      const chatId = identity.chatType === 'group' ? identity.chatId : identity.senderId
+      if (!chatId) return
+
+      const pendingImagePaths = [...(this._desktopPendingImagePaths.get(sessionId) || [])]
+      this._desktopPendingImagePaths.delete(sessionId)
+
+      if (data?.fullText) {
+        const block = `桌面介入> ${data.userContent}\n\n${data.fullText}`
+        await this._wsClient.sendMessage(chatId, {
+          msgtype: 'markdown',
+          markdown: { content: block },
+        })
+      }
+
+      if (Array.isArray(data?.userImages) && data.userImages.length > 0) {
+        await this._sendBase64ImagesToChat(chatId, data.userImages)
+      }
+
+      if (pendingImagePaths.length > 0) {
+        await this._sendImagesToChat(chatId, pendingImagePaths)
+      }
+    })
     if (!frame || !this._wsClient) return result
 
     if (result?.imagePaths?.length > 0) {
-      console.log('[EnterpriseWeixin] Image reply is deferred to phase 2:', result.imagePaths.length)
+      await this._replyImages(frame, result.imagePaths)
     }
 
     return result
@@ -814,18 +1091,42 @@ class EnterpriseWeixinBridge {
     const chatId = identity.chatType === 'group' ? identity.chatId : identity.senderId
     if (!chatId || !this._wsClient || !this._connected) return
 
-    this._replyCollector.recordDesktopIntervention(
-      sessionId,
-      { content, images },
-      async (_sid, { userContent, fullText }) => {
-        if (!fullText) return
-        const block = `桌面介入> ${userContent}\n\n${fullText}`
-        await this._wsClient.sendMessage(chatId, {
-          msgtype: 'markdown',
-          markdown: { content: block },
+    this._desktopPendingImagePaths.set(sessionId, new Set())
+
+    this._replyCollector.recordDesktopIntervention(sessionId, { content, images }, async () => {})
+  }
+
+  async _sendBase64ImagesToChat(chatId, images = []) {
+    if (!chatId || !Array.isArray(images) || images.length === 0) return
+    if (!this._wsClient || typeof this._wsClient.uploadMedia !== 'function') return
+
+    for (const image of images) {
+      const dataUrl = typeof image?.data === 'string' ? image.data : (typeof image === 'string' ? image : '')
+      const buffer = this._base64ImageToBuffer(dataUrl)
+      if (!buffer) continue
+      try {
+        const uploaded = await this._wsClient.uploadMedia(buffer, {
+          type: 'image',
+          filename: 'desktop-image.png',
         })
+        const mediaId = uploaded?.media_id
+        if (!mediaId) continue
+        await this._wsClient.sendMediaMessage(chatId, 'image', mediaId)
+      } catch (err) {
+        console.error('[EnterpriseWeixin] Failed to send desktop base64 image:', err.message)
       }
-    )
+    }
+  }
+
+  _base64ImageToBuffer(rawValue) {
+    if (typeof rawValue !== 'string' || !rawValue.trim()) return null
+    const match = rawValue.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/)
+    const payload = match ? match[1] : rawValue
+    try {
+      return Buffer.from(payload, 'base64')
+    } catch {
+      return null
+    }
   }
 
   async sendTextToTarget({ sessionId, userId, targetId, displayName, text } = {}) {

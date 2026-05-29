@@ -258,6 +258,59 @@
       </Transition>
 
       <div
+        v-if="showEnterpriseWeixinBtn"
+        class="enterprise-weixin-btn"
+        :class="{ sending: enterpriseWeixinSending }"
+        :title="enterpriseWeixinBtnTitle"
+        @click="toggleEnterpriseWeixinDropdown"
+      >
+        <Icon name="weixin" :size="16" />
+      </div>
+      <Transition name="dropdown">
+        <div v-if="showEnterpriseWeixinDropdown && showEnterpriseWeixinBtn" class="enterprise-weixin-dropdown">
+          <div v-if="enterpriseWeixinLoading" class="enterprise-weixin-loading">{{ t('common.loading') }}...</div>
+          <template v-else>
+            <div class="enterprise-weixin-panel-title">{{ t('agent.enterpriseWeixinQuickSendTitle') }}</div>
+            <div class="enterprise-weixin-panel-hint">{{ t('agent.enterpriseWeixinQuickSendHint') }}</div>
+            <div v-if="enterpriseWeixinTargets.length > 0" class="enterprise-weixin-target-list">
+              <div
+                v-for="target in enterpriseWeixinTargets"
+                :key="target.id"
+                class="enterprise-weixin-target-item"
+                :class="{ active: selectedEnterpriseWeixinTargetId === target.id }"
+                @click="selectedEnterpriseWeixinTargetId = target.id"
+              >
+                <span class="enterprise-weixin-target-name">{{ target.displayName || target.name || target.userId || target.id || '未命名' }}</span>
+              </div>
+            </div>
+            <div v-if="enterpriseWeixinTargets.length === 0" class="enterprise-weixin-empty">{{ t('agent.enterpriseWeixinNoTargets') }}</div>
+            <template v-else>
+              <textarea
+                v-model="enterpriseWeixinText"
+                class="enterprise-weixin-message-input"
+                :placeholder="t('agent.enterpriseWeixinQuickSendPlaceholder')"
+                rows="3"
+              />
+              <div v-if="enterpriseWeixinError" class="enterprise-weixin-error">{{ enterpriseWeixinError }}</div>
+              <div class="enterprise-weixin-actions">
+                <button class="enterprise-weixin-action secondary" type="button" @click="closeEnterpriseWeixinDropdown">
+                  {{ t('common.cancel') }}
+                </button>
+                <button
+                  class="enterprise-weixin-action primary"
+                  type="button"
+                  :disabled="!canSendEnterpriseWeixin || enterpriseWeixinSending"
+                  @click="sendEnterpriseWeixinQuickMessage"
+                >
+                  {{ enterpriseWeixinSending ? t('agent.enterpriseWeixinQuickSending') : t('agent.enterpriseWeixinQuickSend') }}
+                </button>
+              </div>
+            </template>
+          </template>
+        </div>
+      </Transition>
+
+      <div
         class="expand-input-btn"
         :title="isExpanded ? t('common.collapse') : t('common.expand')"
         @click="emit('toggle-expanded')"
@@ -306,6 +359,10 @@ const props = defineProps({
   feishuNotifyApi: {
     type: Object,
     default: null
+  },
+  enterpriseWeixinNotifyApi: {
+    type: Object,
+    default: null
   }
 })
 
@@ -350,6 +407,13 @@ const feishuText = ref('')
 const feishuError = ref('')
 const feishuLoading = ref(false)
 const feishuSending = ref(false)
+const showEnterpriseWeixinDropdown = ref(false)
+const enterpriseWeixinTargets = ref([])
+const selectedEnterpriseWeixinTargetId = ref(null)
+const enterpriseWeixinText = ref('')
+const enterpriseWeixinError = ref('')
+const enterpriseWeixinLoading = ref(false)
+const enterpriseWeixinSending = ref(false)
 
 const resolvedImBindingSource = computed(() => {
   return props.sessionImChannel || null
@@ -379,6 +443,14 @@ const feishuBtnTitle = computed(() => t('agent.feishuQuickSendTitle'))
 const selectedFeishuTarget = computed(() => feishuTargets.value.find(target => target.id === selectedFeishuTargetId.value) || null)
 const canSendFeishu = computed(() => Boolean(selectedFeishuTarget.value && feishuText.value.trim()))
 const resolvedFeishuNotifyApi = computed(() => props.feishuNotifyApi || window.electronAPI || null)
+const showEnterpriseWeixinBtn = computed(() => {
+  if (!props.sessionId || !(props.enterpriseWeixinNotifyApi || window.electronAPI)?.listEnterpriseWeixinTargets) return false
+  return !resolvedImBindingSource.value || resolvedImBindingSource.value === 'enterprise-weixin'
+})
+const enterpriseWeixinBtnTitle = computed(() => t('agent.enterpriseWeixinQuickSendTitle'))
+const selectedEnterpriseWeixinTarget = computed(() => enterpriseWeixinTargets.value.find(target => target.id === selectedEnterpriseWeixinTargetId.value) || null)
+const canSendEnterpriseWeixin = computed(() => Boolean(selectedEnterpriseWeixinTarget.value && enterpriseWeixinText.value.trim()))
+const resolvedEnterpriseWeixinNotifyApi = computed(() => props.enterpriseWeixinNotifyApi || window.electronAPI || null)
 
 const loadDingTalkTargets = async () => {
   const dingtalkApi = resolvedDingTalkNotifyApi.value
@@ -512,6 +584,49 @@ const loadFeishuTargets = async () => {
   }
 }
 
+const loadEnterpriseWeixinTargets = async () => {
+  const enterpriseWeixinApi = resolvedEnterpriseWeixinNotifyApi.value
+  if (!enterpriseWeixinApi?.listEnterpriseWeixinTargets) return
+  enterpriseWeixinLoading.value = true
+  try {
+    const [targets, binding] = await Promise.all([
+      enterpriseWeixinApi.listEnterpriseWeixinTargets(),
+      props.sessionId && enterpriseWeixinApi?.getSessionEnterpriseWeixinBinding
+        ? enterpriseWeixinApi.getSessionEnterpriseWeixinBinding(props.sessionId).catch(() => null)
+        : null
+    ])
+    if (targets?.error) {
+      throw new Error(targets.error)
+    }
+    const bindingTargetId = binding?.targetId || binding?.userId || null
+    const allTargets = Array.isArray(targets) ? targets : []
+    if (bindingTargetId) {
+      const boundTarget = allTargets.find(target => [target.id, target.userId].includes(bindingTargetId))
+        || {
+          id: bindingTargetId,
+          userId: binding?.userId || bindingTargetId,
+          displayName: binding?.displayName || bindingTargetId,
+          name: binding?.displayName || bindingTargetId
+        }
+      enterpriseWeixinTargets.value = [boundTarget]
+      selectedEnterpriseWeixinTargetId.value = boundTarget.id
+    } else {
+      enterpriseWeixinTargets.value = allTargets
+      if (!enterpriseWeixinTargets.value.some(target => target.id === selectedEnterpriseWeixinTargetId.value)) {
+        selectedEnterpriseWeixinTargetId.value = enterpriseWeixinTargets.value[0]?.id || null
+      }
+    }
+    enterpriseWeixinError.value = ''
+  } catch (err) {
+    console.error('[ChatInputToolbar] loadEnterpriseWeixinTargets error:', err)
+    enterpriseWeixinTargets.value = []
+    selectedEnterpriseWeixinTargetId.value = null
+    enterpriseWeixinError.value = err?.message || t('agent.enterpriseWeixinQuickSendFailed')
+  } finally {
+    enterpriseWeixinLoading.value = false
+  }
+}
+
 const toggleDingTalkDropdown = () => {
   showDingTalkDropdown.value = !showDingTalkDropdown.value
   showDropdown.value = false
@@ -519,6 +634,7 @@ const toggleDingTalkDropdown = () => {
   showCapDropdown.value = false
   showWeixinDropdown.value = false
   showFeishuDropdown.value = false
+  showEnterpriseWeixinDropdown.value = false
   if (showDingTalkDropdown.value) {
     dingtalkText.value = props.draftText || ''
     dingtalkError.value = ''
@@ -533,6 +649,7 @@ const toggleWeixinDropdown = () => {
   showCapDropdown.value = false
   showDingTalkDropdown.value = false
   showFeishuDropdown.value = false
+  showEnterpriseWeixinDropdown.value = false
   if (showWeixinDropdown.value) {
     weixinText.value = props.draftText || ''
     weixinError.value = ''
@@ -547,10 +664,26 @@ const toggleFeishuDropdown = () => {
   showCapDropdown.value = false
   showDingTalkDropdown.value = false
   showWeixinDropdown.value = false
+  showEnterpriseWeixinDropdown.value = false
   if (showFeishuDropdown.value) {
     feishuText.value = props.draftText || ''
     feishuError.value = ''
     loadFeishuTargets()
+  }
+}
+
+const toggleEnterpriseWeixinDropdown = () => {
+  showEnterpriseWeixinDropdown.value = !showEnterpriseWeixinDropdown.value
+  showDropdown.value = false
+  showApiDropdown.value = false
+  showCapDropdown.value = false
+  showDingTalkDropdown.value = false
+  showWeixinDropdown.value = false
+  showFeishuDropdown.value = false
+  if (showEnterpriseWeixinDropdown.value) {
+    enterpriseWeixinText.value = props.draftText || ''
+    enterpriseWeixinError.value = ''
+    loadEnterpriseWeixinTargets()
   }
 }
 
@@ -567,6 +700,11 @@ const closeWeixinDropdown = () => {
 const closeFeishuDropdown = () => {
   showFeishuDropdown.value = false
   feishuError.value = ''
+}
+
+const closeEnterpriseWeixinDropdown = () => {
+  showEnterpriseWeixinDropdown.value = false
+  enterpriseWeixinError.value = ''
 }
 
 const sendDingTalkQuickMessage = async () => {
@@ -651,13 +789,43 @@ const sendFeishuQuickMessage = async () => {
   }
 }
 
+const sendEnterpriseWeixinQuickMessage = async () => {
+  const enterpriseWeixinApi = resolvedEnterpriseWeixinNotifyApi.value
+  if (!canSendEnterpriseWeixin.value || !props.sessionId || !enterpriseWeixinApi?.sendEnterpriseWeixinText) return
+  enterpriseWeixinSending.value = true
+  enterpriseWeixinError.value = ''
+  try {
+    const target = selectedEnterpriseWeixinTarget.value
+    const result = await enterpriseWeixinApi.sendEnterpriseWeixinText({
+      sessionId: props.sessionId,
+      userId: target.userId || target.id,
+      targetId: target.id,
+      displayName: target.displayName || target.name || target.userId || target.id,
+      text: enterpriseWeixinText.value.trim()
+    })
+    if (result?.error) {
+      console.error('[ChatInputToolbar] send enterprise weixin failed:', result.error)
+      enterpriseWeixinError.value = result.error || t('agent.enterpriseWeixinQuickSendFailed')
+    } else {
+      showEnterpriseWeixinDropdown.value = false
+    }
+  } catch (err) {
+    console.error('[ChatInputToolbar] send enterprise weixin error:', err)
+    enterpriseWeixinError.value = err?.message || t('agent.enterpriseWeixinQuickSendFailed')
+  } finally {
+    enterpriseWeixinSending.value = false
+  }
+}
+
 watch(() => props.sessionId, () => {
   showDingTalkDropdown.value = false
   showWeixinDropdown.value = false
   showFeishuDropdown.value = false
+  showEnterpriseWeixinDropdown.value = false
   selectedDingTalkTargetId.value = null
   selectedWeixinTargetId.value = null
   selectedFeishuTargetId.value = null
+  selectedEnterpriseWeixinTargetId.value = null
 })
 
 const normalizedApiProfiles = computed(() => {
@@ -723,6 +891,7 @@ const toggleApiDropdown = () => {
   showDingTalkDropdown.value = false
   showWeixinDropdown.value = false
   showFeishuDropdown.value = false
+  showEnterpriseWeixinDropdown.value = false
 }
 
 const toggleModelDropdown = () => {
@@ -732,6 +901,7 @@ const toggleModelDropdown = () => {
   showDingTalkDropdown.value = false
   showWeixinDropdown.value = false
   showFeishuDropdown.value = false
+  showEnterpriseWeixinDropdown.value = false
 }
 
 const loadCapabilities = async () => {
@@ -803,6 +973,7 @@ const toggleCapDropdown = () => {
   showDingTalkDropdown.value = false
   showWeixinDropdown.value = false
   showFeishuDropdown.value = false
+  showEnterpriseWeixinDropdown.value = false
   if (showCapDropdown.value) {
     loadCapabilities()
   }
@@ -816,6 +987,7 @@ const handleDocumentClick = (event) => {
     showDingTalkDropdown.value = false
     showWeixinDropdown.value = false
     showFeishuDropdown.value = false
+    showEnterpriseWeixinDropdown.value = false
   }
 }
 
@@ -858,7 +1030,8 @@ onUnmounted(() => {
 .expand-input-btn,
 .dingtalk-btn,
 .weixin-btn,
-.feishu-btn {
+.feishu-btn,
+.enterprise-weixin-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -902,7 +1075,9 @@ onUnmounted(() => {
 .dingtalk-btn.sending,
 .weixin-btn.sending,
 .feishu-btn:hover,
-.feishu-btn.sending {
+.feishu-btn.sending,
+.enterprise-weixin-btn:hover,
+.enterprise-weixin-btn.sending {
   background: var(--hover-bg);
   color: var(--primary-color);
 }
@@ -917,6 +1092,10 @@ onUnmounted(() => {
 
 .feishu-btn.sending {
   color: #3370ff;
+}
+
+.enterprise-weixin-btn.sending {
+  color: #07c160;
 }
 
 .model-label,
@@ -1064,7 +1243,8 @@ onUnmounted(() => {
 
 .dingtalk-dropdown,
 .weixin-dropdown,
-.feishu-dropdown {
+.feishu-dropdown,
+.enterprise-weixin-dropdown {
   position: absolute;
   top: auto;
   bottom: calc(100% + 8px);
@@ -1087,7 +1267,8 @@ onUnmounted(() => {
 
 .dingtalk-panel-title,
 .weixin-panel-title,
-.feishu-panel-title {
+.feishu-panel-title,
+.enterprise-weixin-panel-title {
   color: var(--text-color);
   font-size: 13px;
   font-weight: 600;
@@ -1096,7 +1277,8 @@ onUnmounted(() => {
 
 .dingtalk-panel-hint,
 .weixin-panel-hint,
-.feishu-panel-hint {
+.feishu-panel-hint,
+.enterprise-weixin-panel-hint {
   color: var(--text-color-3);
   font-size: 12px;
   line-height: 1.5;
@@ -1105,7 +1287,8 @@ onUnmounted(() => {
 
 .dingtalk-target-list,
 .weixin-target-list,
-.feishu-target-list {
+.feishu-target-list,
+.enterprise-weixin-target-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1116,7 +1299,8 @@ onUnmounted(() => {
 
 .dingtalk-target-item,
 .weixin-target-item,
-.feishu-target-item {
+.feishu-target-item,
+.enterprise-weixin-target-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1132,13 +1316,16 @@ onUnmounted(() => {
 .weixin-target-item:hover,
 .weixin-target-item.active,
 .feishu-target-item:hover,
-.feishu-target-item.active {
+.feishu-target-item.active,
+.enterprise-weixin-target-item:hover,
+.enterprise-weixin-target-item.active {
   background: var(--hover-bg);
 }
 
 .dingtalk-target-name,
 .weixin-target-name,
-.feishu-target-name {
+.feishu-target-name,
+.enterprise-weixin-target-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1155,7 +1342,8 @@ onUnmounted(() => {
 
 .dingtalk-message-input,
 .weixin-message-input,
-.feishu-message-input {
+.feishu-message-input,
+.enterprise-weixin-message-input {
   width: 100%;
   min-height: 74px;
   resize: vertical;
@@ -1172,13 +1360,15 @@ onUnmounted(() => {
 
 .dingtalk-message-input:focus,
 .weixin-message-input:focus,
-.feishu-message-input:focus {
+.feishu-message-input:focus,
+.enterprise-weixin-message-input:focus {
   border-color: var(--primary-color);
 }
 
 .dingtalk-error,
 .weixin-error,
-.feishu-error {
+.feishu-error,
+.enterprise-weixin-error {
   margin-top: 6px;
   color: #ff4d4f;
   font-size: 12px;
@@ -1187,7 +1377,8 @@ onUnmounted(() => {
 
 .dingtalk-actions,
 .weixin-actions,
-.feishu-actions {
+.feishu-actions,
+.enterprise-weixin-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -1196,7 +1387,8 @@ onUnmounted(() => {
 
 .dingtalk-action,
 .weixin-action,
-.feishu-action {
+.feishu-action,
+.enterprise-weixin-action {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 6px 12px;
@@ -1206,14 +1398,16 @@ onUnmounted(() => {
 
 .dingtalk-action.secondary,
 .weixin-action.secondary,
-.feishu-action.secondary {
+.feishu-action.secondary,
+.enterprise-weixin-action.secondary {
   background: var(--bg-color-secondary);
   color: var(--text-color);
 }
 
 .dingtalk-action.primary,
 .weixin-action.primary,
-.feishu-action.primary {
+.feishu-action.primary,
+.enterprise-weixin-action.primary {
   border-color: var(--primary-color);
   background: var(--primary-color);
   color: #fff;
@@ -1221,7 +1415,8 @@ onUnmounted(() => {
 
 .dingtalk-action:disabled,
 .weixin-action:disabled,
-.feishu-action:disabled {
+.feishu-action:disabled,
+.enterprise-weixin-action:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -1231,7 +1426,9 @@ onUnmounted(() => {
 .weixin-empty,
 .weixin-loading,
 .feishu-empty,
-.feishu-loading {
+.feishu-loading,
+.enterprise-weixin-empty,
+.enterprise-weixin-loading {
   padding: 10px;
   color: var(--text-color-3);
   font-size: 12px;
