@@ -32,8 +32,21 @@ const {
   buildHistoryChoiceMenuText,
   buildActiveSessionsText,
   buildStatusText,
-  buildCommandHelpText,
 } = require('./im-command-presenter')
+const {
+  buildImCommandHelpText,
+  buildAlreadyConnectedText,
+  buildSessionSwitchedText,
+  buildSessionActivatingText,
+  buildSessionCreatingText,
+  buildNoHistoryText,
+  buildRenameMissingSessionText,
+  buildRenamePromptText,
+  buildRenameSuccessText,
+  buildUnknownCommandText,
+  resolveCommandCwd,
+  mergeCurrentSessionIntoHistory,
+} = require('./im-command-policy')
 const { extractImagePaths } = require('./im-utils')
 
 const MAX_TEXT_LENGTH = 6000
@@ -576,9 +589,9 @@ class EnterpriseWeixinBridge {
     })
 
     if (result.action === 'resume') {
-      await this._sendTextReply(frame, result.wasActivated ? '已连接到当前会话' : this._buildSessionActivatingText())
+      await this._sendTextReply(frame, result.wasActivated ? buildAlreadyConnectedText(result.selectedSession?.title || result.sessionId) : buildSessionActivatingText())
     } else if (result.action === 'new') {
-      await this._sendTextReply(frame, this._buildSessionCreatingText())
+      await this._sendTextReply(frame, buildSessionCreatingText())
     }
 
     const pending = this._pendingInboundMessages.get(mapKey)
@@ -673,10 +686,21 @@ class EnterpriseWeixinBridge {
           await this._sendTextReply(context.frame, 'AI 正在响应中，请等待完成后再操作')
           return
         }
+        let cwd
+        try {
+          cwd = resolveCommandCwd({
+            args,
+            outputBaseDir: this._agentSessionManager._getOutputBaseDir(),
+            imSubdir: this._imType,
+          })
+        } catch (err) {
+          await this._sendTextReply(context.frame, err.message)
+          return
+        }
         if (sessionId) {
           this._clearSessionIdentity(sessionId)
         }
-        const newId = await this._sessionMapper.createSession(identity)
+        const newId = await this._sessionMapper.createSession(identity, { cwd })
         if (!newId) {
           await this._sendTextReply(context.frame, '创建新会话失败')
           return
@@ -691,7 +715,19 @@ class EnterpriseWeixinBridge {
           chatName: identity.channelName || identity.nickname || identity.userId,
         })
         this._notifier.notifySessionCreated({ sessionId: newId, nickname: identity.nickname || identity.userId })
-        await this._sendTextReply(context.frame, this._buildSessionCreatingText())
+        await this._sendTextReply(context.frame, buildSessionCreatingText())
+        this._notifier.notifyMessageReceived({
+          sessionId: newId,
+          senderNick: identity.nickname || identity.userId,
+          text: 'hello',
+        })
+        await this._enqueueInboundMessage(newId, context.frame, {
+          msgId: `cmd-new-${Date.now()}`,
+          chatId,
+          chatType: identity.chatType,
+          text: 'hello',
+          images: [],
+        }, identity)
         return
       }
 
@@ -703,9 +739,10 @@ class EnterpriseWeixinBridge {
 
         const currentSessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
 
-        const history = await this._sessionMapper._queryHistorySessions(identity)
+        let history = await this._sessionMapper._queryHistorySessions(identity)
+        history = this._mergeCurrentSessionIntoHistory(history, currentSessionId, identity)
         if (!history || history.length === 0) {
-          await this._sendTextReply(context.frame, '没有历史会话记录\n\n发送任意消息可开始新会话')
+          await this._sendTextReply(context.frame, buildNoHistoryText())
           return
         }
 
@@ -746,9 +783,23 @@ class EnterpriseWeixinBridge {
           await this._sendTextReply(
             context.frame,
             result.wasActivated
-              ? this._buildSessionSwitchedText(result.selectedSession?.title || result.sessionId)
-              : this._buildSessionActivatingText()
+              ? buildSessionSwitchedText(result.selectedSession?.title || result.sessionId)
+              : buildSessionActivatingText()
           )
+          if (!result.wasActivated) {
+            this._notifier.notifyMessageReceived({
+              sessionId: result.sessionId,
+              senderNick: identity.nickname || identity.userId,
+              text: 'hello',
+            })
+            await this._enqueueInboundMessage(result.sessionId, context.frame, {
+              msgId: `cmd-resume-${Date.now()}`,
+              chatId,
+              chatType: identity.chatType,
+              text: 'hello',
+              images: [],
+            }, identity)
+          }
           return
         }
 
@@ -766,21 +817,21 @@ class EnterpriseWeixinBridge {
 
       case '/rename': {
         if (!sessionId) {
-          await this._sendTextReply(context.frame, '当前没有活跃会话，无法重命名')
+          await this._sendTextReply(context.frame, buildRenameMissingSessionText())
           return
         }
         const newTitle = args.join(' ').trim()
         if (!newTitle) {
-          await this._sendTextReply(context.frame, '请提供新名称，例如：/rename 我的项目')
+          await this._sendTextReply(context.frame, buildRenamePromptText())
           return
         }
         this._agentSessionManager.rename(sessionId, newTitle)
-        await this._sendTextReply(context.frame, `会话已重命名为：${newTitle}`)
+        await this._sendTextReply(context.frame, buildRenameSuccessText(newTitle))
         return
       }
 
       default:
-        await this._sendTextReply(context.frame, `未知命令: ${cmd}\n输入 /help 查看可用命令`)
+        await this._sendTextReply(context.frame, buildUnknownCommandText(cmd))
     }
   }
 
@@ -906,18 +957,11 @@ class EnterpriseWeixinBridge {
   }
 
   _buildHelpText() {
-    return buildCommandHelpText([
-      '企业微信可用命令：',
-      '/help    - 显示帮助',
-      '/status  - 查看连接状态',
-      '/sessions - 查看当前聊天下的活跃会话',
-      '/close [编号] - 关闭当前会话或指定会话',
-      '/new     - 新建会话',
-      '/resume [编号] - 恢复历史会话',
-      '/rename <名称> - 重命名当前会话',
-      '',
-      '回复数字可选择历史会话，回复 0 开始全新会话',
-    ])
+    return buildImCommandHelpText({
+      title: '企业微信可用命令：',
+      includeDirectoryArg: true,
+      includeHistoryHint: true,
+    })
   }
 
   _buildStatusMenuText({ sessionId, chatId } = {}) {
@@ -953,18 +997,6 @@ class EnterpriseWeixinBridge {
     })
   }
 
-  _buildSessionCreatingText() {
-    return '正在创建新会话，请继续发送消息'
-  }
-
-  _buildSessionSwitchedText(title) {
-    return `已切换到会话：${title}`
-  }
-
-  _buildSessionActivatingText() {
-    return '已恢复历史会话，请继续发送消息'
-  }
-
   _getDirName(cwd) {
     if (!cwd) return '-'
     try {
@@ -981,6 +1013,36 @@ class EnterpriseWeixinBridge {
     } catch {
       return profileId
     }
+  }
+
+  _mergeCurrentSessionIntoHistory(history, currentSessionId, identity = {}) {
+    const rows = Array.isArray(history) ? history : []
+    if (!currentSessionId) return rows
+
+    const liveSession = this._agentSessionManager.sessions.get(currentSessionId)
+    const dbRow = this._sessionDatabase?.getAgentConversation?.(currentSessionId)
+    if (!liveSession && (!dbRow || dbRow.status === 'closed')) return rows
+
+    const currentRow = {
+      ...(dbRow || {}),
+      session_id: dbRow?.session_id || liveSession?.id || currentSessionId,
+      title: dbRow?.title || liveSession?.title || currentSessionId,
+      cwd: dbRow?.cwd || liveSession?.cwd || null,
+      api_profile_id: dbRow?.api_profile_id || liveSession?.apiProfileId || null,
+      updated_at: dbRow?.updated_at || (liveSession?.updatedAt ? new Date(liveSession.updatedAt).getTime() : Date.now()),
+      type: 'chat',
+      source: 'im-inbound',
+      im_channel: this._imType,
+      staff_id: dbRow?.staff_id || identity.userId || '',
+      conversation_id: dbRow?.conversation_id || identity.chatId || '',
+      status: dbRow?.status || liveSession?.status || 'idle',
+    }
+
+    return mergeCurrentSessionIntoHistory({
+      history: rows,
+      currentSessionId,
+      currentRow,
+    })
   }
 
   async _sendTextReply(frame, content) {

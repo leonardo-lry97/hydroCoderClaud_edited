@@ -25,8 +25,21 @@ const {
   buildHistoryChoiceMenuText,
   buildActiveSessionsText,
   buildStatusText,
-  buildCommandHelpText,
 } = require('./im-command-presenter')
+const {
+  buildImCommandHelpText,
+  buildAlreadyConnectedText,
+  buildSessionSwitchedText,
+  buildSessionActivatingText,
+  buildSessionCreatingText,
+  buildNoHistoryText,
+  buildRenameMissingSessionText,
+  buildRenamePromptText,
+  buildRenameSuccessText,
+  buildUnknownCommandText,
+  resolveCommandCwd,
+  mergeCurrentSessionIntoHistory,
+} = require('./im-command-policy')
 const {
   buildHistoryChoiceCard,
   buildSessionsCard,
@@ -534,19 +547,19 @@ class FeishuBridge {
           await this._api.sendTextMessage(
             receiveIdType,
             receiveId,
-            this._buildAlreadyConnectedText(result.selectedSession?.title || result.sessionId)
+            buildAlreadyConnectedText(result.selectedSession?.title || result.sessionId)
           )
         } else if (result.wasActivated) {
           await this._api.sendTextMessage(
             receiveIdType,
             receiveId,
-            this._buildSessionSwitchedText(result.selectedSession?.title || result.sessionId)
+            buildSessionSwitchedText(result.selectedSession?.title || result.sessionId)
           )
         } else {
-          await this._api.sendTextMessage(receiveIdType, receiveId, this._buildSessionActivatingText())
+          await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionActivatingText())
         }
       } else {
-        await this._api.sendTextMessage(receiveIdType, receiveId, this._buildSessionCreatingText())
+        await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionCreatingText())
       }
       if (pending) {
         this._pendingMessages.delete(mapKey)
@@ -713,7 +726,7 @@ class FeishuBridge {
         if (preservePendingSelection) {
           this._sessionMapper.clearPendingChoice(mapKey)
         }
-        await this._api.sendTextMessage(receiveIdType, receiveId, this._buildSessionCreatingText())
+        await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionCreatingText())
         const pending = preservePendingSelection ? this._pendingMessages.get(mapKey) : null
         if (pending) {
           this._pendingMessages.delete(mapKey)
@@ -742,7 +755,7 @@ class FeishuBridge {
         })
         history = this._mergeCurrentSessionIntoHistory(history, sessionId, context)
         if (!history || history.length === 0) {
-          await this._api.sendTextMessage(receiveIdType, receiveId, '没有历史会话记录\n\n发送任意消息可开始新会话')
+          await this._api.sendTextMessage(receiveIdType, receiveId, buildNoHistoryText())
           break
         }
         const selectedIndex = Number.parseInt(args[0], 10)
@@ -762,7 +775,7 @@ class FeishuBridge {
               await this._api.sendTextMessage(
                 receiveIdType,
                 receiveId,
-                this._buildAlreadyConnectedText(selected?.title || liveCurrentSession?.title || sessionId)
+                buildAlreadyConnectedText(selected?.title || liveCurrentSession?.title || sessionId)
               )
               break
             }
@@ -792,9 +805,9 @@ class FeishuBridge {
             })
             this._notifier.notifySessionCreated({ sessionId: resolvedSessionId, nickname: context.senderName || context.senderId })
             if (isActivated) {
-              await this._api.sendTextMessage(receiveIdType, receiveId, this._buildSessionSwitchedText(selected?.title || resolvedSessionId))
+              await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionSwitchedText(selected?.title || resolvedSessionId))
             } else {
-              await this._api.sendTextMessage(receiveIdType, receiveId, this._buildSessionActivatingText())
+              await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionActivatingText())
             }
             if (pending) {
               this._pendingMessages.delete(mapKey)
@@ -822,20 +835,20 @@ class FeishuBridge {
       }
       case '/rename': {
         if (!sessionId) {
-          await this._api.sendTextMessage(receiveIdType, receiveId, '当前没有活跃会话，无法重命名')
+          await this._api.sendTextMessage(receiveIdType, receiveId, buildRenameMissingSessionText())
           break
         }
         const newTitle = args.join(' ').trim()
         if (!newTitle) {
-          await this._api.sendTextMessage(receiveIdType, receiveId, '请提供新名称，例如：/rename 我的项目')
+          await this._api.sendTextMessage(receiveIdType, receiveId, buildRenamePromptText())
           break
         }
         this._agentSessionManager.rename(sessionId, newTitle)
-        await this._api.sendTextMessage(receiveIdType, receiveId, `会话已重命名为：${newTitle}`)
+        await this._api.sendTextMessage(receiveIdType, receiveId, buildRenameSuccessText(newTitle))
         break
       }
       default:
-        await this._api.sendTextMessage(receiveIdType, receiveId, `未知命令: ${cmd}\n输入 /help 查看可用命令`)
+        await this._api.sendTextMessage(receiveIdType, receiveId, buildUnknownCommandText(cmd))
     }
   }
 
@@ -868,7 +881,11 @@ class FeishuBridge {
       status: dbRow?.status || liveSession?.status || 'idle',
     }
 
-    return [currentRow, ...rows]
+    return mergeCurrentSessionIntoHistory({
+      history: rows,
+      currentSessionId: sessionId,
+      currentRow,
+    })
   }
 
   _normalizeCommandText(text, context = {}, options = {}) {
@@ -1634,16 +1651,11 @@ class FeishuBridge {
   // ─── 辅助 ───
 
   _getHelpText() {
-    return buildCommandHelpText([
-      '飞书 Agent 桥接命令:',
-      '/help    - 显示帮助',
-      '/status  - 查看连接状态',
-      '/sessions - 查看当前聊天下的活跃会话',
-      '/close [编号] - 关闭当前会话或指定会话',
-      '/new [目录] - 创建新会话（可选：目录名或绝对路径）',
-      '/resume [编号] - 恢复历史会话',
-      '/rename <名称> - 重命名当前会话',
-    ])
+    return buildImCommandHelpText({
+      title: '飞书 Agent 桥接命令:',
+      includeDirectoryArg: true,
+      includeHistoryHint: true,
+    })
   }
 
   _getActiveSessionsByChat(chatId) {
@@ -1658,22 +1670,6 @@ class FeishuBridge {
       chatId,
       includeSession,
     })
-  }
-
-  _buildAlreadyConnectedText(title) {
-    return `✅ 当前已连接该会话：${title || '当前会话'}`
-  }
-
-  _buildSessionSwitchedText(title) {
-    return `✅ 已切换到会话：${title || '当前会话'}\n\n现在可以继续对话了`
-  }
-
-  _buildSessionActivatingText() {
-    return '会话恢复中，请等待信息返回后，即可开始聊天'
-  }
-
-  _buildSessionCreatingText() {
-    return '会话创建中，请等待信息返回后，即可开始聊天'
   }
 
   _buildActiveSessionsText({ sessionId, chatId }) {
@@ -2022,21 +2018,11 @@ class FeishuBridge {
   }
 
   _resolveNewSessionCwd(args) {
-    const dirArg = args.join(' ').trim()
-    if (!dirArg) return undefined
-
-    let cwd
-    if (path.isAbsolute(dirArg) || /^[A-Za-z]:[/\\]/.test(dirArg)) {
-      cwd = dirArg
-    } else {
-      cwd = path.join(this._agentSessionManager._getOutputBaseDir(), 'feishu', dirArg)
-    }
-    try {
-      fs.mkdirSync(cwd, { recursive: true })
-    } catch (err) {
-      throw new Error(`无法创建目录: ${err.message}`)
-    }
-    return cwd
+    return resolveCommandCwd({
+      args,
+      outputBaseDir: this._agentSessionManager._getOutputBaseDir(),
+      imSubdir: 'feishu',
+    })
   }
 }
 

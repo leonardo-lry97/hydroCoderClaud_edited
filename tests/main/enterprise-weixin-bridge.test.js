@@ -509,7 +509,7 @@ describe('EnterpriseWeixinBridge', () => {
     await bridge._handleMessage(inboundFrame({ text: { content: '第一条消息' } }))
     await bridge._handleMessage(inboundFrame({ text: { content: '1' } }))
 
-    expect(replies.at(-1).markdown.content).toContain('已恢复历史会话，请继续发送消息')
+    expect(replies.at(-1).markdown.content).toContain('会话恢复中，请等待信息返回后，即可开始聊天')
     expect(bridge._sessionMapper.sessionMap.get('user-a:user-a')).toBe(reopened.id)
   })
 
@@ -541,6 +541,7 @@ describe('EnterpriseWeixinBridge', () => {
     const { bridge, manager, replies, sent } = createHarness()
     const reopened = manager.create({ type: 'chat', source: 'manual', title: '历史会话 1' })
     reopened.imChannel = 'enterprise-weixin'
+    const enqueueSpy = vi.spyOn(bridge, '_enqueueInboundMessage').mockResolvedValue()
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([
       { session_id: reopened.id, title: '历史会话 1', updated_at: Date.now() - 1000 },
     ])
@@ -549,9 +550,10 @@ describe('EnterpriseWeixinBridge', () => {
       text: { content: '/resume 1' },
     }))
 
-    expect(replies.at(-1).markdown.content).toContain('已恢复历史会话，请继续发送消息')
+    expect(replies.at(-1).markdown.content).toContain('会话恢复中，请等待信息返回后，即可开始聊天')
     expect(bridge._sessionMapper.sessionMap.get('user-a:user-a')).toBe(reopened.id)
     expect(sent.map(item => item.channel)).toContain('enterprise-weixin:sessionCreated')
+    expect(enqueueSpy).toHaveBeenCalled()
   })
 
   it('marks the current live history session with a green check in resume menu', () => {
@@ -649,7 +651,20 @@ describe('EnterpriseWeixinBridge', () => {
     await bridge._handleMessage(inboundFrame({ text: { content: '0' } }))
 
     expect(manager.sessions.size).toBe(beforeCount + 1)
-    expect(replies.at(-1).markdown.content).toContain('正在创建新会话')
+    expect(replies.at(-1).markdown.content).toContain('会话创建中，请等待信息返回后，即可开始聊天')
+    expect(enqueueSpy).toHaveBeenCalled()
+  })
+
+  it('creates a new enterprise weixin session with /new and auto-activates it', async () => {
+    const { bridge, manager, replies } = createHarness()
+    const enqueueSpy = vi.spyOn(bridge, '_enqueueInboundMessage').mockResolvedValue()
+
+    await bridge._handleMessage(inboundFrame({
+      text: { content: '/new' },
+    }))
+
+    expect(manager.sessions.size).toBe(1)
+    expect(replies.at(-1).markdown.content).toContain('会话创建中，请等待信息返回后，即可开始聊天')
     expect(enqueueSpy).toHaveBeenCalled()
   })
 

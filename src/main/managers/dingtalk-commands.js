@@ -10,12 +10,24 @@ const path = require('path')
 const {
   buildActiveSessionsText,
   buildStatusText,
-  buildCommandHelpText,
 } = require('./im-command-presenter')
 const {
   listChatSessions,
   createActivatedSessionMatcher,
 } = require('./im-session-selectors')
+const {
+  buildImCommandHelpText,
+  buildAlreadyConnectedText,
+  buildSessionSwitchedText,
+  buildSessionActivatingText,
+  buildSessionCreatingText,
+  buildNoHistoryText,
+  buildRenameMissingSessionText,
+  buildRenamePromptText,
+  buildRenameSuccessText,
+  buildUnknownCommandText,
+  resolveCommandCwd,
+} = require('./im-command-policy')
 
 function buildDingTalkCommandContext(context = {}, webhook = null) {
   return {
@@ -67,7 +79,7 @@ module.exports = {
       case 'new':      reply = await this._cmdNew(args, context, webhook); break
       case 'resume':   reply = await this._cmdResume(args, context, webhook); break
       case 'rename':   reply = this._cmdRename(args, context); break
-      default:         reply = `❓ 未知命令: /${cmd}\n\n输入 /help 查看可用命令`
+      default:         reply = `❓ ${buildUnknownCommandText(cmd)}`
     }
 
     if (reply != null) {
@@ -77,19 +89,11 @@ module.exports = {
   },
 
   _cmdHelp(_context = null) {
-    return buildCommandHelpText([
-      '📋 可用命令：',
-      '',
-      '/help — 显示此帮助',
-      '/status — 系统状态',
-      '/sessions — 已激活会话列表',
-      '/new [目录] — 新建会话（可选：目录名或绝对路径）',
-      '/resume [编号] — 恢复历史会话（不带编号显示列表）',
-      '/rename <名称> — 修改当前会话名称',
-      '/close [编号] — 关闭会话（不带编号关闭当前会话，带编号关闭指定会话）',
-      '',
-      '💬 不带 / 的消息直接发给当前 Agent 会话'
-    ])
+    return buildImCommandHelpText({
+      title: '📋 可用命令：',
+      includeDirectoryArg: true,
+      includeHistoryHint: true,
+    })
   },
 
   async _cmdResume(args, { mapKey, senderStaffId, senderNick, conversationId, conversationTitle, conversationType, robotCode }, webhook) {
@@ -150,7 +154,7 @@ module.exports = {
       }
     }
 
-    if (!sessions || sessions.length === 0) return '📭 没有历史会话记录\n\n发送任意消息可开始新会话'
+    if (!sessions || sessions.length === 0) return `📭 ${buildNoHistoryText()}`
 
     // 直接指定编号 → 立即恢复
     const numArg = parseInt(args[0])
@@ -159,7 +163,7 @@ module.exports = {
 
       // 如果选择的就是当前会话，提示无需切换
       if (currentSessionId === selectedRow.session_id) {
-        return `✅ 当前已连接该会话：${selectedRow.title}`
+        return buildAlreadyConnectedText(selectedRow.title)
       }
 
       // 切换到目标会话（不关闭当前会话）
@@ -182,11 +186,11 @@ module.exports = {
 
         if (isActivated) {
           // 已激活 → 直接可用
-          return this._t('sessionSwitched').replace('{title}', selectedRow.title)
+          return buildSessionSwitchedText(selectedRow.title)
         }
 
         // 未激活 → 自动发 hello 激活
-        await this._replyToDingTalk(webhook, this._t('sessionActivating'))
+        await this._replyToDingTalk(webhook, buildSessionActivatingText())
         this._notifyFrontend('dingtalk:messageReceived', {
           sessionId: selectedRow.session_id, senderNick, text: 'hello'
         })
@@ -207,13 +211,13 @@ module.exports = {
 
   _cmdRename(args, { mapKey }) {
     const sessionId = this._resolveActiveSessionId(mapKey)
-    if (!sessionId) return '当前没有活跃会话，无法重命名'
+    if (!sessionId) return buildRenameMissingSessionText()
 
     const newTitle = args.join(' ').trim()
-    if (!newTitle) return '请提供新名称，例如：/rename 我的项目'
+    if (!newTitle) return buildRenamePromptText()
 
     this.agentSessionManager.rename(sessionId, newTitle)
-    return `✅ 会话已重命名为：${newTitle}`
+    return `✅ ${buildRenameSuccessText(newTitle)}`
   },
 
   /**
@@ -348,27 +352,21 @@ module.exports = {
 
     this._clearPendingChoice(mapKey)
 
-    const dirArg = args.join(' ').trim()
     let cwd
-
-    if (dirArg) {
-      // 绝对路径直接使用，相对名称放在 dingtalk/ 子目录下
-      if (path.isAbsolute(dirArg) || /^[A-Za-z]:[/\\]/.test(dirArg)) {
-        cwd = dirArg
-      } else {
-        cwd = path.join(this.agentSessionManager._getOutputBaseDir(), 'dingtalk', dirArg)
-      }
-      try {
-        fs.mkdirSync(cwd, { recursive: true })
-      } catch (err) {
-        return `❌ 无法创建目录: ${err.message}`
-      }
+    try {
+      cwd = resolveCommandCwd({
+        args,
+        outputBaseDir: this.agentSessionManager._getOutputBaseDir(),
+        imSubdir: 'dingtalk',
+      })
+    } catch (err) {
+      return `❌ ${err.message}`
     }
 
     const sessionId = await this._createNewSession(senderStaffId, senderNick, conversationId, conversationTitle, mapKey, { cwd })
 
     // 发送"会话创建中"提示
-    await this._replyToDingTalk(webhook, this._t('sessionCreating'))
+    await this._replyToDingTalk(webhook, buildSessionCreatingText())
 
     // 补发 dingtalk:messageReceived，让桌面端显示用户消息
     this._notifyFrontend('dingtalk:messageReceived', {
