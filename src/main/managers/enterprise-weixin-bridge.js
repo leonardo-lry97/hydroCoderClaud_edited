@@ -40,6 +40,7 @@ const {
   resolveRenameCommand,
 } = require('./im-command-executor')
 const { runResumePostAction } = require('./im-resume-post-action')
+const { activateNewSession, resolveResumeSelection } = require('./im-session-command-flow')
 const {
   buildImCommandHelpText,
   buildAlreadyConnectedText,
@@ -753,18 +754,25 @@ class EnterpriseWeixinBridge {
         })
         this._notifier.notifySessionCreated({ sessionId: newId, nickname: identity.nickname || identity.userId })
         await this._sendTextReply(context.frame, buildSessionCreatingText())
-        this._notifier.notifyMessageReceived({
+        await activateNewSession({
           sessionId: newId,
-          senderNick: identity.nickname || identity.userId,
-          text: 'hello',
+          notifyMessageReceived: () => {
+            this._notifier.notifyMessageReceived({
+              sessionId: newId,
+              senderNick: identity.nickname || identity.userId,
+              text: 'hello',
+            })
+          },
+          enqueueHello: async () => {
+            await this._enqueueInboundMessage(newId, context.frame, {
+              msgId: `cmd-new-${Date.now()}`,
+              chatId,
+              chatType: identity.chatType,
+              text: 'hello',
+              images: [],
+            }, identity)
+          },
         })
-        await this._enqueueInboundMessage(newId, context.frame, {
-          msgId: `cmd-new-${Date.now()}`,
-          chatId,
-          chatType: identity.chatType,
-          text: 'hello',
-          images: [],
-        }, identity)
         return
       }
 
@@ -784,25 +792,26 @@ class EnterpriseWeixinBridge {
         }
 
         if (args.length > 0) {
-          const selectedIndex = Number.parseInt(args[0], 10)
-          if (Number.isNaN(selectedIndex) || selectedIndex < 1 || selectedIndex > history.length) {
-            await this._sendTextReply(context.frame, `编号错误：请输入 1-${history.length} 之间的数字`)
+          const selection = resolveResumeSelection({
+            history,
+            selectedIndex: args[0],
+            currentSessionId,
+            currentSession,
+          })
+          if (selection.action === 'invalid_index') {
+            await this._sendTextReply(context.frame, `编号错误：请输入 1-${selection.max} 之间的数字`)
+            return
+          }
+          if (selection.action === 'already_connected') {
+            await this._sendTextReply(context.frame, buildAlreadyConnectedText(selection.selected?.title || selection.sessionId))
             return
           }
 
           this._sessionMapper.clearPendingChoice(mapKey)
-          this._sessionMapper._pendingChoices.set(mapKey, {
-            sessions: history,
-            resolve: () => {},
-            timer: setTimeout(() => {
-              this._sessionMapper._pendingChoices.delete(mapKey)
-            }, HISTORY_CHOICE_TIMEOUT),
-            options: {
-              timeoutMs: HISTORY_CHOICE_TIMEOUT,
-              menuBuilder: (sessions) => this._buildHistoryChoiceMenu(sessions, currentSessionId),
-            },
+          const result = await this._sessionMapper.handleDirectChoice(mapKey, history, String(selection.index), identity, {
+            timeoutMs: HISTORY_CHOICE_TIMEOUT,
+            menuBuilder: (sessions) => this._buildHistoryChoiceMenu(sessions, currentSessionId),
           })
-          const result = await this._sessionMapper.handleChoice(mapKey, String(selectedIndex), identity)
           if (!result?.sessionId) {
             await this._sendTextReply(context.frame, '无法恢复该会话，可能已被删除\n\n发送任意消息可开始新会话')
             return
@@ -823,20 +832,26 @@ class EnterpriseWeixinBridge {
               ? buildSessionSwitchedText(result.selectedSession?.title || result.sessionId)
               : buildSessionActivatingText()
           )
-          if (!result.wasActivated) {
-            this._notifier.notifyMessageReceived({
-              sessionId: result.sessionId,
-              senderNick: identity.nickname || identity.userId,
-              text: 'hello',
-            })
-            await this._enqueueInboundMessage(result.sessionId, context.frame, {
-              msgId: `cmd-resume-${Date.now()}`,
-              chatId,
-              chatType: identity.chatType,
-              text: 'hello',
-              images: [],
-            }, identity)
-          }
+          await activateNewSession({
+            sessionId: result.sessionId,
+            wasActivated: result.wasActivated,
+            notifyMessageReceived: () => {
+              this._notifier.notifyMessageReceived({
+                sessionId: result.sessionId,
+                senderNick: identity.nickname || identity.userId,
+                text: 'hello',
+              })
+            },
+            enqueueHello: async () => {
+              await this._enqueueInboundMessage(result.sessionId, context.frame, {
+                msgId: `cmd-resume-${Date.now()}`,
+                chatId,
+                chatType: identity.chatType,
+                text: 'hello',
+                images: [],
+              }, identity)
+            },
+          })
           return
         }
 

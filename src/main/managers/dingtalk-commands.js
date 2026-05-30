@@ -13,6 +13,7 @@ const {
   resolveCloseCommand,
   resolveRenameCommand,
 } = require('./im-command-executor')
+const { activateNewSession, resolveResumeSelection } = require('./im-session-command-flow')
 const {
   listChatSessions,
   createActivatedSessionMatcher,
@@ -160,11 +161,20 @@ module.exports = {
 
     // 直接指定编号 → 立即恢复
     const numArg = parseInt(args[0])
-    if (!isNaN(numArg) && numArg >= 1 && numArg <= sessions.length) {
-      const selectedRow = sessions[numArg - 1]
+    if (!isNaN(numArg)) {
+      const selection = resolveResumeSelection({
+        history: sessions,
+        selectedIndex: numArg,
+        currentSessionId,
+        currentSession,
+      })
+      if (selection.action === 'invalid_index') {
+        return `❌ 编号错误：请输入 1-${selection.max} 之间的数字`
+      }
+      const selectedRow = selection.selected
 
       // 如果选择的就是当前会话，提示无需切换
-      if (currentSessionId === selectedRow.session_id) {
+      if (selection.action === 'already_connected') {
         return buildAlreadyConnectedText(selectedRow.title)
       }
 
@@ -353,15 +363,19 @@ module.exports = {
     // 发送"会话创建中"提示
     await this._replyToDingTalk(webhook, buildSessionCreatingText())
 
-    // 补发 dingtalk:messageReceived，让桌面端显示用户消息
-    this._notifyFrontend('dingtalk:messageReceived', {
+    await activateNewSession({
       sessionId,
-      senderNick,
-      text: 'hello'
+      notifyMessageReceived: () => {
+        this._notifyFrontend('dingtalk:messageReceived', {
+          sessionId,
+          senderNick,
+          text: 'hello'
+        })
+      },
+      enqueueHello: async () => {
+        this._enqueueMessage(sessionId, 'hello', webhook, senderNick, { robotCode, senderStaffId, conversationId, conversationType })
+      },
     })
-
-    // 自动发送 "hello" 激活会话
-    this._enqueueMessage(sessionId, 'hello', webhook, senderNick, { robotCode, senderStaffId, conversationId, conversationType })
 
     return null  // 已由 _replyToDingTalk 回复
   }

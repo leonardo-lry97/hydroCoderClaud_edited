@@ -261,31 +261,74 @@ class ImSessionMapper {
    * @returns {Promise<{ sessionId: string|null }>} 用户选择后 resolve
    */
   initPendingChoice(mapKey, sessions, onSendChoiceMenu, optionsOrTimeout = 10 * 60 * 1000) {
-    this.clearPendingChoice(mapKey)
-
-    const options = typeof optionsOrTimeout === 'object' && optionsOrTimeout !== null
-      ? optionsOrTimeout
-      : {}
-    const timeoutMs = typeof optionsOrTimeout === 'number'
-      ? optionsOrTimeout
-      : (typeof options.timeoutMs === 'number' ? options.timeoutMs : 10 * 60 * 1000)
-
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this._pendingChoices.delete(mapKey)
-        resolve({ sessionId: null })
-      }, timeoutMs)
+      const { options } = this._setPendingChoiceEntry(mapKey, sessions, {
+        optionsOrTimeout,
+        resolve,
+        timerFactory: () => {
+          return setTimeout(() => {
+            this._pendingChoices.delete(mapKey)
+            resolve({ sessionId: null })
+          }, this._resolvePendingChoiceTimeout(optionsOrTimeout))
+        },
+      })
 
-      this._pendingChoices.set(mapKey, { sessions, resolve, timer, options })
+      const pending = this._pendingChoices.get(mapKey)
+      if (pending) {
+        pending.resolve = resolve
+      }
 
       // 发送选择菜单
       const menuText = this._buildChoiceMenuText(sessions, options)
       onSendChoiceMenu(menuText).catch(() => {
-        clearTimeout(timer)
+        const currentPending = this._pendingChoices.get(mapKey)
+        if (currentPending?.timer) {
+          clearTimeout(currentPending.timer)
+        }
         this._pendingChoices.delete(mapKey)
         resolve({ sessionId: null })
       })
     })
+  }
+
+  async handleDirectChoice(mapKey, sessions, inputText, identity, optionsOrTimeout = 10 * 60 * 1000) {
+    this._setPendingChoiceEntry(mapKey, sessions, {
+      optionsOrTimeout,
+      timerFactory: () => {
+        return setTimeout(() => {
+          this._pendingChoices.delete(mapKey)
+        }, this._resolvePendingChoiceTimeout(optionsOrTimeout))
+      },
+    })
+
+    return this.handleChoice(mapKey, inputText, identity)
+  }
+
+  _resolvePendingChoiceOptions(optionsOrTimeout) {
+    return typeof optionsOrTimeout === 'object' && optionsOrTimeout !== null
+      ? optionsOrTimeout
+      : {}
+  }
+
+  _resolvePendingChoiceTimeout(optionsOrTimeout) {
+    const options = this._resolvePendingChoiceOptions(optionsOrTimeout)
+    if (typeof optionsOrTimeout === 'number') return optionsOrTimeout
+    return typeof options.timeoutMs === 'number' ? options.timeoutMs : 10 * 60 * 1000
+  }
+
+  _setPendingChoiceEntry(mapKey, sessions, { optionsOrTimeout, resolve = () => {}, timerFactory }) {
+    this.clearPendingChoice(mapKey)
+
+    const options = this._resolvePendingChoiceOptions(optionsOrTimeout)
+    const entry = {
+      sessions,
+      resolve,
+      timer: null,
+      options,
+    }
+    entry.timer = timerFactory()
+    this._pendingChoices.set(mapKey, entry)
+    return { options, entry }
   }
 
   /** @private */

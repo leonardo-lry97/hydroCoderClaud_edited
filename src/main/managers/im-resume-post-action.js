@@ -1,3 +1,5 @@
+const { activateNewSession } = require('./im-session-command-flow')
+
 async function runResumePostAction({
   pendingMessage,
   clearPendingMessage,
@@ -6,21 +8,16 @@ async function runResumePostAction({
   replayPendingMessage,
   enqueueHello,
 }) {
-  if (pendingMessage) {
-    if (typeof clearPendingMessage === 'function') {
-      clearPendingMessage()
-    }
-    await replayPendingMessage?.(pendingMessage)
-    return { mode: 'replay_pending' }
-  }
-
-  if (!wasActivated) {
-    notifyMessageReceived?.()
-    await enqueueHello?.()
-    return { mode: 'enqueue_hello' }
-  }
-
-  return { mode: 'noop' }
+  const result = await activateNewSession({
+    sessionId: 'resume-post-action',
+    pendingMessage,
+    clearPendingMessage,
+    wasActivated,
+    notifyMessageReceived,
+    replayPendingMessage,
+    enqueueHello,
+  })
+  return { mode: result?.mode || 'noop' }
 }
 
 module.exports = {

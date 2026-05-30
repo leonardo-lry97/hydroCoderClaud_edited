@@ -33,6 +33,7 @@ const {
   resolveRenameCommand,
 } = require('./im-command-executor')
 const { runResumePostAction } = require('./im-resume-post-action')
+const { activateNewSession, resolveResumeSelection } = require('./im-session-command-flow')
 const {
   buildImCommandHelpText,
   buildAlreadyConnectedText,
@@ -756,18 +757,25 @@ class FeishuBridge {
         }
         await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionCreatingText())
         const pending = preservePendingSelection ? this._pendingMessages.get(mapKey) : null
-        if (pending) {
-          this._pendingMessages.delete(mapKey)
-          this._notifyPendingMessageReceived(newId, context.senderName || context.senderId, pending.message)
-          this._enqueueMessage(newId, pending.message, pending.senderId, pending.chatId, pending.chatType)
-        } else {
-          this._notifier.notifyMessageReceived({
-            sessionId: newId,
-            senderNick: context.senderName || context.senderId,
-            text: 'hello',
-          })
-          this._enqueueMessage(newId, { text: 'hello', images: undefined }, context.senderName || context.senderId, context.chatId, context.chatType)
-        }
+        await activateNewSession({
+          sessionId: newId,
+          pendingMessage: pending,
+          clearPendingMessage: () => this._pendingMessages.delete(mapKey),
+          notifyMessageReceived: () => {
+            this._notifier.notifyMessageReceived({
+              sessionId: newId,
+              senderNick: context.senderName || context.senderId,
+              text: 'hello',
+            })
+          },
+          replayPendingMessage: async (pendingSelection) => {
+            this._notifyPendingMessageReceived(newId, context.senderName || context.senderId, pendingSelection.message)
+            this._enqueueMessage(newId, pendingSelection.message, pendingSelection.senderId, pendingSelection.chatId, pendingSelection.chatType)
+          },
+          enqueueHello: async () => {
+            this._enqueueMessage(newId, { text: 'hello', images: undefined }, context.senderName || context.senderId, context.chatId, context.chatType)
+          },
+        })
         break
       }
       case '/resume': {
@@ -788,26 +796,27 @@ class FeishuBridge {
         }
         const selectedIndex = Number.parseInt(args[0], 10)
         if (!Number.isNaN(selectedIndex)) {
-          if (selectedIndex < 1 || selectedIndex > history.length) {
-            await this._api.sendTextMessage(receiveIdType, receiveId, `编号错误：请输入 1-${history.length} 之间的数字`)
+          const selection = resolveResumeSelection({
+            history,
+            selectedIndex,
+            currentSessionId: sessionId,
+            currentSession,
+          })
+          if (selection.action === 'invalid_index') {
+            await this._api.sendTextMessage(receiveIdType, receiveId, `编号错误：请输入 1-${selection.max} 之间的数字`)
             break
           }
           const pending = preservePendingSelection ? this._pendingMessages.get(mapKey) : null
-          const selected = history[selectedIndex - 1]
-          const restoredSessionId = selected?.session_id || selected?.sessionId || selected?.id || null
-          let resolvedSessionId = restoredSessionId
-          let isActivated = false
-          if (sessionId && restoredSessionId === sessionId) {
-            const liveCurrentSession = this._agentSessionManager.sessions.get(sessionId)
-            if (liveCurrentSession?.queryGenerator && !pending) {
-              await this._api.sendTextMessage(
-                receiveIdType,
-                receiveId,
-                buildAlreadyConnectedText(selected?.title || liveCurrentSession?.title || sessionId)
-              )
-              break
-            }
+          if (selection.action === 'already_connected') {
+            await this._api.sendTextMessage(
+              receiveIdType,
+              receiveId,
+              buildAlreadyConnectedText(selection.selected?.title || currentSession?.title || selection.sessionId)
+            )
+            break
           }
+          let resolvedSessionId = selection.sessionId
+          let isActivated = false
           if (resolvedSessionId) {
             try {
               const existingSession = this._agentSessionManager.sessions.get(resolvedSessionId)
@@ -833,7 +842,7 @@ class FeishuBridge {
             })
             this._notifier.notifySessionCreated({ sessionId: resolvedSessionId, nickname: context.senderName || context.senderId })
             if (isActivated) {
-              await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionSwitchedText(selected?.title || resolvedSessionId))
+              await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionSwitchedText(selection.selected?.title || resolvedSessionId))
             } else {
               await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionActivatingText())
             }
