@@ -96,6 +96,7 @@ class EnterpriseWeixinBridge {
     this._pendingInboundMessages = new Map()
     this._activeSendChunks = new Map()
     this._desktopPendingImagePaths = new Map()
+    this._proactiveRebindSuppressedKeys = new Set()
 
     this._bindAgentEvents()
   }
@@ -208,6 +209,7 @@ class EnterpriseWeixinBridge {
     this._pendingInboundMessages.clear()
     this._activeSendChunks.clear()
     this._desktopPendingImagePaths.clear()
+    this._proactiveRebindSuppressedKeys.clear()
 
     if (this._wsClient) {
       try { this._wsClient.disconnect() } catch {}
@@ -411,9 +413,10 @@ class EnterpriseWeixinBridge {
         mapKey,
         identity,
         resolveBoundSessionId: async () => {
-          if (identity.chatType !== 'single') return null
+          if (identity.chatType !== 'single' || this._proactiveRebindSuppressedKeys.has(mapKey)) return null
           const boundSessionId = this._findBoundSessionIdByUserId(identity.userId)
           if (!boundSessionId) return null
+          this._proactiveRebindSuppressedKeys.delete(mapKey)
           this._sessionIdentities.set(boundSessionId, {
             userId: identity.userId,
             senderId: identity.userId,
@@ -612,8 +615,10 @@ class EnterpriseWeixinBridge {
     })
 
     if (result.action === 'resume') {
+      this._proactiveRebindSuppressedKeys.delete(mapKey)
       await this._sendTextReply(frame, result.wasActivated ? buildAlreadyConnectedText(result.selectedSession?.title || result.sessionId) : buildSessionActivatingText())
     } else if (result.action === 'new') {
+      this._proactiveRebindSuppressedKeys.delete(mapKey)
       await this._sendTextReply(frame, buildSessionCreatingText())
     }
 
@@ -721,6 +726,9 @@ class EnterpriseWeixinBridge {
 
           await this._agentSessionManager.close(closeDecision.targetSessionId)
           this._clearSessionIdentity(closeDecision.targetSessionId)
+          if ((context.chatType || '').toLowerCase() === 'single') {
+            this._proactiveRebindSuppressedKeys.add(mapKey)
+          }
           this._notifier.notifySessionClosed({ sessionId: closeDecision.targetSessionId })
 
           await this._sendTextReply(context.frame, closeDecision.closeText)
@@ -744,6 +752,7 @@ class EnterpriseWeixinBridge {
           if (sessionId) {
             this._clearSessionIdentity(sessionId)
           }
+          this._proactiveRebindSuppressedKeys.delete(mapKey)
           const newId = await this._sessionMapper.createSession(identity, { cwd })
           if (!newId) {
             await this._sendTextReply(context.frame, '创建新会话失败')
@@ -829,6 +838,7 @@ class EnterpriseWeixinBridge {
               chatType: identity.chatType,
               chatName: identity.channelName || identity.nickname || identity.userId,
             })
+            this._proactiveRebindSuppressedKeys.delete(mapKey)
             this._notifier.notifySessionCreated({ sessionId: result.sessionId, nickname: identity.nickname || identity.userId })
             await this._sendTextReply(
               context.frame,
@@ -1528,9 +1538,10 @@ class EnterpriseWeixinBridge {
       this._targetSessionMap.delete(previousTarget.userId)
     }
 
+    this._clearSingleSessionMapBindingsForUser(resolvedUserId, sessionId)
+
     const previousSessionId = this._targetSessionMap.get(resolvedUserId)
     if (previousSessionId && previousSessionId !== sessionId) {
-      this._clearSingleSessionMapBindingsForUser(resolvedUserId, sessionId)
       this._sessionTargets.delete(previousSessionId)
       this._targetSessionMap.delete(resolvedUserId)
     }
@@ -1557,6 +1568,8 @@ class EnterpriseWeixinBridge {
         console.warn('[EnterpriseWeixin] Failed to persist bound target identity:', err.message)
       }
     }
+
+    this._clearProactiveRebindSuppressionForUser(resolvedUserId)
 
     return { success: true, target }
   }
@@ -1664,6 +1677,16 @@ class EnterpriseWeixinBridge {
     if (!identity) return
     if (identity.chatType === 'single' && !this._sessionTargets.has(sessionId)) {
       this._sessionIdentities.delete(sessionId)
+    }
+  }
+
+  _clearProactiveRebindSuppressionForUser(userId) {
+    const normalizedUserId = typeof userId === 'string' ? userId.trim() : ''
+    if (!normalizedUserId) return
+    for (const key of this._proactiveRebindSuppressedKeys) {
+      if (key.startsWith(`${normalizedUserId}:`)) {
+        this._proactiveRebindSuppressedKeys.delete(key)
+      }
     }
   }
 

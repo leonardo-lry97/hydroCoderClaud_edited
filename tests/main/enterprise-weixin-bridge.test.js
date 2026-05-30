@@ -768,6 +768,54 @@ describe('EnterpriseWeixinBridge', () => {
     )
   })
 
+  it('prompts for history after closing the current enterprise weixin session instead of auto-using another proactive binding', async () => {
+    const { bridge, manager, replies } = createHarness()
+    const sendMessage = stubSendMessage(manager)
+    const initPendingChoice = vi.spyOn(bridge._sessionMapper, 'initPendingChoice')
+    vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([
+      { session_id: 'old-bound-session', title: '旧主动绑定会话', updated_at: Date.now() - 60 * 1000 },
+    ])
+    initPendingChoice.mockImplementation(async (_mapKey, history, onSendChoiceMenu, options) => {
+      await onSendChoiceMenu(options.menuBuilder(history))
+      return { sessionId: null }
+    })
+
+    const current = manager.create({ type: 'chat', source: 'im-inbound', imChannel: 'enterprise-weixin', title: '当前会话' })
+    const oldBound = manager.create({ type: 'chat', source: 'manual', imChannel: 'enterprise-weixin', title: '旧主动绑定会话' })
+    manager.sessions.get(current.id).queryGenerator = {}
+    manager.sessions.get(oldBound.id).queryGenerator = {}
+    vi.spyOn(manager, 'close').mockImplementation(async (sessionId) => {
+      manager.sessions.delete(sessionId)
+    })
+
+    bridge._sessionMapper.sessionMap.set('user-a:user-a', current.id)
+    bridge._sessionIdentities.set(current.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+    bridge._targetSessionMap.set('user-a', oldBound.id)
+    bridge._sessionTargets.set(oldBound.id, {
+      userId: 'user-a',
+      displayName: '雷斯林',
+    })
+
+    await bridge._handleMessage(inboundFrame({
+      text: { content: '/close' },
+    }))
+
+    await bridge._handleMessage(inboundFrame({
+      text: { content: '关闭后再来一条' },
+    }))
+
+    expect(sendMessage).not.toHaveBeenCalled()
+    expect(initPendingChoice).toHaveBeenCalled()
+    expect(replies.some(item => JSON.stringify(item).includes('旧主动绑定会话'))).toBe(true)
+  })
+
   it('only forwards desktop intervention from the latest bound session for the same user', async () => {
     const { bridge, manager, wsClient } = createHarness()
     const first = manager.create({ type: 'chat', source: 'manual', title: '会话1' })
