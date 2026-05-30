@@ -691,13 +691,7 @@ class EnterpriseWeixinBridge {
           return
         }
 
-        let currentSessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
-        if (!currentSessionId && identity.chatType === 'single') {
-          currentSessionId = this._findBoundSessionIdByUserId(identity.userId)
-          if (currentSessionId) {
-            this._sessionMapper.sessionMap.set(mapKey, currentSessionId)
-          }
-        }
+        const currentSessionId = await this._sessionMapper.resolveActiveSessionId(mapKey)
 
         const history = await this._sessionMapper._queryHistorySessions(identity)
         if (!history || history.length === 0) {
@@ -861,6 +855,10 @@ class EnterpriseWeixinBridge {
 
   _getActiveSessionsByChat(chatId) {
     const chatKey = String(chatId || '').trim()
+    for (const session of this._agentSessionManager.sessions.values()) {
+      if (session?.imChannel !== this._imType) continue
+      this._restoreSessionIdentityFromDatabase(session.id)
+    }
     const results = []
     const seen = new Set()
     for (const [sessionId, identity] of this._sessionIdentities.entries()) {
@@ -872,6 +870,29 @@ class EnterpriseWeixinBridge {
       results.push(session)
     }
     return results.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))
+  }
+
+  _restoreSessionIdentityFromDatabase(sessionId) {
+    if (!sessionId || this._sessionIdentities.has(sessionId)) return this._sessionIdentities.get(sessionId) || null
+
+    const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
+    const userId = typeof row?.staff_id === 'string' ? row.staff_id.trim() : ''
+    if (!userId || row?.im_channel !== this._imType) return null
+
+    const chatId = typeof row?.conversation_id === 'string' && row.conversation_id.trim()
+      ? row.conversation_id.trim()
+      : userId
+    const displayName = this._sessionTargets.get(sessionId)?.displayName || userId
+    const identity = {
+      userId,
+      senderId: userId,
+      senderName: displayName,
+      chatId,
+      chatType: chatId !== userId ? 'group' : 'single',
+      chatName: displayName,
+    }
+    this._sessionIdentities.set(sessionId, identity)
+    return identity
   }
 
   _buildHelpText() {
@@ -1272,6 +1293,13 @@ class EnterpriseWeixinBridge {
   _onDesktopIntervention(sessionId, content, images) {
     const identity = this._sessionIdentities.get(sessionId)
     if (!identity) return
+
+    const boundTarget = this._sessionTargets.get(sessionId)
+    const targetUserId = boundTarget?.userId || identity.senderId || identity.userId || null
+    if (!targetUserId || this._targetSessionMap.get(targetUserId) !== sessionId) {
+      console.log(`[EnterpriseWeixin] Desktop intervention blocked for session ${sessionId}: not current bound session`)
+      return
+    }
 
     const chatId = identity.chatType === 'group' ? identity.chatId : identity.senderId
     if (!chatId || !this._wsClient || !this._connected) return
