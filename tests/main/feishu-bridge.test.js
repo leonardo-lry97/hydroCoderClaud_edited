@@ -1299,6 +1299,8 @@ describe('FeishuBridge', () => {
         })
       })
     )
+    const sessionsPayload = sendCardMessage.mock.calls.at(-1)?.[2]
+    expect(JSON.stringify(sessionsPayload)).toContain('使用 /close [编号] 关闭指定会话，编号以 /sessions 列表为准')
   })
 
   it('lists active sessions for the current group chat from card actions', async () => {
@@ -1335,6 +1337,8 @@ describe('FeishuBridge', () => {
         })
       })
     )
+    const helpPayload = sendCardMessage.mock.calls.at(-1)?.[2]
+    expect(JSON.stringify(helpPayload)).toContain('/close [编号] - 关闭当前会话或指定会话（编号以 /sessions 为准）')
   })
 
   it('renames the active Feishu session', async () => {

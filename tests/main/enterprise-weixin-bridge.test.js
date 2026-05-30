@@ -271,6 +271,7 @@ describe('EnterpriseWeixinBridge', () => {
         content: expect.stringContaining('/help'),
       },
     })
+    expect(replies.at(-1).markdown.content).toContain('/close [编号] - 关闭当前会话或指定会话（编号以 /sessions 为准）')
   })
 
   it('reports enterprise weixin historical session state with /status', async () => {
@@ -369,6 +370,7 @@ describe('EnterpriseWeixinBridge', () => {
     expect(replies.at(-1).markdown.content).toContain('活跃会话')
     expect(replies.at(-1).markdown.content).toContain('会话 A')
     expect(replies.at(-1).markdown.content).toContain('会话 B')
+    expect(replies.at(-1).markdown.content).toContain('使用 /close [编号] 关闭指定会话，编号以 /sessions 列表为准')
   })
 
   it('includes a reopened bound session for the same chat in /sessions even when identity was not restored yet', async () => {

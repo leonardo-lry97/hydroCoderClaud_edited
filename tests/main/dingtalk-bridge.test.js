@@ -719,5 +719,6 @@ describe('DingTalkBridge', () => {
     expect(text).not.toContain('暂无活跃会话')
     expect(text).toContain('钉钉 · 李四')
     expect(text).toContain('使用 /close 关闭当前会话')
+    expect(text).toContain('使用 /close [编号] 关闭指定会话，编号以 /sessions 列表为准')
   })
 })
