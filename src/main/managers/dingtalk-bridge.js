@@ -51,6 +51,7 @@ class DingTalkBridge {
 
     this.client = null
     this.connected = false
+    this._stopped = false
 
     // 钉钉用户+会话 → Agent 会话映射：{ "staffId:conversationId": sessionId }
     this.sessionMap = new Map()
@@ -144,6 +145,7 @@ class DingTalkBridge {
    * 启动钉钉桥接（根据配置决定是否启动）
    */
   async start() {
+    this._stopped = false
     const config = this.configManager.getConfig()
     const { enabled, appKey, appSecret } = config.dingtalk || {}
 
@@ -166,6 +168,7 @@ class DingTalkBridge {
    * 停止钉钉桥接
    */
   async stop() {
+    this._stopped = true
     if (this._reconnectWatchdog) {
       clearTimeout(this._reconnectWatchdog)
       this._reconnectWatchdog = null
@@ -289,6 +292,10 @@ class DingTalkBridge {
     if (!socket) return
 
     socket.once('close', () => {
+      if (this._stopped) {
+        this.connected = false
+        return
+      }
       if (this.connected) {
         this.connected = false
         console.log('[DingTalk] Socket closed, waiting for SDK reconnect...')
@@ -308,9 +315,11 @@ class DingTalkBridge {
    *   - 失败 → 执行完整 restart，再失败则持续重试（间隔递增，最长 5 分钟）
    */
   _startReconnectWatchdog() {
+    if (this._stopped) return
     this._clearReconnectWatchdog()
     this._reconnectWatchdog = setTimeout(() => {
       this._reconnectWatchdog = null
+      if (this._stopped) return
 
       // SDK 可能已自动重连成功（创建了新 socket）
       if (this.client?.registered) {
@@ -330,6 +339,7 @@ class DingTalkBridge {
    * watchdog 重连：restart 失败后按递增间隔持续重试，最长 5 分钟
    */
   _watchdogRestart(nextDelay) {
+    if (this._stopped) return
     this.restart().then(ok => {
       if (ok) return // restart 成功，_connect 内部会重新 hookSocketEvents
       // restart 返回 false（start 内部 catch 了异常）
@@ -337,7 +347,7 @@ class DingTalkBridge {
       console.log(`[DingTalk] Watchdog restart failed, retrying in ${cappedDelay / 1000}s...`)
       this._reconnectWatchdog = setTimeout(() => {
         this._reconnectWatchdog = null
-        if (this.connected) return
+        if (this._stopped || this.connected) return
         this._watchdogRestart(cappedDelay * 2) // 指数退避
       }, cappedDelay)
     }).catch(err => {
@@ -345,7 +355,7 @@ class DingTalkBridge {
       console.error('[DingTalk] Watchdog restart unexpected error:', err.message)
       this._reconnectWatchdog = setTimeout(() => {
         this._reconnectWatchdog = null
-        if (this.connected) return
+        if (this._stopped || this.connected) return
         this._watchdogRestart(60 * 1000)
       }, 60 * 1000)
     })
