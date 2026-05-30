@@ -39,6 +39,7 @@ const {
   resolveCloseCommand,
   resolveRenameCommand,
 } = require('./im-command-executor')
+const { runResumePostAction } = require('./im-resume-post-action')
 const {
   buildImCommandHelpText,
   buildAlreadyConnectedText,
@@ -617,30 +618,37 @@ class EnterpriseWeixinBridge {
     }
 
     const pending = this._pendingInboundMessages.get(mapKey)
-    if (pending) {
-      this._pendingInboundMessages.delete(mapKey)
-      this._notifier.notifyMessageReceived({
-        sessionId,
-        senderNick: identity.nickname || identity.userId,
-        text: pending.message.text || (pending.message.images?.length ? '[图片]' : ''),
-        images: pending.message.images,
-        imagesCount: Array.isArray(pending.message.images) ? pending.message.images.length : 0,
-      })
-      await this._enqueueInboundMessage(sessionId, pending.frame, pending.message, identity)
-    } else if (!result.wasActivated) {
-      this._notifier.notifyMessageReceived({
-        sessionId,
-        senderNick: identity.nickname || identity.userId,
-        text: 'hello',
-      })
-      await this._enqueueInboundMessage(sessionId, frame, {
-        msgId: `choice-resume-${Date.now()}`,
-        chatId: identity.chatId,
-        chatType: identity.chatType,
-        text: 'hello',
-        images: [],
-      }, identity)
-    }
+    await runResumePostAction({
+      pendingMessage: pending,
+      clearPendingMessage: () => this._pendingInboundMessages.delete(mapKey),
+      wasActivated: result.wasActivated,
+      notifyMessageReceived: () => {
+        this._notifier.notifyMessageReceived({
+          sessionId,
+          senderNick: identity.nickname || identity.userId,
+          text: 'hello',
+        })
+      },
+      replayPendingMessage: async (pendingSelection) => {
+        this._notifier.notifyMessageReceived({
+          sessionId,
+          senderNick: identity.nickname || identity.userId,
+          text: pendingSelection.message.text || (pendingSelection.message.images?.length ? '[图片]' : ''),
+          images: pendingSelection.message.images,
+          imagesCount: Array.isArray(pendingSelection.message.images) ? pendingSelection.message.images.length : 0,
+        })
+        await this._enqueueInboundMessage(sessionId, pendingSelection.frame, pendingSelection.message, identity)
+      },
+      enqueueHello: async () => {
+        await this._enqueueInboundMessage(sessionId, frame, {
+          msgId: `choice-resume-${Date.now()}`,
+          chatId: identity.chatId,
+          chatType: identity.chatType,
+          text: 'hello',
+          images: [],
+        }, identity)
+      },
+    })
   }
 
   async _handleCommand(text, context, options = {}) {

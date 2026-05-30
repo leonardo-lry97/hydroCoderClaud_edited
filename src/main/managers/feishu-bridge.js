@@ -32,6 +32,7 @@ const {
   resolveCloseCommand,
   resolveRenameCommand,
 } = require('./im-command-executor')
+const { runResumePostAction } = require('./im-resume-post-action')
 const {
   buildImCommandHelpText,
   buildAlreadyConnectedText,
@@ -578,18 +579,25 @@ class FeishuBridge {
       } else {
         await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionCreatingText())
       }
-      if (pending) {
-        this._pendingMessages.delete(mapKey)
-        this._notifyPendingMessageReceived(result.sessionId, displayName, pending.message)
-        this._enqueueMessage(result.sessionId, pending.message, pending.senderId, pending.chatId, pending.chatType)
-      } else if (!result.wasActivated) {
-        this._notifier.notifyMessageReceived({
-          sessionId: result.sessionId,
-          senderNick: displayName,
-          text: 'hello',
-        })
-        this._enqueueMessage(result.sessionId, { text: 'hello', images: undefined }, displayName, chatId, chatType)
-      }
+      await runResumePostAction({
+        pendingMessage: pending,
+        clearPendingMessage: () => this._pendingMessages.delete(mapKey),
+        wasActivated: result.wasActivated,
+        notifyMessageReceived: () => {
+          this._notifier.notifyMessageReceived({
+            sessionId: result.sessionId,
+            senderNick: displayName,
+            text: 'hello',
+          })
+        },
+        replayPendingMessage: async (pendingSelection) => {
+          this._notifyPendingMessageReceived(result.sessionId, displayName, pendingSelection.message)
+          this._enqueueMessage(result.sessionId, pendingSelection.message, pendingSelection.senderId, pendingSelection.chatId, pendingSelection.chatType)
+        },
+        enqueueHello: async () => {
+          this._enqueueMessage(result.sessionId, { text: 'hello', images: undefined }, displayName, chatId, chatType)
+        },
+      })
     } else {
       await this._api.sendTextMessage(receiveIdType, receiveId, '无效选择，请重新回复数字')
     }
@@ -829,18 +837,25 @@ class FeishuBridge {
             } else {
               await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionActivatingText())
             }
-            if (pending) {
-              this._pendingMessages.delete(mapKey)
-              this._notifyPendingMessageReceived(resolvedSessionId, context.senderName || context.senderId, pending.message)
-              this._enqueueMessage(resolvedSessionId, pending.message, pending.senderId, pending.chatId, pending.chatType)
-            } else if (!isActivated) {
-              this._notifier.notifyMessageReceived({
-                sessionId: resolvedSessionId,
-                senderNick: context.senderName || context.senderId,
-                text: 'hello',
-              })
-              this._enqueueMessage(resolvedSessionId, { text: 'hello', images: undefined }, context.senderName || context.senderId, context.chatId, context.chatType)
-            }
+            await runResumePostAction({
+              pendingMessage: pending,
+              clearPendingMessage: () => this._pendingMessages.delete(mapKey),
+              wasActivated: isActivated,
+              notifyMessageReceived: () => {
+                this._notifier.notifyMessageReceived({
+                  sessionId: resolvedSessionId,
+                  senderNick: context.senderName || context.senderId,
+                  text: 'hello',
+                })
+              },
+              replayPendingMessage: async (pendingSelection) => {
+                this._notifyPendingMessageReceived(resolvedSessionId, context.senderName || context.senderId, pendingSelection.message)
+                this._enqueueMessage(resolvedSessionId, pendingSelection.message, pendingSelection.senderId, pendingSelection.chatId, pendingSelection.chatType)
+              },
+              enqueueHello: async () => {
+                this._enqueueMessage(resolvedSessionId, { text: 'hello', images: undefined }, context.senderName || context.senderId, context.chatId, context.chatType)
+              },
+            })
           } else {
             await this._api.sendTextMessage(receiveIdType, receiveId, '无法恢复该会话，可能已被删除\n\n发送任意消息可开始新会话')
           }
