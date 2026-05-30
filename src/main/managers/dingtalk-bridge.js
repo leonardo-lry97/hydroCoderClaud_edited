@@ -8,6 +8,11 @@ const fs = require('fs')
 const path = require('path')
 const { ImFrontendNotifier } = require('./im-frontend-notifier')
 const {
+  isMappedCurrentSession,
+  deleteSessionMappingsByPrefix,
+  clearExactSessionMapping,
+} = require('./im-session-selectors')
+const {
   buildHistoryChoiceMenuText,
 } = require('./im-command-presenter')
 
@@ -786,20 +791,19 @@ class DingTalkBridge {
     const row = this.agentSessionManager.sessionDatabase?.getAgentConversation?.(sessionId)
     const conversationId = liveSession?.meta?.conversationId || row?.conversation_id || ''
     if (!conversationId) return
-    const mapKey = `${staffId}:${conversationId}`
-    if (this.sessionMap.get(mapKey) === sessionId) {
-      this.sessionMap.delete(mapKey)
-    }
+    clearExactSessionMapping({
+      sessionMap: this.sessionMap,
+      mapKey: `${staffId}:${conversationId}`,
+      sessionId,
+    })
   }
 
   _clearStaffConversationMapBindings(staffId, keepSessionId = null) {
-    if (!staffId) return
-    const prefix = `${staffId}:`
-    for (const [mapKey, mappedSessionId] of this.sessionMap.entries()) {
-      if (!mapKey.startsWith(prefix)) continue
-      if (keepSessionId && mappedSessionId === keepSessionId) continue
-      this.sessionMap.delete(mapKey)
-    }
+    deleteSessionMappingsByPrefix({
+      sessionMap: this.sessionMap,
+      prefix: `${staffId}:`,
+      keepSessionId,
+    })
   }
 
   _findBoundSessionIdByStaffId(staffId) {
@@ -1288,7 +1292,10 @@ class DingTalkBridge {
     if (!this._sessionWebhooks.has(sessionId)) return
 
     // 检查是否是当前连接的会话（在 sessionMap 中）
-    const isCurrentSession = [...this.sessionMap.values()].includes(sessionId)
+    const isCurrentSession = isMappedCurrentSession({
+      sessionMap: this.sessionMap,
+      sessionId,
+    })
     if (!isCurrentSession) {
       console.log(`[DingTalk] Desktop intervention blocked for session ${sessionId}: not current connected session`)
       return

@@ -15,6 +15,13 @@ const { FeishuEventClient } = require('./feishu-event-client')
 const { FeishuMessageAPI } = require('./feishu-message-api')
 const { extractImagePaths, normalizePath, formatRelativeTime, IMAGE_EXTENSIONS, IMAGE_MAX_SIZE } = require('./im-utils')
 const {
+  listChatSessions,
+  createActivatedSessionMatcher,
+  isMappedCurrentSession,
+  clearExactSessionMapping,
+  clearSessionMappingsForSession,
+} = require('./im-session-selectors')
+const {
   buildHistoryChoiceMenuText,
   buildActiveSessionsText,
   buildStatusText,
@@ -1116,6 +1123,19 @@ class FeishuBridge {
     const identity = this._sessionIdentities.get(sessionId)
     if (!identity) return
 
+    const mapKey = this._sessionMapper.buildKey({
+      userId: identity.senderId,
+      chatId: identity.chatId,
+    })
+    if (!isMappedCurrentSession({
+      sessionMap: this._sessionMapper.sessionMap,
+      sessionId,
+      mapKey,
+    })) {
+      console.log(`[FeishuBridge] Desktop intervention blocked for session ${sessionId}: not current connected session`)
+      return
+    }
+
     const receiveId = identity.chatType === 'p2p' ? identity.senderId : identity.chatId
     const receiveIdType = identity.chatType === 'p2p' ? 'open_id' : 'chat_id'
 
@@ -1246,10 +1266,12 @@ class FeishuBridge {
     if (!sessionId || !senderId) return
     const identity = this._sessionIdentities.get(sessionId)
     if (!identity || identity.chatType !== 'p2p' || !identity.chatId) return
-    const mapKey = this._sessionMapper.buildKey({ userId: senderId, chatId: identity.chatId })
-    if (this._sessionMapper.sessionMap.get(mapKey) === sessionId) {
-      this._sessionMapper.sessionMap.delete(mapKey)
-    }
+    clearExactSessionMapping({
+      sessionMap: this._sessionMapper.sessionMap,
+      mapKey: this._sessionMapper.buildKey({ userId: senderId, chatId: identity.chatId }),
+      sessionId,
+      deleteEntry: (mapKeyToDelete) => this._sessionMapper.clearSessionState(mapKeyToDelete),
+    })
   }
 
   _clearP2PSessionMapBindingsForSender(senderId, keepSessionId = null) {
@@ -1625,14 +1647,16 @@ class FeishuBridge {
   }
 
   _getActiveSessionsByChat(chatId) {
-    const sessions = [...this._agentSessionManager.sessions.values()]
-    return sessions.filter((session) => {
-      const belongsToFeishu = session.imChannel === 'feishu'
-      if (!belongsToFeishu || !session.queryGenerator) return false
-      const identity = this._sessionIdentities.get(session.id)
-      if (identity?.chatId === chatId) return true
-      const row = this._sessionDatabase?.getAgentConversation?.(session.id)
-      return row?.conversation_id === chatId
+    const includeSession = createActivatedSessionMatcher({
+      imType: 'feishu',
+      getImChannel: (session) => session?.imChannel,
+      getChatId: (session) => this._sessionIdentities.get(session?.id)?.chatId || this._sessionDatabase?.getAgentConversation?.(session?.id)?.conversation_id || '',
+      isActivated: (session) => !!session?.queryGenerator,
+    })
+    return listChatSessions({
+      sessions: this._agentSessionManager.sessions.values(),
+      chatId,
+      includeSession,
     })
   }
 
@@ -1894,11 +1918,11 @@ class FeishuBridge {
   }
 
   _clearSessionIdentity(sessionId) {
-    for (const [key, sid] of this._sessionMapper.sessionMap.entries()) {
-      if (sid === sessionId) {
-        this._sessionMapper.clearSessionState(key)
-      }
-    }
+    clearSessionMappingsForSession({
+      sessionMap: this._sessionMapper.sessionMap,
+      sessionId,
+      deleteEntry: (mapKey) => this._sessionMapper.clearSessionState(mapKey),
+    })
     const target = this._sessionTargets.get(sessionId)
     if (target?.openId) {
       this._targetSessionMap.delete(target.openId)

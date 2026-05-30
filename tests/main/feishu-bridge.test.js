@@ -1083,6 +1083,11 @@ describe('FeishuBridge', () => {
 
     const session = manager.create({ type: 'feishu', source: 'feishu', title: '飞书会话', cwd: tempDir })
     bridge._sessionMapper.sessionMap.set('ou_xxx:oc_xxx', session.id)
+    bridge._sessionTargets.set(session.id, {
+      openId: 'ou_xxx',
+      displayName: '张三'
+    })
+    bridge._targetSessionMap.set('ou_xxx', session.id)
     bridge._sessionIdentities.set(session.id, {
       senderId: 'ou_xxx',
       chatId: 'oc_xxx',
@@ -1130,7 +1135,7 @@ describe('FeishuBridge', () => {
     expect(desktopIntervention).toHaveBeenCalledWith(session.id, '桌面继续', undefined)
   })
 
-  it('sends desktop intervention back to Feishu for a proactively bound chat session even without a sessionMap key', async () => {
+  it('does not forward desktop intervention for a proactively bound Feishu session without current chat mapping', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -1145,10 +1150,101 @@ describe('FeishuBridge', () => {
     bridge._onDesktopIntervention(session.id, '桌面继续', undefined)
     await bridge._onAgentResult(session.id)
 
-    expect(sendTextMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).not.toHaveBeenCalled()
+  })
+
+  it('does not forward Feishu desktop intervention for a reopened history session without current chat mapping', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
+
+    const current = manager.create({ type: 'chat', source: 'manual', title: '当前桌面会话', cwd: tempDir })
+    const history = manager.create({ type: 'chat', source: 'manual', title: '历史桌面会话', cwd: tempDir })
+    await bridge.sendTextToTarget({
+      sessionId: current.id,
+      openId: 'ou_target',
+      displayName: '张三',
+      text: '当前绑定'
+    })
+    bridge._sessionMapper.sessionMap.set('ou_target:oc_reply', current.id)
+    bridge._sessionIdentities.set(current.id, {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+    bridge._sessionIdentities.set(history.id, {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+    bridge._sessionTargets.set(history.id, {
+      openId: 'ou_target',
+      displayName: '张三'
+    })
+
+    bridge._onDesktopIntervention(history.id, '历史会话不应回发', undefined)
+    await bridge._onAgentResult(history.id)
+
+    expect(sendTextMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks desktop intervention from an older Feishu session after rebinding the same user', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
+
+    const first = manager.create({ type: 'chat', source: 'manual', title: '会话1', cwd: tempDir })
+    const second = manager.create({ type: 'chat', source: 'manual', title: '会话2', cwd: tempDir })
+
+    await bridge.sendTextToTarget({
+      sessionId: first.id,
+      openId: 'ou_target',
+      displayName: '张三',
+      text: '第一条'
+    })
+
+    bridge._sessionMapper.sessionMap.set('ou_target:oc_reply', first.id)
+    bridge._sessionIdentities.set(first.id, {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+
+    await bridge.sendTextToTarget({
+      sessionId: second.id,
+      openId: 'ou_target',
+      displayName: '张三',
+      text: '第二条'
+    })
+
+    bridge._sessionIdentities.set(second.id, {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+    bridge._sessionMapper.sessionMap.set('ou_target:oc_reply', second.id)
+
+    bridge._onDesktopIntervention(first.id, '旧会话不应回发', undefined)
+    await bridge._onAgentResult(first.id)
+
+    expect(sendTextMessage).toHaveBeenCalledTimes(2)
+
+    bridge._onDesktopIntervention(second.id, '新会话应回发', undefined)
+    await bridge._onAgentResult(second.id)
+
+    expect(sendTextMessage).toHaveBeenCalledTimes(3)
+    expect(sendTextMessage).toHaveBeenLastCalledWith(
       'open_id',
       'ou_target',
-      expect.stringContaining('桌面介入> 桌面继续')
+      expect.stringContaining('桌面介入> 新会话应回发')
     )
   })
 

@@ -12,6 +12,10 @@ const {
   buildStatusText,
   buildCommandHelpText,
 } = require('./im-command-presenter')
+const {
+  listChatSessions,
+  createActivatedSessionMatcher,
+} = require('./im-session-selectors')
 
 function buildDingTalkCommandContext(context = {}, webhook = null) {
   return {
@@ -218,26 +222,19 @@ module.exports = {
    * @returns {Object[]} 匹配的激活会话数组
    */
   _getActiveSessionsByConversation(conversationId) {
-    const allSessions = [...this.agentSessionManager.sessions.values()]
     const db = this.agentSessionManager.sessionDatabase
-
-    return allSessions.filter(s => {
-      const belongsToDingTalk = s.imChannel === 'dingtalk'
-      if (!belongsToDingTalk || !s.queryGenerator) return false
-      if (!conversationId) return true
-
-      // 优先使用内存中的 meta.conversationId，如果没有则从数据库查询
-      if (s.meta?.conversationId) {
-        return s.meta.conversationId === conversationId
-      }
-
-      // 从数据库查询会话的 conversationId
-      if (db) {
-        const row = db.getAgentConversation(s.id)
-        return row?.conversation_id === conversationId
-      }
-
-      return true  // 无法判断时包含（兼容旧会话）
+    const includeSession = createActivatedSessionMatcher({
+      imType: 'dingtalk',
+      getImChannel: (session) => session?.imChannel,
+      getChatId: (session) => session?.meta?.conversationId || db?.getAgentConversation?.(session?.id)?.conversation_id || '',
+      isActivated: (session) => !!session?.queryGenerator,
+    })
+    return listChatSessions({
+      sessions: this.agentSessionManager.sessions.values(),
+      chatId: conversationId,
+      includeSession,
+      // DingTalk historically kept insertion order; preserve that for menu numbering stability.
+      sortSessions: (sessions) => [...sessions],
     })
   },
 

@@ -294,12 +294,50 @@ describe('EnterpriseWeixinBridge', () => {
     expect(replies.at(-1).markdown.content).toContain('企业微信: 已连接')
   })
 
+  it('limits enterprise weixin /status to active sessions in the current chat', async () => {
+    const { bridge, manager, replies } = createHarness()
+    const current = manager.create({ type: 'chat', source: 'manual', title: '当前聊天会话' })
+    const other = manager.create({ type: 'chat', source: 'manual', title: '其他聊天会话' })
+    manager.sessions.get(current.id).imChannel = 'enterprise-weixin'
+    manager.sessions.get(other.id).imChannel = 'enterprise-weixin'
+    manager.sessions.get(current.id).queryGenerator = {}
+    manager.sessions.get(other.id).queryGenerator = {}
+
+    bridge._sessionMapper.sessionMap.set('user-a:user-a', current.id)
+    bridge._sessionIdentities.set(current.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+    bridge._sessionIdentities.set(other.id, {
+      userId: 'user-b',
+      senderId: 'user-b',
+      senderName: 'HydroCoder',
+      chatId: 'user-b',
+      chatType: 'single',
+      chatName: 'HydroCoder',
+    })
+
+    await bridge._handleMessage(inboundFrame({
+      text: { content: '/status' },
+    }))
+
+    const statusText = replies.at(-1).markdown.content
+    expect(statusText).toContain('总会话数: 1 个')
+    expect(statusText).toContain('空闲: 1 个')
+  })
+
   it('lists active chat sessions for /sessions', async () => {
     const { bridge, manager, replies } = createHarness()
     const first = manager.create({ type: 'chat', source: 'manual', title: '会话 A' })
     const second = manager.create({ type: 'chat', source: 'manual', title: '会话 B' })
-    first.imChannel = 'enterprise-weixin'
-    second.imChannel = 'enterprise-weixin'
+    manager.sessions.get(first.id).imChannel = 'enterprise-weixin'
+    manager.sessions.get(second.id).imChannel = 'enterprise-weixin'
+    manager.sessions.get(first.id).queryGenerator = {}
+    manager.sessions.get(second.id).queryGenerator = {}
     bridge._sessionMapper.sessionMap.set('user-a:user-a', first.id)
     bridge._sessionIdentities.set(first.id, {
       userId: 'user-a',
@@ -333,6 +371,8 @@ describe('EnterpriseWeixinBridge', () => {
     const reopened = manager.create({ type: 'chat', source: 'manual', title: '历史激活会话' })
     manager.sessions.get(current.id).imChannel = 'enterprise-weixin'
     manager.sessions.get(reopened.id).imChannel = 'enterprise-weixin'
+    manager.sessions.get(current.id).queryGenerator = {}
+    manager.sessions.get(reopened.id).queryGenerator = {}
 
     bridge._sessionMapper.sessionMap.set('user-a:user-a', current.id)
     bridge._sessionIdentities.set(current.id, {
@@ -362,6 +402,40 @@ describe('EnterpriseWeixinBridge', () => {
 
     expect(replies.at(-1).markdown.content).toContain('当前绑定会话')
     expect(replies.at(-1).markdown.content).toContain('历史激活会话')
+  })
+
+  it('does not include non-activated enterprise weixin sessions in /sessions', async () => {
+    const { bridge, manager, replies } = createHarness()
+    const activated = manager.create({ type: 'chat', source: 'manual', title: '已激活会话' })
+    const liveOnly = manager.create({ type: 'chat', source: 'manual', title: '仅存活会话' })
+    manager.sessions.get(activated.id).imChannel = 'enterprise-weixin'
+    manager.sessions.get(liveOnly.id).imChannel = 'enterprise-weixin'
+    manager.sessions.get(activated.id).queryGenerator = {}
+
+    bridge._sessionMapper.sessionMap.set('user-a:user-a', activated.id)
+    bridge._sessionIdentities.set(activated.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+    bridge._sessionIdentities.set(liveOnly.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+
+    await bridge._handleMessage(inboundFrame({
+      text: { content: '/sessions' },
+    }))
+
+    expect(replies.at(-1).markdown.content).toContain('已激活会话')
+    expect(replies.at(-1).markdown.content).not.toContain('仅存活会话')
   })
 
 
@@ -674,6 +748,7 @@ describe('EnterpriseWeixinBridge', () => {
       chatType: 'single',
       chatName: '雷斯林',
     })
+    bridge._sessionMapper.sessionMap.set('user-a:user-a', second.id)
 
     bridge._onDesktopIntervention(first.id, '旧会话不应回发', null)
     await bridge._onAgentResult(first.id)
@@ -694,6 +769,39 @@ describe('EnterpriseWeixinBridge', () => {
         content: '桌面介入> 新会话应回发\n\n来自新会话的回复',
       },
     })
+  })
+
+  it('clears old enterprise weixin chat mapping when rebinding the same user to a newer desktop session', async () => {
+    const { bridge, manager } = createHarness()
+    const first = manager.create({ type: 'chat', source: 'manual', title: '会话1' })
+    const second = manager.create({ type: 'chat', source: 'manual', title: '会话2' })
+
+    await bridge.sendTextToTarget({
+      sessionId: first.id,
+      userId: 'user-a',
+      displayName: '雷斯林',
+      text: '第一条',
+    })
+
+    bridge._sessionMapper.sessionMap.set('user-a:user-a', first.id)
+    bridge._sessionIdentities.set(first.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+
+    await bridge.sendTextToTarget({
+      sessionId: second.id,
+      userId: 'user-a',
+      displayName: '雷斯林',
+      text: '第二条',
+    })
+
+    expect(bridge._targetSessionMap.get('user-a')).toBe(second.id)
+    expect(bridge._sessionMapper.sessionMap.get('user-a:user-a')).toBeUndefined()
   })
 
   it('does not forward desktop messages after the bound session is closed and reopened', async () => {
@@ -727,6 +835,52 @@ describe('EnterpriseWeixinBridge', () => {
     )
     expect(manager.sessionDatabase.setImChannel).not.toHaveBeenCalledWith(created.id, null)
     expect(manager.sessionDatabase.clearImIdentity).not.toHaveBeenCalledWith(created.id)
+  })
+
+  it('does not forward enterprise weixin desktop intervention for a reopened history session without current chat mapping', async () => {
+    const { bridge, manager, wsClient } = createHarness()
+    const current = manager.create({ type: 'chat', source: 'manual', title: '当前会话' })
+    const history = manager.create({ type: 'chat', source: 'manual', title: '历史会话' })
+
+    await bridge.sendTextToTarget({
+      sessionId: current.id,
+      userId: 'user-a',
+      displayName: '雷斯林',
+      text: '当前绑定',
+    })
+
+    manager.sessions.get(current.id).imChannel = 'enterprise-weixin'
+    manager.sessions.get(history.id).imChannel = 'enterprise-weixin'
+    bridge._sessionMapper.sessionMap.set('user-a:user-a', current.id)
+    bridge._sessionIdentities.set(current.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+    bridge._sessionIdentities.set(history.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+    bridge._sessionTargets.set(history.id, {
+      userId: 'user-a',
+      displayName: '雷斯林',
+    })
+
+    bridge._onDesktopIntervention(history.id, '历史会话不应回发', null)
+    bridge._onAgentMessage(history.id, {
+      type: 'assistant',
+      content: [{ type: 'text', text: '历史会话回复' }],
+    })
+    await bridge._onAgentResult(history.id)
+
+    expect(wsClient.sendMessage).toHaveBeenCalledTimes(1)
   })
 
   it('keeps persisted binding metadata when the session is closed', async () => {
@@ -898,6 +1052,7 @@ describe('EnterpriseWeixinBridge', () => {
       chatType: 'single',
       chatName: '雷斯林',
     })
+    bridge._sessionMapper.sessionMap.set('user-a:user-a', sessionId)
 
     bridge._onDesktopIntervention(sessionId, '', [
       {

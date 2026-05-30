@@ -22,6 +22,13 @@ const { ImFrontendNotifier } = require('./im-frontend-notifier')
 const { ImReplyCollector } = require('./im-reply-collector')
 const { ImSessionMapper } = require('./im-session-mapper')
 const {
+  listChatSessions,
+  createActivatedSessionMatcher,
+  isMappedCurrentSession,
+  deleteSessionMappingsByPrefix,
+  clearSessionMappingsForSession,
+} = require('./im-session-selectors')
+const {
   buildHistoryChoiceMenuText,
   buildActiveSessionsText,
   buildStatusText,
@@ -614,7 +621,10 @@ class EnterpriseWeixinBridge {
         return
 
       case '/status':
-        await this._sendTextReply(context.frame, this._buildStatusMenuText(sessionId))
+        await this._sendTextReply(context.frame, this._buildStatusMenuText({
+          sessionId,
+          chatId,
+        }))
         return
 
       case '/sessions':
@@ -859,17 +869,17 @@ class EnterpriseWeixinBridge {
       if (session?.imChannel !== this._imType) continue
       this._restoreSessionIdentityFromDatabase(session.id)
     }
-    const results = []
-    const seen = new Set()
-    for (const [sessionId, identity] of this._sessionIdentities.entries()) {
-      if (!identity) continue
-      if (String(identity.chatId || '').trim() !== chatKey) continue
-      const session = this._agentSessionManager.sessions.get(sessionId)
-      if (!session || seen.has(sessionId)) continue
-      seen.add(sessionId)
-      results.push(session)
-    }
-    return results.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))
+    const includeSession = createActivatedSessionMatcher({
+      imType: this._imType,
+      getImChannel: (session) => session?.imChannel,
+      getChatId: (session) => this._sessionIdentities.get(session?.id)?.chatId || '',
+      isActivated: (session) => !!session?.queryGenerator,
+    })
+    return listChatSessions({
+      sessions: this._agentSessionManager.sessions.values(),
+      chatId: chatKey,
+      includeSession,
+    })
   }
 
   _restoreSessionIdentityFromDatabase(sessionId) {
@@ -910,10 +920,9 @@ class EnterpriseWeixinBridge {
     ])
   }
 
-  _buildStatusMenuText(sessionId) {
+  _buildStatusMenuText({ sessionId, chatId } = {}) {
     const currentSession = sessionId ? this._agentSessionManager.sessions.get(sessionId) : null
-    const activeSessions = Array.from(this._agentSessionManager.sessions.values())
-      .filter(session => session?.imChannel === this._imType)
+    const activeSessions = this._getActiveSessionsByChat(chatId)
     return buildStatusText({
       bridgeLabel: '企业微信',
       connected: this._connected,
@@ -1294,10 +1303,13 @@ class EnterpriseWeixinBridge {
     const identity = this._sessionIdentities.get(sessionId)
     if (!identity) return
 
-    const boundTarget = this._sessionTargets.get(sessionId)
-    const targetUserId = boundTarget?.userId || identity.senderId || identity.userId || null
-    if (!targetUserId || this._targetSessionMap.get(targetUserId) !== sessionId) {
-      console.log(`[EnterpriseWeixin] Desktop intervention blocked for session ${sessionId}: not current bound session`)
+    const mapKey = this._sessionMapper.buildKey(identity)
+    if (!isMappedCurrentSession({
+      sessionMap: this._sessionMapper.sessionMap,
+      sessionId,
+      mapKey,
+    })) {
+      console.log(`[EnterpriseWeixin] Desktop intervention blocked for session ${sessionId}: not current connected session`)
       return
     }
 
@@ -1413,6 +1425,7 @@ class EnterpriseWeixinBridge {
 
     const previousSessionId = this._targetSessionMap.get(resolvedUserId)
     if (previousSessionId && previousSessionId !== sessionId) {
+      this._clearSingleSessionMapBindingsForUser(resolvedUserId, sessionId)
       this._sessionTargets.delete(previousSessionId)
       this._targetSessionMap.delete(resolvedUserId)
     }
@@ -1457,6 +1470,15 @@ class EnterpriseWeixinBridge {
       const nextLabel = displayName || resolvedUserId
       throw new Error(`当前会话已绑定企业微信联系人「${currentLabel}」，不能再发送给「${nextLabel}」。请新建会话后再联系其他成员。`)
     }
+  }
+
+  _clearSingleSessionMapBindingsForUser(userId, keepSessionId = null) {
+    deleteSessionMappingsByPrefix({
+      sessionMap: this._sessionMapper.sessionMap,
+      prefix: `${typeof userId === 'string' ? userId.trim() : ''}:`,
+      keepSessionId,
+      deleteEntry: (mapKey) => this._sessionMapper.clearSessionState(mapKey),
+    })
   }
 
   getSessionBinding(sessionId) {
@@ -1523,6 +1545,11 @@ class EnterpriseWeixinBridge {
     this._activeSendChunks.delete(sessionId)
     this._desktopPendingImagePaths.delete(sessionId)
     this._replyCollector.clear(sessionId)
+    clearSessionMappingsForSession({
+      sessionMap: this._sessionMapper.sessionMap,
+      sessionId,
+      deleteEntry: (mapKey) => this._sessionMapper.clearSessionState(mapKey),
+    })
     const target = this._sessionTargets.get(sessionId)
     if (target?.userId) {
       this._targetSessionMap.delete(target.userId)
