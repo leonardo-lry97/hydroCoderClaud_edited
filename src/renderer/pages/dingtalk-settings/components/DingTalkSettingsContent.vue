@@ -187,6 +187,13 @@ const primaryActionText = computed(() => {
   return t('dingtalkSettings.connect')
 })
 
+const buildFriendlyConnectMessage = () => {
+  if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') {
+    return '钉钉桥接未立即连接成功，已进入自动重连，请稍后查看状态'
+  }
+  return '钉钉桥接连接失败，请检查网络或配置后重试'
+}
+
 const applyStatus = (status) => {
   if (!status) return
   connected.value = !!status.connected
@@ -211,7 +218,7 @@ onMounted(async () => {
   }
   if (window.electronAPI?.onDingTalkError) {
     const cleanup = window.electronAPI.onDingTalkError((data) => {
-      message.error(data.error || 'DingTalk error')
+      console.warn('[DingTalkSettings] Bridge error event:', data)
     })
     cleanups.push(cleanup)
   }
@@ -291,15 +298,16 @@ const handleConnect = async () => {
     const result = await invoke(
       runtimeState.value === 'connected' ? 'restartDingTalk' : 'startDingTalk'
     )
+    await refreshStatus()
     if (result) {
       message.success(t('dingtalkSettings.connectSuccess'))
     } else {
-      message.warning(t('dingtalkSettings.connectFailed'))
+      message.warning(buildFriendlyConnectMessage())
     }
-    await refreshStatus()
   } catch (err) {
     console.error('Failed to connect DingTalk:', err)
-    message.error(t('dingtalkSettings.connectFailed') + ': ' + err.message)
+    await refreshStatus()
+    message.warning(buildFriendlyConnectMessage())
   } finally {
     connecting.value = false
   }

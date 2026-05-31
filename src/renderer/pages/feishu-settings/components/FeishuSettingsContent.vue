@@ -176,6 +176,13 @@ const primaryActionText = computed(() => {
   return '连接'
 })
 
+const buildFriendlyConnectMessage = () => {
+  if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') {
+    return '飞书桥接未立即连接成功，已进入自动重连，请稍后查看状态'
+  }
+  return '飞书桥接连接失败，请检查网络或配置后重试'
+}
+
 const applyStatus = (status) => {
   if (!status) return
   connected.value = !!status.connected
@@ -275,10 +282,13 @@ const handleConnect = async () => {
     if (status?.connected) {
       message.success('飞书桥接已连接')
     } else {
-      message.warning('飞书桥接正在连接，请稍后刷新状态')
+      await refreshStatus()
+      message.warning(buildFriendlyConnectMessage())
     }
   } catch (err) {
-    message.error('连接失败: ' + (err.message || err))
+    console.error('[FeishuSettings] Connect error:', err)
+    await refreshStatus()
+    message.warning(buildFriendlyConnectMessage())
   } finally {
     connecting.value = false
   }
@@ -316,7 +326,7 @@ onMounted(async () => {
   if (window.electronAPI?.onFeishuError) {
     cleanupFns.push(
       window.electronAPI.onFeishuError((data) => {
-        message.error(data?.error || 'Feishu error')
+        console.warn('[FeishuSettings] Bridge error event:', data)
       })
     )
   }

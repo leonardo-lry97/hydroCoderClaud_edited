@@ -172,7 +172,8 @@ class DingTalkBridge {
       await this._connect(appKey, appSecret)
       return true
     } catch (err) {
-      this._runtimeState = preserveRuntimeState ? this._runtimeState : 'disconnected'
+      const shouldKeepReconnecting = preserveRuntimeState || (!this._stopped && !!this.client)
+      this._runtimeState = shouldKeepReconnecting ? 'reconnecting' : 'disconnected'
       console.error('[DingTalk] Failed to start:', err.message)
       if (!silent) {
         this._notifyFrontend('dingtalk:error', { error: err.message })

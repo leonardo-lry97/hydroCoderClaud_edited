@@ -235,6 +235,13 @@ const primaryActionText = computed(() => {
   if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') return '连接中'
   return '连接'
 })
+
+const buildFriendlyConnectMessage = () => {
+  if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') {
+    return '企业微信桥接未立即连接成功，已进入自动重连，请稍后查看状态'
+  }
+  return '企业微信桥接连接失败，请检查网络或配置后重试'
+}
 const cliInstalled = computed(() => Boolean(cliStatus.value?.installed))
 const cliInitialized = computed(() => Boolean(cliStatus.value?.initialized))
 const cliContactAuth = computed(() => cliStatus.value?.contactAuth || 'unknown')
@@ -456,12 +463,14 @@ const handleConnect = async () => {
     if (result && connected.value) {
       message.success('企业微信桥接已连接')
     } else if (result) {
-      message.warning('企业微信已启动，但尚未收到已连接状态')
+      message.warning(buildFriendlyConnectMessage())
     } else {
-      message.warning('企业微信桥接启动失败')
+      message.warning(buildFriendlyConnectMessage())
     }
   } catch (err) {
     console.error('[EnterpriseWeixinSettings] Connect error:', err)
+    await refreshStatus()
+    message.warning(buildFriendlyConnectMessage())
   } finally {
     connecting.value = false
   }
@@ -497,7 +506,7 @@ onMounted(async () => {
   if (window.electronAPI?.onEnterpriseWeixinError) {
     cleanupFns.push(
       window.electronAPI.onEnterpriseWeixinError((data) => {
-        message.error(data?.error || 'Enterprise Weixin error')
+        console.warn('[EnterpriseWeixinSettings] Bridge error event:', data)
       })
     )
   }
