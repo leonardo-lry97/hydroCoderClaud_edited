@@ -18,6 +18,7 @@ class FeishuEventClient extends EventEmitter {
     this._appSecret = null
     this._connected = false
     this._stopped = false
+    this._runtimeState = 'disabled'
     this._wsClient = null
     this._eventDispatcher = null
   }
@@ -25,6 +26,7 @@ class FeishuEventClient extends EventEmitter {
   // ─── 公开 API ───
 
   get connected() { return this._connected }
+  get runtimeState() { return this._runtimeState }
 
   /**
    * 连接飞书事件订阅
@@ -35,6 +37,8 @@ class FeishuEventClient extends EventEmitter {
     this._appId = appId
     this._appSecret = appSecret
     this._stopped = false
+    this._runtimeState = 'connecting'
+    this.emit('statusChange', { connected: false, runtimeState: this._runtimeState })
 
     await this._startClient()
   }
@@ -43,6 +47,7 @@ class FeishuEventClient extends EventEmitter {
   stop() {
     this._stopped = true
     this._connected = false
+    this._runtimeState = 'disabled'
     this._closeClient()
     this._eventDispatcher = null
   }
@@ -68,7 +73,8 @@ class FeishuEventClient extends EventEmitter {
       autoReconnect: true,
       onReady: () => {
         this._connected = true
-        this.emit('statusChange', { connected: true })
+        this._runtimeState = 'connected'
+        this.emit('statusChange', { connected: true, runtimeState: this._runtimeState })
         console.log('[FeishuEventClient] Connected and ready')
       },
       onError: (err) => {
@@ -77,11 +83,13 @@ class FeishuEventClient extends EventEmitter {
       },
       onReconnecting: () => {
         console.log('[FeishuEventClient] Reconnecting...')
+        this._runtimeState = 'reconnecting'
         this._markDisconnected()
       },
       onReconnected: () => {
         this._connected = true
-        this.emit('statusChange', { connected: true })
+        this._runtimeState = 'connected'
+        this.emit('statusChange', { connected: true, runtimeState: this._runtimeState })
       },
     })
 
@@ -91,6 +99,7 @@ class FeishuEventClient extends EventEmitter {
     } catch (err) {
       console.error('[FeishuEventClient] Start failed:', err.message)
       this.emit('error', { message: `Start failed: ${err.message}` })
+      this._runtimeState = 'disconnected'
       this._markDisconnected()
       this._closeClient()
       throw err
@@ -109,7 +118,10 @@ class FeishuEventClient extends EventEmitter {
   _markDisconnected() {
     if (this._connected) {
       this._connected = false
-      this.emit('statusChange', { connected: false })
+      if (this._runtimeState !== 'disabled' && this._runtimeState !== 'reconnecting') {
+        this._runtimeState = 'disconnected'
+      }
+      this.emit('statusChange', { connected: false, runtimeState: this._runtimeState })
     } else {
       this._connected = false
     }

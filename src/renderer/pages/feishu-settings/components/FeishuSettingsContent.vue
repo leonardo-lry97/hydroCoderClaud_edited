@@ -157,15 +157,22 @@ const statusText = computed(() => {
   return '未连接'
 })
 const canRunAction = computed(() =>
-  !togglingEnabled.value && formData.value.enabled && formData.value.appId && formData.value.appSecret
+  !togglingEnabled.value &&
+  formData.value.enabled &&
+  formData.value.appId &&
+  formData.value.appSecret &&
+  runtimeState.value !== 'connecting' &&
+  runtimeState.value !== 'reconnecting'
 )
 const canDisconnect = computed(() =>
-  !togglingEnabled.value && formData.value.enabled && runtimeState.value === 'connected'
+  !togglingEnabled.value &&
+  formData.value.enabled &&
+  runtimeState.value === 'connected'
 )
 const primaryActionText = computed(() => {
   if (!formData.value.enabled || runtimeState.value === 'disabled') return '连接'
   if (runtimeState.value === 'connected') return '重新连接'
-  if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') return '重新连接'
+  if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') return '连接中'
   return '连接'
 })
 

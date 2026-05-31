@@ -187,6 +187,7 @@ class FeishuBridge {
     return {
       connected: this._eventClient.connected,
       activeSessions: this._sessionMapper.sessionMap.size,
+      runtimeState: this._eventClient.runtimeState,
     }
   }
 

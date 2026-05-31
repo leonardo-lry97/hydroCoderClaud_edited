@@ -60,6 +60,7 @@ class DingTalkBridge {
     this.client = null
     this.connected = false
     this._stopped = false
+    this._runtimeState = 'disabled'
 
     // 钉钉用户+会话 → Agent 会话映射：{ "staffId:conversationId": sessionId }
     this.sessionMap = new Map()
@@ -154,24 +155,29 @@ class DingTalkBridge {
    * 启动钉钉桥接（根据配置决定是否启动）
    */
   async start(options = {}) {
-    const { silent = false } = options || {}
+    const { silent = false, preserveRuntimeState = false } = options || {}
     this._stopped = false
     const config = this.configManager.getConfig()
     const { enabled, appKey, appSecret } = config.dingtalk || {}
 
     if (!enabled || !appKey || !appSecret) {
+      this._runtimeState = 'disabled'
       console.log('[DingTalk] Bridge disabled or not configured')
       return false
     }
 
+    this._runtimeState = preserveRuntimeState ? this._runtimeState : 'connecting'
+    this._notifyFrontend('dingtalk:statusChange', this.getStatus())
     try {
       await this._connect(appKey, appSecret)
       return true
     } catch (err) {
+      this._runtimeState = preserveRuntimeState ? this._runtimeState : 'disconnected'
       console.error('[DingTalk] Failed to start:', err.message)
       if (!silent) {
         this._notifyFrontend('dingtalk:error', { error: err.message })
       }
+      this._notifyFrontend('dingtalk:statusChange', this.getStatus())
       return false
     }
   }
@@ -180,7 +186,7 @@ class DingTalkBridge {
    * 停止钉钉桥接
    */
   async stop(options = {}) {
-    const { preserveWatchdogRetry = false } = options || {}
+    const { preserveWatchdogRetry = false, preserveRuntimeState = false } = options || {}
     this._stopped = true
     if (this._reconnectWatchdog) {
       clearTimeout(this._reconnectWatchdog)
@@ -198,6 +204,7 @@ class DingTalkBridge {
       this.client = null
     }
     this.connected = false
+    this._runtimeState = preserveRuntimeState ? this._runtimeState : 'disabled'
     for (const collector of this.responseCollectors.values()) clearTimeout(collector.timer)
     this.responseCollectors.clear()
     if (this._msgIdCleanupTimer) {
@@ -213,7 +220,7 @@ class DingTalkBridge {
     this._targetSessionMap.clear()
     this._desktopPendingBlocks.clear()
     console.log('[DingTalk] Bridge stopped')
-    this._notifyFrontend('dingtalk:statusChange', { connected: false })
+    this._notifyFrontend('dingtalk:statusChange', this.getStatus())
   }
 
   /**
@@ -221,7 +228,7 @@ class DingTalkBridge {
    */
   async restart(options = {}) {
     const { preserveWatchdogRetry = false } = options || {}
-    await this.stop({ preserveWatchdogRetry })
+    await this.stop(options)
     return this.start(options)
   }
 
@@ -231,7 +238,8 @@ class DingTalkBridge {
   getStatus() {
     return {
       connected: this.connected,
-      activeSessions: this.sessionMap.size
+      activeSessions: this.sessionMap.size,
+      runtimeState: this._runtimeState,
     }
   }
 
@@ -289,9 +297,10 @@ class DingTalkBridge {
     // 连接
     await this.client.connect()
     this.connected = true
+    this._runtimeState = 'connected'
     this._watchdogRetryIndex = 0
     console.log('[DingTalk] Bridge connected')
-    this._notifyFrontend('dingtalk:statusChange', { connected: true })
+    this._notifyFrontend('dingtalk:statusChange', this.getStatus())
 
     // 监听 SDK 内部 socket 事件，同步连接状态 + 兜底重连
     this._hookSocketEvents()
@@ -316,8 +325,9 @@ class DingTalkBridge {
       }
       if (this.connected) {
         this.connected = false
+        this._runtimeState = 'reconnecting'
         console.log('[DingTalk] Socket closed, waiting for SDK reconnect...')
-        this._notifyFrontend('dingtalk:statusChange', { connected: false })
+        this._notifyFrontend('dingtalk:statusChange', this.getStatus())
       }
       // 启动兜底：定期检查 SDK 是否已自动重连成功
       this._startReconnectWatchdog()
@@ -342,8 +352,9 @@ class DingTalkBridge {
       // SDK 可能已自动重连成功（创建了新 socket）
       if (this.client?.registered) {
         this.connected = true
+        this._runtimeState = 'connected'
         console.log('[DingTalk] SDK auto-reconnected successfully')
-        this._notifyFrontend('dingtalk:statusChange', { connected: true })
+        this._notifyFrontend('dingtalk:statusChange', this.getStatus())
         this._hookSocketEvents() // hook 新 socket
         return
       }
@@ -358,7 +369,7 @@ class DingTalkBridge {
    */
   _watchdogRestart() {
     if (this._stopped) return
-    this.restart({ silent: true, preserveWatchdogRetry: true }).then(ok => {
+    this.restart({ silent: true, preserveWatchdogRetry: true, preserveRuntimeState: true }).then(ok => {
       if (ok) {
         this._watchdogRetryIndex = 0
         return // restart 成功，_connect 内部会重新 hookSocketEvents
