@@ -20,9 +20,6 @@ class FeishuEventClient extends EventEmitter {
     this._stopped = false
     this._wsClient = null
     this._eventDispatcher = null
-    this._reconnectWatchdog = null
-    this._reconnectBackoffMs = 30 * 1000
-    this._restartInFlight = null
   }
 
   // ─── 公开 API ───
@@ -38,7 +35,6 @@ class FeishuEventClient extends EventEmitter {
     this._appId = appId
     this._appSecret = appSecret
     this._stopped = false
-    this._reconnectBackoffMs = 30 * 1000
 
     await this._startClient()
   }
@@ -47,8 +43,6 @@ class FeishuEventClient extends EventEmitter {
   stop() {
     this._stopped = true
     this._connected = false
-    this._clearReconnectWatchdog()
-    this._restartInFlight = null
     this._closeClient()
     this._eventDispatcher = null
   }
@@ -74,25 +68,19 @@ class FeishuEventClient extends EventEmitter {
       autoReconnect: true,
       onReady: () => {
         this._connected = true
-        this._clearReconnectWatchdog()
         this.emit('statusChange', { connected: true })
         console.log('[FeishuEventClient] Connected and ready')
       },
       onError: (err) => {
         console.error('[FeishuEventClient] Error:', err.message)
-        if (!this._connected) {
-          this._scheduleReconnectWatchdog()
-        }
         this.emit('error', { message: err.message })
       },
       onReconnecting: () => {
         console.log('[FeishuEventClient] Reconnecting...')
         this._markDisconnected()
-        this._scheduleReconnectWatchdog()
       },
       onReconnected: () => {
         this._connected = true
-        this._clearReconnectWatchdog()
         this.emit('statusChange', { connected: true })
       },
     })
@@ -124,44 +112,6 @@ class FeishuEventClient extends EventEmitter {
       this.emit('statusChange', { connected: false })
     } else {
       this._connected = false
-    }
-  }
-
-  _scheduleReconnectWatchdog(delayMs = 15 * 1000) {
-    if (this._stopped || this._reconnectWatchdog) return
-    this._reconnectWatchdog = setTimeout(() => {
-      this._reconnectWatchdog = null
-      if (this._stopped || this._connected) return
-      this._restartFromWatchdog(this._reconnectBackoffMs).catch(() => {})
-    }, delayMs)
-  }
-
-  async _restartFromWatchdog(nextDelayMs) {
-    if (this._stopped || this._connected) return
-    if (this._restartInFlight) return this._restartInFlight
-
-    this._restartInFlight = (async () => {
-      try {
-        this._closeClient()
-        await this._startClient()
-        this._reconnectBackoffMs = 30 * 1000
-      } catch (err) {
-        const retryMs = Math.min(nextDelayMs, 5 * 60 * 1000)
-        console.error('[FeishuEventClient] Watchdog restart failed:', err.message)
-        this._scheduleReconnectWatchdog(retryMs)
-        this._reconnectBackoffMs = Math.min(retryMs * 2, 5 * 60 * 1000)
-      } finally {
-        this._restartInFlight = null
-      }
-    })()
-
-    return this._restartInFlight
-  }
-
-  _clearReconnectWatchdog() {
-    if (this._reconnectWatchdog) {
-      clearTimeout(this._reconnectWatchdog)
-      this._reconnectWatchdog = null
     }
   }
 
