@@ -26,7 +26,11 @@
 
       <n-card title="基本配置" class="settings-section">
         <n-form-item label="启用飞书桥接">
-          <n-switch v-model:value="formData.enabled" />
+          <n-switch
+            :value="formData.enabled"
+            :loading="togglingEnabled"
+            @update:value="handleEnabledChange"
+          />
           <template #feedback>开启后，应用启动时自动连接飞书</template>
         </n-form-item>
 
@@ -64,14 +68,14 @@
         <n-space>
           <n-button
             type="primary"
-            :disabled="!canConnect"
+            :disabled="!canRunAction"
             :loading="connecting"
             @click="handleConnect"
           >
-            {{ connected ? '重新连接' : '连接' }}
+            {{ primaryActionText }}
           </n-button>
           <n-button
-            :disabled="!connected"
+            :disabled="!canDisconnect"
             @click="handleDisconnect"
           >
             断开
@@ -106,7 +110,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated } from 'vue'
 import { useMessage } from 'naive-ui'
 import { useIPC } from '@composables/useIPC'
 import { useLocale } from '@composables/useLocale'
@@ -129,15 +133,48 @@ const formData = ref({
 const connected = ref(false)
 const activeSessions = ref(0)
 const connecting = ref(false)
+const togglingEnabled = ref(false)
 const configLoaded = ref(false)
+const runtimeState = ref('disabled')
+const manualStopped = ref(false)
 
 let cleanupFns = []
 
-const statusType = computed(() => connected.value ? 'success' : 'default')
-const statusText = computed(() => connected.value ? '已连接' : '未连接')
-const canConnect = computed(() =>
-  formData.value.enabled && formData.value.appId && formData.value.appSecret
+const statusType = computed(() => {
+  if (runtimeState.value === 'connected') return 'success'
+  if (runtimeState.value === 'error') return 'error'
+  if (runtimeState.value === 'reconnecting' || runtimeState.value === 'connecting') return 'warning'
+  return 'default'
+})
+const statusText = computed(() => {
+  if (!formData.value.enabled || runtimeState.value === 'disabled') return '未启用'
+  if (runtimeState.value === 'connected') return '已连接'
+  if (runtimeState.value === 'manually_disconnected') return '已断开'
+  if (runtimeState.value === 'reconnecting') return '重连中'
+  if (runtimeState.value === 'connecting') return '连接中'
+  if (runtimeState.value === 'error') return '连接失败'
+  return '未连接'
+})
+const canRunAction = computed(() =>
+  !togglingEnabled.value && formData.value.enabled && formData.value.appId && formData.value.appSecret
 )
+const canDisconnect = computed(() =>
+  !togglingEnabled.value && formData.value.enabled && runtimeState.value === 'connected'
+)
+const primaryActionText = computed(() => {
+  if (!formData.value.enabled || runtimeState.value === 'disabled') return '连接'
+  if (runtimeState.value === 'connected') return '重新连接'
+  if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') return '重新连接'
+  return '连接'
+})
+
+const applyStatus = (status) => {
+  if (!status) return
+  connected.value = !!status.connected
+  activeSessions.value = status.activeSessions || 0
+  runtimeState.value = status.runtimeState || (status.connected ? 'connected' : 'disconnected')
+  manualStopped.value = !!status.manualStopped
+}
 
 const loadConfig = async () => {
   try {
@@ -154,23 +191,38 @@ const loadConfig = async () => {
 const refreshStatus = async () => {
   try {
     const status = await invoke('getFeishuStatus')
-    if (status) {
-      connected.value = status.connected
-      activeSessions.value = status.activeSessions || 0
-    }
+    applyStatus(status)
   } catch {}
+}
+
+const buildConfigPayload = (enabled = formData.value.enabled) => ({
+  appId: formData.value.appId,
+  appSecret: formData.value.appSecret,
+  enabled,
+  defaultCwd: formData.value.defaultCwd,
+  maxHistorySessions: formData.value.maxHistorySessions,
+})
+
+const handleEnabledChange = async (nextEnabled) => {
+  if (togglingEnabled.value || nextEnabled === formData.value.enabled) return
+  togglingEnabled.value = true
+  try {
+    await invoke('updateFeishuConfig', buildConfigPayload(nextEnabled))
+    const status = await invoke('setFeishuEnabled', nextEnabled)
+    formData.value.enabled = !!nextEnabled
+    applyStatus(status)
+  } catch (err) {
+    console.error('[FeishuSettings] Toggle enabled error:', err)
+    message.error((nextEnabled ? '连接失败' : '断开失败') + ': ' + (err.message || err))
+  } finally {
+    togglingEnabled.value = false
+  }
 }
 
 const handleSave = async () => {
   console.log('[FeishuSettings] Saving config:', { ...formData.value, appSecret: '***' })
   try {
-    await invoke('updateFeishuConfig', {
-      appId: formData.value.appId,
-      appSecret: formData.value.appSecret,
-      enabled: formData.value.enabled,
-      defaultCwd: formData.value.defaultCwd,
-      maxHistorySessions: formData.value.maxHistorySessions,
-    })
+    await invoke('updateFeishuConfig', buildConfigPayload())
     message.success('飞书配置已保存')
     await refreshStatus()
   } catch (err) {
@@ -182,15 +234,8 @@ const handleSave = async () => {
 const handleConnect = async () => {
   connecting.value = true
   try {
-    await invoke('updateFeishuConfig', {
-      appId: formData.value.appId,
-      appSecret: formData.value.appSecret,
-      enabled: true,
-      defaultCwd: formData.value.defaultCwd,
-      maxHistorySessions: formData.value.maxHistorySessions,
-    })
-    formData.value.enabled = true
-    await invoke('startFeishu')
+    await invoke('updateFeishuConfig', buildConfigPayload())
+    await invoke(runtimeState.value === 'connected' ? 'restartFeishu' : 'startFeishu')
     await refreshStatus()
     message.success('飞书桥接已连接')
   } catch (err) {
@@ -222,7 +267,7 @@ onMounted(async () => {
   if (window.electronAPI?.onFeishuStatusChange) {
     cleanupFns.push(
       window.electronAPI.onFeishuStatusChange((data) => {
-        connected.value = data?.connected || false
+        applyStatus(data)
       })
     )
   }
@@ -233,6 +278,11 @@ onMounted(async () => {
       })
     )
   }
+})
+
+onActivated(async () => {
+  await loadConfig()
+  await refreshStatus()
 })
 
 onUnmounted(() => {

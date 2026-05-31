@@ -30,7 +30,11 @@
           </n-button>
         </template>
         <n-form-item :label="t('dingtalkSettings.enableBridge')">
-          <n-switch v-model:value="formData.enabled" />
+          <n-switch
+            :value="formData.enabled"
+            :loading="togglingEnabled"
+            @update:value="handleEnabledChange"
+          />
           <template #feedback>{{ t('dingtalkSettings.enableHint') }}</template>
         </n-form-item>
 
@@ -68,14 +72,14 @@
         <n-space>
           <n-button
             type="primary"
-            :disabled="!canConnect"
+            :disabled="!canRunAction"
             :loading="connecting"
             @click="handleConnect"
           >
-            {{ connected ? t('dingtalkSettings.reconnect') : t('dingtalkSettings.connect') }}
+            {{ primaryActionText }}
           </n-button>
           <n-button
-            :disabled="!connected"
+            :disabled="!canDisconnect"
             @click="handleDisconnect"
           >
             {{ t('dingtalkSettings.disconnect') }}
@@ -110,7 +114,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated } from 'vue'
 import { useMessage } from 'naive-ui'
 import { useIPC } from '@composables/useIPC'
 import { useTheme } from '@composables/useTheme'
@@ -139,19 +143,50 @@ const formData = ref({
 const connected = ref(false)
 const activeSessions = ref(0)
 const connecting = ref(false)
+const togglingEnabled = ref(false)
 const configLoaded = ref(false)
+const runtimeState = ref('disabled')
+const manualStopped = ref(false)
 
 // Cleanup listeners
 const cleanups = []
 
-const statusType = computed(() => connected.value ? 'success' : 'default')
-const statusText = computed(() =>
-  connected.value ? t('dingtalkSettings.statusConnected') : t('dingtalkSettings.statusDisconnected')
-)
+const statusType = computed(() => {
+  if (runtimeState.value === 'connected') return 'success'
+  if (runtimeState.value === 'error') return 'error'
+  if (runtimeState.value === 'reconnecting' || runtimeState.value === 'connecting') return 'warning'
+  return 'default'
+})
+const statusText = computed(() => {
+  if (!formData.value.enabled || runtimeState.value === 'disabled') return '未启用'
+  if (runtimeState.value === 'connected') return t('dingtalkSettings.statusConnected')
+  if (runtimeState.value === 'manually_disconnected') return '已断开'
+  if (runtimeState.value === 'reconnecting') return '重连中'
+  if (runtimeState.value === 'connecting') return '连接中'
+  if (runtimeState.value === 'error') return '连接失败'
+  return t('dingtalkSettings.statusDisconnected')
+})
 
-const canConnect = computed(() =>
-  formData.value.enabled && formData.value.appKey && formData.value.appSecret
+const canRunAction = computed(() =>
+  !togglingEnabled.value && formData.value.enabled && formData.value.appKey && formData.value.appSecret
 )
+const canDisconnect = computed(() =>
+  !togglingEnabled.value && formData.value.enabled && runtimeState.value === 'connected'
+)
+const primaryActionText = computed(() => {
+  if (!formData.value.enabled || runtimeState.value === 'disabled') return t('dingtalkSettings.connect')
+  if (runtimeState.value === 'connected') return t('dingtalkSettings.reconnect')
+  if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') return t('dingtalkSettings.reconnect')
+  return t('dingtalkSettings.connect')
+})
+
+const applyStatus = (status) => {
+  if (!status) return
+  connected.value = !!status.connected
+  activeSessions.value = status.activeSessions || 0
+  runtimeState.value = status.runtimeState || (status.connected ? 'connected' : 'disconnected')
+  manualStopped.value = !!status.manualStopped
+}
 
 onMounted(async () => {
   await initTheme()
@@ -163,7 +198,7 @@ onMounted(async () => {
   // Listen for status changes
   if (window.electronAPI?.onDingTalkStatusChange) {
     const cleanup = window.electronAPI.onDingTalkStatusChange((data) => {
-      connected.value = data.connected
+      applyStatus(data)
     })
     cleanups.push(cleanup)
   }
@@ -173,6 +208,11 @@ onMounted(async () => {
     })
     cleanups.push(cleanup)
   }
+})
+
+onActivated(async () => {
+  await loadConfig()
+  await refreshStatus()
 })
 
 onUnmounted(() => {
@@ -196,24 +236,39 @@ const loadConfig = async () => {
 const refreshStatus = async () => {
   try {
     const status = await invoke('getDingTalkStatus')
-    if (status) {
-      connected.value = status.connected
-      activeSessions.value = status.activeSessions || 0
-    }
+    applyStatus(status)
   } catch (err) {
     console.error('Failed to get DingTalk status:', err)
   }
 }
 
+const buildConfigPayload = (enabled = formData.value.enabled) => ({
+  appKey: formData.value.appKey,
+  appSecret: formData.value.appSecret,
+  robotCode: formData.value.robotCode,
+  enabled,
+  maxHistorySessions: formData.value.maxHistorySessions,
+})
+
+const handleEnabledChange = async (nextEnabled) => {
+  if (togglingEnabled.value || nextEnabled === formData.value.enabled) return
+  togglingEnabled.value = true
+  try {
+    await invoke('updateDingTalkConfig', buildConfigPayload(nextEnabled))
+    const status = await invoke('setDingTalkEnabled', nextEnabled)
+    formData.value.enabled = !!nextEnabled
+    applyStatus(status)
+  } catch (err) {
+    console.error('Failed to toggle DingTalk bridge:', err)
+    message.error((nextEnabled ? t('dingtalkSettings.connectFailed') : t('dingtalkSettings.disconnected')) + ': ' + err.message)
+  } finally {
+    togglingEnabled.value = false
+  }
+}
+
 const handleSave = async () => {
   try {
-    await invoke('updateDingTalkConfig', {
-      appKey: formData.value.appKey,
-      appSecret: formData.value.appSecret,
-      robotCode: formData.value.robotCode,
-      enabled: formData.value.enabled,
-      maxHistorySessions: formData.value.maxHistorySessions,
-    })
+    await invoke('updateDingTalkConfig', buildConfigPayload())
     message.success(t('dingtalkSettings.saveSuccess'))
     await refreshStatus()
   } catch (err) {
@@ -225,16 +280,10 @@ const handleSave = async () => {
 const handleConnect = async () => {
   connecting.value = true
   try {
-    // Save config first, then start
-    await invoke('updateDingTalkConfig', {
-      appKey: formData.value.appKey,
-      appSecret: formData.value.appSecret,
-      robotCode: formData.value.robotCode,
-      enabled: true,
-      maxHistorySessions: formData.value.maxHistorySessions,
-    })
-    formData.value.enabled = true
-    const result = await invoke('startDingTalk')
+    await invoke('updateDingTalkConfig', buildConfigPayload())
+    const result = await invoke(
+      runtimeState.value === 'connected' ? 'restartDingTalk' : 'startDingTalk'
+    )
     if (result) {
       message.success(t('dingtalkSettings.connectSuccess'))
     } else {
