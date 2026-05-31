@@ -98,57 +98,12 @@
       </div>
 
       <div
-        v-if="showDingTalkBtn"
-        class="dingtalk-btn"
-        :class="{ sending: dingtalkSending }"
-        :title="dingtalkBtnTitle"
-        @click="toggleDingTalkDropdown"
+        class="expand-input-btn"
+        :title="isExpanded ? t('common.collapse') : t('common.expand')"
+        @click="emit('toggle-expanded')"
       >
-        <Icon name="dingtalk" :size="16" />
+        <Icon :name="isExpanded ? 'restore' : 'maximize'" :size="13" />
       </div>
-      <Transition name="dropdown">
-        <div v-if="showDingTalkDropdown && showDingTalkBtn" class="dingtalk-dropdown">
-          <div v-if="dingtalkLoading" class="dingtalk-loading">{{ t('common.loading') }}...</div>
-          <template v-else>
-            <div class="dingtalk-panel-title">{{ t('agent.dingtalkQuickSendTitle') }}</div>
-            <div class="dingtalk-panel-hint">{{ t('agent.dingtalkQuickSendHint') }}</div>
-            <div v-if="dingtalkTargets.length > 0" class="dingtalk-target-list">
-              <div
-                v-for="target in dingtalkTargets"
-                :key="target.id"
-                class="dingtalk-target-item"
-                :class="{ active: selectedDingTalkTargetId === target.id }"
-                @click="selectedDingTalkTargetId = target.id"
-              >
-                <span class="dingtalk-target-name">{{ target.displayName || target.name || target.userId || target.id }}</span>
-              </div>
-            </div>
-            <div v-if="dingtalkError" class="dingtalk-error">{{ dingtalkError }}</div>
-            <div v-if="dingtalkTargets.length === 0" class="dingtalk-empty">{{ t('agent.dingtalkNoTargets') }}</div>
-            <template v-else>
-              <textarea
-                v-model="dingtalkText"
-                class="dingtalk-message-input"
-                :placeholder="t('agent.dingtalkQuickSendPlaceholder')"
-                rows="3"
-              />
-              <div class="dingtalk-actions">
-                <button class="dingtalk-action secondary" type="button" @click="closeDingTalkDropdown">
-                  {{ t('common.cancel') }}
-                </button>
-                <button
-                  class="dingtalk-action primary"
-                  type="button"
-                  :disabled="!canSendDingTalk || dingtalkSending"
-                  @click="sendDingTalkQuickMessage"
-                >
-                  {{ dingtalkSending ? t('agent.dingtalkQuickSending') : t('agent.dingtalkQuickSend') }}
-                </button>
-              </div>
-            </template>
-          </template>
-        </div>
-      </Transition>
 
       <div
         v-if="showWeixinBtn"
@@ -197,59 +152,6 @@
                   @click="sendWeixinQuickMessage"
                 >
                   {{ weixinSending ? t('agent.weixinQuickSending') : t('agent.weixinQuickSend') }}
-                </button>
-              </div>
-            </template>
-          </template>
-        </div>
-      </Transition>
-
-      <div
-        v-if="showFeishuBtn"
-        class="feishu-btn"
-        :class="{ sending: feishuSending }"
-        :title="feishuBtnTitle"
-        @click="toggleFeishuDropdown"
-      >
-        <Icon name="feishu" :size="16" />
-      </div>
-      <Transition name="dropdown">
-        <div v-if="showFeishuDropdown && showFeishuBtn" class="feishu-dropdown">
-          <div v-if="feishuLoading" class="feishu-loading">{{ t('common.loading') }}...</div>
-          <template v-else>
-            <div class="feishu-panel-title">{{ t('agent.feishuQuickSendTitle') }}</div>
-            <div class="feishu-panel-hint">{{ t('agent.feishuQuickSendHint') }}</div>
-            <div v-if="feishuTargets.length > 0" class="feishu-target-list">
-              <div
-                v-for="target in feishuTargets"
-                :key="target.id"
-                class="feishu-target-item"
-                :class="{ active: selectedFeishuTargetId === target.id }"
-                @click="selectedFeishuTargetId = target.id"
-              >
-                <span class="feishu-target-name">{{ target.displayName || target.name || '未命名' }}</span>
-              </div>
-            </div>
-            <div v-if="feishuTargets.length === 0" class="feishu-empty">{{ t('agent.feishuNoTargets') }}</div>
-            <template v-else>
-              <textarea
-                v-model="feishuText"
-                class="feishu-message-input"
-                :placeholder="t('agent.feishuQuickSendPlaceholder')"
-                rows="3"
-              />
-              <div v-if="feishuError" class="feishu-error">{{ feishuError }}</div>
-              <div class="feishu-actions">
-                <button class="feishu-action secondary" type="button" @click="closeFeishuDropdown">
-                  {{ t('common.cancel') }}
-                </button>
-                <button
-                  class="feishu-action primary"
-                  type="button"
-                  :disabled="!canSendFeishu || feishuSending"
-                  @click="sendFeishuQuickMessage"
-                >
-                  {{ feishuSending ? t('agent.feishuQuickSending') : t('agent.feishuQuickSend') }}
                 </button>
               </div>
             </template>
@@ -315,12 +217,112 @@
       </Transition>
 
       <div
-        class="expand-input-btn"
-        :title="isExpanded ? t('common.collapse') : t('common.expand')"
-        @click="emit('toggle-expanded')"
+        v-if="showDingTalkBtn"
+        class="dingtalk-btn"
+        :class="{ sending: dingtalkSending }"
+        :title="dingtalkBtnTitle"
+        @click="toggleDingTalkDropdown"
       >
-        <Icon :name="isExpanded ? 'restore' : 'maximize'" :size="13" />
+        <Icon name="dingtalk" :size="16" />
       </div>
+      <Transition name="dropdown">
+        <div v-if="showDingTalkDropdown && showDingTalkBtn" class="dingtalk-dropdown">
+          <div v-if="dingtalkLoading" class="dingtalk-loading">{{ t('common.loading') }}...</div>
+          <template v-else>
+            <div class="dingtalk-panel-title">{{ t('agent.dingtalkQuickSendTitle') }}</div>
+            <div class="dingtalk-panel-hint">{{ t('agent.dingtalkQuickSendHint') }}</div>
+            <div v-if="dingtalkTargets.length > 0" class="dingtalk-target-list">
+              <div
+                v-for="target in dingtalkTargets"
+                :key="target.id"
+                class="dingtalk-target-item"
+                :class="{ active: selectedDingTalkTargetId === target.id }"
+                @click="selectedDingTalkTargetId = target.id"
+              >
+                <span class="dingtalk-target-name">{{ target.displayName || target.name || target.userId || target.id }}</span>
+              </div>
+            </div>
+            <div v-if="dingtalkError" class="dingtalk-error">{{ dingtalkError }}</div>
+            <div v-if="dingtalkTargets.length === 0" class="dingtalk-empty">{{ t('agent.dingtalkNoTargets') }}</div>
+            <template v-else>
+              <textarea
+                v-model="dingtalkText"
+                class="dingtalk-message-input"
+                :placeholder="t('agent.dingtalkQuickSendPlaceholder')"
+                rows="3"
+              />
+              <div class="dingtalk-actions">
+                <button class="dingtalk-action secondary" type="button" @click="closeDingTalkDropdown">
+                  {{ t('common.cancel') }}
+                </button>
+                <button
+                  class="dingtalk-action primary"
+                  type="button"
+                  :disabled="!canSendDingTalk || dingtalkSending"
+                  @click="sendDingTalkQuickMessage"
+                >
+                  {{ dingtalkSending ? t('agent.dingtalkQuickSending') : t('agent.dingtalkQuickSend') }}
+                </button>
+              </div>
+            </template>
+          </template>
+        </div>
+      </Transition>
+
+      <div
+        v-if="showFeishuBtn"
+        class="feishu-btn"
+        :class="{ sending: feishuSending }"
+        :title="feishuBtnTitle"
+        @click="toggleFeishuDropdown"
+      >
+        <Icon name="feishu" :size="16" />
+      </div>
+      <Transition name="dropdown">
+        <div v-if="showFeishuDropdown && showFeishuBtn" class="feishu-dropdown">
+          <div v-if="feishuLoading" class="feishu-loading">{{ t('common.loading') }}...</div>
+          <template v-else>
+            <div class="feishu-panel-title">{{ t('agent.feishuQuickSendTitle') }}</div>
+            <div class="feishu-panel-hint">{{ t('agent.feishuQuickSendHint') }}</div>
+            <div v-if="feishuTargets.length > 0" class="feishu-target-list">
+              <div
+                v-for="target in feishuTargets"
+                :key="target.id"
+                class="feishu-target-item"
+                :class="{ active: selectedFeishuTargetId === target.id }"
+                @click="selectedFeishuTargetId = target.id"
+              >
+                <span class="feishu-target-name">{{ target.displayName || target.name || '未命名' }}</span>
+              </div>
+            </div>
+            <div v-if="feishuTargets.length === 0" class="feishu-empty">{{ t('agent.feishuNoTargets') }}</div>
+            <template v-else>
+              <textarea
+                v-model="feishuText"
+                class="feishu-message-input"
+                :placeholder="t('agent.feishuQuickSendPlaceholder')"
+                rows="3"
+              />
+              <div v-if="feishuError" class="feishu-error">{{ feishuError }}</div>
+              <div class="feishu-actions">
+                <button class="feishu-action secondary" type="button" @click="closeFeishuDropdown">
+                  {{ t('common.cancel') }}
+                </button>
+                <button
+                  class="feishu-action primary"
+                  type="button"
+                  :disabled="!canSendFeishu || feishuSending"
+                  @click="sendFeishuQuickMessage"
+                >
+                  {{ feishuSending ? t('agent.feishuQuickSending') : t('agent.feishuQuickSend') }}
+                </button>
+              </div>
+            </template>
+          </template>
+        </div>
+      </Transition>
+
+
     </div>
 
     <div class="toolbar-right">
