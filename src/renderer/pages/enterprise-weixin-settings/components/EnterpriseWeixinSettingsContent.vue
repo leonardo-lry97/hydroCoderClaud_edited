@@ -217,7 +217,12 @@ const statusText = computed(() => {
   return '未连接'
 })
 const canRunAction = computed(() =>
-  !togglingEnabled.value && formData.value.enabled && formData.value.botId && formData.value.secret
+  !togglingEnabled.value &&
+  formData.value.enabled &&
+  formData.value.botId &&
+  formData.value.secret &&
+  runtimeState.value !== 'connecting' &&
+  runtimeState.value !== 'reconnecting'
 )
 const canDisconnect = computed(() =>
   !togglingEnabled.value && formData.value.enabled && runtimeState.value === 'connected'
@@ -225,7 +230,7 @@ const canDisconnect = computed(() =>
 const primaryActionText = computed(() => {
   if (!formData.value.enabled || runtimeState.value === 'disabled') return '连接'
   if (runtimeState.value === 'connected') return '重新连接'
-  if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') return '重新连接'
+  if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') return '重连中'
   return '连接'
 })
 const cliInstalled = computed(() => Boolean(cliStatus.value?.installed))
