@@ -248,17 +248,17 @@ class WecomCliManager {
     if (process.platform === 'win32') {
       return {
         supported: true,
-        command: 'wecom-cli init',
+        command: 'wecom-cli init --no-open',
         shell: process.env.COMSPEC || 'cmd.exe',
-        args: ['/k', 'wecom-cli init'],
+        args: ['/k', 'wecom-cli init --no-open'],
       }
     }
 
     return {
       supported: true,
-      command: 'wecom-cli init',
+      command: 'wecom-cli init --no-open',
       shell: '/bin/sh',
-      args: ['-lc', 'wecom-cli init'],
+      args: ['-lc', 'wecom-cli init --no-open'],
     }
   }
 
