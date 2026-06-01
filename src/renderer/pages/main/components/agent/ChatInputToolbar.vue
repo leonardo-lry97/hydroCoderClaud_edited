@@ -350,6 +350,7 @@ const props = defineProps({
   queueEnabled: { type: Boolean, default: true },
   isExpanded: { type: Boolean, default: false },
   sessionId: { type: String, default: null },
+  sessionTitle: { type: String, default: '' },
   sessionType: { type: String, default: 'chat' },
   sessionSource: { type: String, default: 'manual' },
   sessionImChannel: { type: String, default: null },
@@ -833,6 +834,25 @@ const closeEnterpriseWeixinDropdown = () => {
   closeEnterpriseWeixinBridgeUi()
 }
 
+const normalizeSessionTitle = () => {
+  const title = typeof props.sessionTitle === 'string' ? props.sessionTitle.trim() : ''
+  if (title) return title
+
+  const sessionId = typeof props.sessionId === 'string' ? props.sessionId.trim() : ''
+  if (sessionId) {
+    return t('agent.imQuickSendUntitledSession', { id: sessionId.slice(0, 8) })
+  }
+
+  return t('agent.imQuickSendUntitledSession', { id: 'unknown' })
+}
+
+const buildOutboundImText = (rawText) => {
+  const text = typeof rawText === 'string' ? rawText.trim() : ''
+  if (!text) return text
+
+  return `${t('agent.imQuickSendSessionPrefix', { title: normalizeSessionTitle() })}\n\n${text}`
+}
+
 const sendDingTalkQuickMessage = async () => {
   const dingtalkApi = resolvedDingTalkNotifyApi.value
   if (!canSendDingTalk.value || !props.sessionId || !dingtalkApi?.sendDingTalkText) return
@@ -845,7 +865,7 @@ const sendDingTalkQuickMessage = async () => {
       staffId: target.staffId || target.userId || target.id,
       targetId: target.id,
       displayName: target.displayName || target.name || target.userId || target.id,
-      text: dingtalkText.value.trim()
+      text: buildOutboundImText(dingtalkText.value)
     })
     if (result?.error) {
       console.error('[ChatInputToolbar] send dingtalk failed:', result.error)
@@ -872,7 +892,7 @@ const sendWeixinQuickMessage = async () => {
       sessionId: props.sessionId,
       accountId: target.accountId,
       targetId: target.id,
-      text: weixinText.value.trim()
+      text: buildOutboundImText(weixinText.value)
     })
     if (result?.error) {
       console.error('[ChatInputToolbar] send weixin failed:', result.error)
@@ -899,7 +919,7 @@ const sendFeishuQuickMessage = async () => {
       sessionId: props.sessionId,
       openId: target.openId || target.id,
       displayName: target.displayName || target.name || target.userId || target.id,
-      text: feishuText.value.trim()
+      text: buildOutboundImText(feishuText.value)
     })
     if (result?.error) {
       console.error('[ChatInputToolbar] send feishu failed:', result.error)
@@ -927,7 +947,7 @@ const sendEnterpriseWeixinQuickMessage = async () => {
       userId: target.userId || target.id,
       targetId: target.id,
       displayName: target.displayName || target.name || target.userId || target.id,
-      text: enterpriseWeixinText.value.trim()
+      text: buildOutboundImText(enterpriseWeixinText.value)
     })
     if (result?.error) {
       console.error('[ChatInputToolbar] send enterprise weixin failed:', result.error)

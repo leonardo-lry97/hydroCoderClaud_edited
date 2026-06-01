@@ -17,8 +17,12 @@ describe('chat input IM binding props', () => {
     const toolbarSource = fs.readFileSync(chatInputToolbarPath, 'utf-8')
 
     expect(agentChatTabSource).toContain(':session-im-channel="props.sessionImChannel || null"')
+    expect(agentChatTabSource).toContain(':session-title="props.sessionTitle"')
     expect(chatInputSource).toContain('sessionImChannel:')
+    expect(chatInputSource).toContain('sessionTitle:')
+    expect(chatInputSource).toContain(':session-title="sessionTitle"')
     expect(chatInputSource).toContain(':session-im-channel="sessionImChannel"')
+    expect(toolbarSource).toContain('sessionTitle: { type: String, default: \'\' }')
     expect(toolbarSource).toContain('sessionImChannel: { type: String, default: null }')
     expect(toolbarSource).toContain('return !resolvedImBindingSource.value || resolvedImBindingSource.value === \'dingtalk\'')
     expect(toolbarSource).toContain('return !resolvedImBindingSource.value || resolvedImBindingSource.value === \'weixin\'')
@@ -35,7 +39,19 @@ describe('chat input IM binding props', () => {
   it('passes IM channel when opening a tab from external IM session-created events', () => {
     const mainContentSource = fs.readFileSync(mainContentPath, 'utf-8')
 
+    expect(mainContentSource).toContain(':session-title="tab.title"')
     expect(mainContentSource).toContain('const tab = ensureAgentTab({')
     expect(mainContentSource).toContain('imChannel: imType,')
+  })
+
+  it('prefixes all toolbar quick-send IM messages with the current session label', () => {
+    const toolbarSource = fs.readFileSync(chatInputToolbarPath, 'utf-8')
+
+    expect(toolbarSource).toContain('const buildOutboundImText = (rawText) => {')
+    expect(toolbarSource).toContain("t('agent.imQuickSendSessionPrefix', { title: normalizeSessionTitle() })")
+    expect(toolbarSource).toContain('text: buildOutboundImText(dingtalkText.value)')
+    expect(toolbarSource).toContain('text: buildOutboundImText(weixinText.value)')
+    expect(toolbarSource).toContain('text: buildOutboundImText(feishuText.value)')
+    expect(toolbarSource).toContain('text: buildOutboundImText(enterpriseWeixinText.value)')
   })
 })

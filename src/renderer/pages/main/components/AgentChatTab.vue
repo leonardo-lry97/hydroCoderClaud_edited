@@ -94,6 +94,7 @@
       :api-profile-disabled="isStreaming || !props.sessionId"
       :show-api-profile-switcher="Boolean(props.sessionId)"
       :session-id="props.sessionId"
+      :session-title="props.sessionTitle"
       :session-type="props.sessionType"
       :session-source="props.sessionSource"
       :session-im-channel="props.sessionImChannel || null"
@@ -137,6 +138,10 @@ const props = defineProps({
   sessionId: {
     type: String,
     required: true
+  },
+  sessionTitle: {
+    type: String,
+    default: ''
   },
   sessionType: {
     type: String,

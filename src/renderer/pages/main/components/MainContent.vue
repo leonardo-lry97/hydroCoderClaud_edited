@@ -101,6 +101,7 @@
               :key="tab.id"
               :ref="el => { if (el) agentChatTabRefs[tab.id] = el }"
               :session-id="tab.sessionId"
+              :session-title="tab.title"
               :session-type="tab.sessionType"
               :session-source="tab.sessionSource || 'manual'"
               :session-im-channel="tab.imChannel || null"

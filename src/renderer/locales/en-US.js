@@ -1526,6 +1526,8 @@ export default {
     enterpriseWeixinQuickSending: 'Sending...',
     enterpriseWeixinQuickSendFailed: 'Failed to send WeCom message',
     enterpriseWeixinNoTargets: 'No WeCom contacts are available yet. Complete wecom-cli init and contact authorization first.',
+    imQuickSendSessionPrefix: 'From session "{title}"',
+    imQuickSendUntitledSession: 'Untitled session {id}',
     crossImBindingConfirmTitle: 'Bind an additional IM channel',
     crossImBindingConfirmContent: 'This session is already bound to {current}. Continuing will also bind {next}, and replies from either side may return to this session. Continue?',
     historyHint: 'Above are historical messages. Type in the input box to activate this session',

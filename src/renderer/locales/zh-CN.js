@@ -1531,6 +1531,8 @@ export default {
     enterpriseWeixinQuickSending: '发送中...',
     enterpriseWeixinQuickSendFailed: '企业微信发送失败',
     enterpriseWeixinNoTargets: '暂无可用企业微信联系人。请先完成 wecom-cli 初始化与机器人通讯录授权。',
+    imQuickSendSessionPrefix: '来自会话《{title}》',
+    imQuickSendUntitledSession: '未命名会话 {id}',
     crossImBindingConfirmTitle: '将绑定新的 IM 渠道',
     crossImBindingConfirmContent: '当前会话已绑定 {current}，继续后还会绑定 {next}。后续任一端回复都可能回到当前会话。是否继续？',
     historyHint: '上面为会话的历史信息，请在输入框输入文字激活当前会话',

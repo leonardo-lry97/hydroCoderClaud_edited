@@ -12,6 +12,7 @@
         :queue-enabled="queueEnabled"
         :is-expanded="isExpanded"
         :session-id="sessionId"
+        :session-title="sessionTitle"
         :session-type="sessionType"
         :session-source="sessionSource"
         :session-im-channel="sessionImChannel"
@@ -205,6 +206,10 @@ const props = defineProps({
   sessionId: {
     type: String,
     default: null
+  },
+  sessionTitle: {
+    type: String,
+    default: ''
   },
   sessionType: {
     type: String,
