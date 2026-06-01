@@ -1644,6 +1644,10 @@ class EnterpriseWeixinBridge {
       this._targetSessionMap.delete(target.userId)
     }
     this._sessionTargets.delete(sessionId)
+    this._activeSendChunks.delete(sessionId)
+    this._desktopPendingImagePaths.delete(sessionId)
+    this._replyCollector.clear(sessionId)
+    this._agentSessionManager?.unbindSessionExternalImSource?.(sessionId)
     return { success: true }
   }
 

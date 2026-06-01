@@ -146,6 +146,15 @@
                   {{ t('common.cancel') }}
                 </button>
                 <button
+                  v-if="hasBoundWeixinTarget"
+                  class="weixin-action secondary danger"
+                  type="button"
+                  :disabled="weixinSending"
+                  @click="unbindWeixinTarget"
+                >
+                  {{ t('agent.imQuickUnbind') }}
+                </button>
+                <button
                   class="weixin-action primary"
                   type="button"
                   :disabled="!canSendWeixin || weixinSending"
@@ -202,6 +211,15 @@
                   {{ t('common.cancel') }}
                 </button>
                 <button
+                  v-if="hasBoundEnterpriseWeixinTarget"
+                  class="enterprise-weixin-action secondary danger"
+                  type="button"
+                  :disabled="enterpriseWeixinSending"
+                  @click="unbindEnterpriseWeixinTarget"
+                >
+                  {{ t('agent.imQuickUnbind') }}
+                </button>
+                <button
                   class="enterprise-weixin-action primary"
                   type="button"
                   :disabled="!canSendEnterpriseWeixin || enterpriseWeixinSending"
@@ -256,6 +274,15 @@
                   {{ t('common.cancel') }}
                 </button>
                 <button
+                  v-if="hasBoundDingTalkTarget"
+                  class="dingtalk-action secondary danger"
+                  type="button"
+                  :disabled="dingtalkSending"
+                  @click="unbindDingTalkTarget"
+                >
+                  {{ t('agent.imQuickUnbind') }}
+                </button>
+                <button
                   class="dingtalk-action primary"
                   type="button"
                   :disabled="!canSendDingTalk || dingtalkSending"
@@ -307,6 +334,15 @@
               <div class="feishu-actions">
                 <button class="feishu-action secondary" type="button" @click="closeFeishuDropdown">
                   {{ t('common.cancel') }}
+                </button>
+                <button
+                  v-if="hasBoundFeishuTarget"
+                  class="feishu-action secondary danger"
+                  type="button"
+                  :disabled="feishuSending"
+                  @click="unbindFeishuTarget"
+                >
+                  {{ t('agent.imQuickUnbind') }}
                 </button>
                 <button
                   class="feishu-action primary"
@@ -439,6 +475,7 @@ const showDingTalkBtn = computed(() => {
 const dingtalkBtnTitle = computed(() => t('agent.dingtalkQuickSendTitle'))
 const selectedDingTalkTarget = computed(() => dingtalkTargets.value.find(target => target.id === selectedDingTalkTargetId.value) || null)
 const canSendDingTalk = computed(() => Boolean(selectedDingTalkTarget.value && dingtalkText.value.trim()))
+const hasBoundDingTalkTarget = computed(() => Boolean(props.sessionImChannel === 'dingtalk' && selectedDingTalkTarget.value))
 const resolvedDingTalkNotifyApi = computed(() => props.dingtalkNotifyApi || window.electronAPI || null)
 const showWeixinBtn = computed(() => {
   if (!props.sessionId || !(props.weixinNotifyApi || window.electronAPI)?.listWeixinNotifyTargets) return false
@@ -447,6 +484,7 @@ const showWeixinBtn = computed(() => {
 const weixinBtnTitle = computed(() => t('agent.weixinQuickSendTitle'))
 const selectedWeixinTarget = computed(() => weixinTargets.value.find(target => target.id === selectedWeixinTargetId.value) || null)
 const canSendWeixin = computed(() => Boolean(selectedWeixinTarget.value && weixinText.value.trim()))
+const hasBoundWeixinTarget = computed(() => Boolean(props.sessionImChannel === 'weixin' && selectedWeixinTarget.value))
 const resolvedWeixinNotifyApi = computed(() => props.weixinNotifyApi || window.electronAPI || null)
 const showFeishuBtn = computed(() => {
   if (feishuBridgeEnabled.value !== true) return false
@@ -456,6 +494,7 @@ const showFeishuBtn = computed(() => {
 const feishuBtnTitle = computed(() => t('agent.feishuQuickSendTitle'))
 const selectedFeishuTarget = computed(() => feishuTargets.value.find(target => target.id === selectedFeishuTargetId.value) || null)
 const canSendFeishu = computed(() => Boolean(selectedFeishuTarget.value && feishuText.value.trim()))
+const hasBoundFeishuTarget = computed(() => Boolean(props.sessionImChannel === 'feishu' && selectedFeishuTarget.value))
 const resolvedFeishuNotifyApi = computed(() => props.feishuNotifyApi || window.electronAPI || null)
 const showEnterpriseWeixinBtn = computed(() => {
   if (enterpriseWeixinBridgeEnabled.value !== true) return false
@@ -465,6 +504,7 @@ const showEnterpriseWeixinBtn = computed(() => {
 const enterpriseWeixinBtnTitle = computed(() => t('agent.enterpriseWeixinQuickSendTitle'))
 const selectedEnterpriseWeixinTarget = computed(() => enterpriseWeixinTargets.value.find(target => target.id === selectedEnterpriseWeixinTargetId.value) || null)
 const canSendEnterpriseWeixin = computed(() => Boolean(selectedEnterpriseWeixinTarget.value && enterpriseWeixinText.value.trim()))
+const hasBoundEnterpriseWeixinTarget = computed(() => Boolean(props.sessionImChannel === 'enterprise-weixin' && selectedEnterpriseWeixinTarget.value))
 const resolvedEnterpriseWeixinNotifyApi = computed(() => props.enterpriseWeixinNotifyApi || window.electronAPI || null)
 
 const closeDingTalkBridgeUi = () => {
@@ -851,6 +891,100 @@ const buildOutboundImText = (rawText) => {
   if (!text) return text
 
   return `${t('agent.imQuickSendSessionPrefix', { title: normalizeSessionTitle() })}\n\n${text}`
+}
+
+const confirmUnbindImTarget = async () => {
+  return await new Promise((resolve) => {
+    dialog.warning({
+      title: t('agent.imQuickUnbindTitle'),
+      content: t('agent.imQuickUnbindConfirm'),
+      positiveText: t('agent.imQuickUnbind'),
+      negativeText: t('common.cancel'),
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false)
+    })
+  })
+}
+
+const unbindDingTalkTarget = async () => {
+  const dingtalkApi = resolvedDingTalkNotifyApi.value
+  if (!props.sessionId || !dingtalkApi?.unbindSessionDingTalkTarget) return
+  const confirmed = await confirmUnbindImTarget()
+  if (!confirmed) return
+  dingtalkSending.value = true
+  dingtalkError.value = ''
+  try {
+    const result = await dingtalkApi.unbindSessionDingTalkTarget({ sessionId: props.sessionId })
+    if (result?.error || result?.success === false) {
+      throw new Error(result?.error || t('agent.imQuickUnbindFailed'))
+    }
+    closeDingTalkDropdown()
+  } catch (err) {
+    dingtalkError.value = err?.message || t('agent.imQuickUnbindFailed')
+  } finally {
+    dingtalkSending.value = false
+  }
+}
+
+const unbindWeixinTarget = async () => {
+  const weixinApi = resolvedWeixinNotifyApi.value
+  if (!props.sessionId || !weixinApi?.unbindSessionWeixinTarget) return
+  const confirmed = await confirmUnbindImTarget()
+  if (!confirmed) return
+  weixinSending.value = true
+  weixinError.value = ''
+  try {
+    const result = await weixinApi.unbindSessionWeixinTarget({ sessionId: props.sessionId })
+    if (result?.error || result?.success === false) {
+      throw new Error(result?.error || t('agent.imQuickUnbindFailed'))
+    }
+    closeWeixinDropdown()
+  } catch (err) {
+    weixinError.value = err?.message || t('agent.imQuickUnbindFailed')
+  } finally {
+    weixinSending.value = false
+  }
+}
+
+const unbindFeishuTarget = async () => {
+  const feishuApi = resolvedFeishuNotifyApi.value
+  if (!props.sessionId || !feishuApi?.unbindSessionFeishuTarget) return
+  const confirmed = await confirmUnbindImTarget()
+  if (!confirmed) return
+  feishuSending.value = true
+  feishuError.value = ''
+  try {
+    const result = await feishuApi.unbindSessionFeishuTarget({ sessionId: props.sessionId })
+    if (result?.error || result?.success === false) {
+      throw new Error(result?.error || t('agent.imQuickUnbindFailed'))
+    }
+    closeFeishuDropdown()
+  } catch (err) {
+    feishuError.value = err?.message || t('agent.imQuickUnbindFailed')
+  } finally {
+    feishuSending.value = false
+  }
+}
+
+const unbindEnterpriseWeixinTarget = async () => {
+  const enterpriseWeixinApi = resolvedEnterpriseWeixinNotifyApi.value
+  if (!props.sessionId || !enterpriseWeixinApi?.unbindSessionEnterpriseWeixinTarget) return
+  const confirmed = await confirmUnbindImTarget()
+  if (!confirmed) return
+  enterpriseWeixinSending.value = true
+  enterpriseWeixinError.value = ''
+  try {
+    const result = await enterpriseWeixinApi.unbindSessionEnterpriseWeixinTarget({ sessionId: props.sessionId })
+    if (result?.error || result?.success === false) {
+      throw new Error(result?.error || t('agent.imQuickUnbindFailed'))
+    }
+    closeEnterpriseWeixinDropdown()
+  } catch (err) {
+    enterpriseWeixinError.value = err?.message || t('agent.imQuickUnbindFailed')
+  } finally {
+    enterpriseWeixinSending.value = false
+  }
 }
 
 const sendDingTalkQuickMessage = async () => {

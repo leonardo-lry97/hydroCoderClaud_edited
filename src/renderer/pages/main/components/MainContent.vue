@@ -560,9 +560,7 @@ const setupSessionListeners = () => {
           if (session.source) {
             tab.sessionSource = session.source
           }
-          if (session.imChannel) {
-            tab.imChannel = session.imChannel
-          }
+          tab.imChannel = session.imChannel || null
         }
         // 如果当前活动会话的 UUID 被更新，刷新 currentSessionUuid
         const activeTab = tabs.value.find(t => t.id === activeTabId.value)

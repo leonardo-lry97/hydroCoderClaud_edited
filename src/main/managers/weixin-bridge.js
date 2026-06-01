@@ -585,6 +585,7 @@ class WeixinBridge {
     this.pendingReplies.delete(sessionId)
     this.replySendQueues.delete(sessionId)
     this.desktopPendingBlocks.delete(sessionId)
+    this.agentSessionManager?.unbindSessionExternalImSource?.(sessionId)
     console.log(`[WeixinBridge] Unbound session ${sessionId}`)
     return { success: true }
   }

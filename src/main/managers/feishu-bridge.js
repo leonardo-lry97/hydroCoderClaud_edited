@@ -1355,10 +1355,13 @@ class FeishuBridge {
       this._targetSessionMap.delete(target.openId)
     }
     this._sessionTargets.delete(sessionId)
+    this._activeSendChunks.delete(sessionId)
+    this._replyCollector.clear(sessionId)
     const identity = this._sessionIdentities.get(sessionId)
     if (identity?.chatType === 'p2p' && !identity.chatId) {
       this._sessionIdentities.delete(sessionId)
     }
+    this._agentSessionManager?.unbindSessionExternalImSource?.(sessionId)
     return { success: true }
   }
 

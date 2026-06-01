@@ -54,4 +54,19 @@ describe('chat input IM binding props', () => {
     expect(toolbarSource).toContain('text: buildOutboundImText(feishuText.value)')
     expect(toolbarSource).toContain('text: buildOutboundImText(enterpriseWeixinText.value)')
   })
+
+  it('adds an IM unbind action to all bound quick-send dropdowns', () => {
+    const toolbarSource = fs.readFileSync(chatInputToolbarPath, 'utf-8')
+
+    expect(toolbarSource).toContain("{{ t('agent.imQuickUnbind') }}")
+    expect(toolbarSource).toContain('const confirmUnbindImTarget = async () => {')
+    expect(toolbarSource).toContain('const unbindDingTalkTarget = async () => {')
+    expect(toolbarSource).toContain('const unbindWeixinTarget = async () => {')
+    expect(toolbarSource).toContain('const unbindFeishuTarget = async () => {')
+    expect(toolbarSource).toContain('const unbindEnterpriseWeixinTarget = async () => {')
+    expect(toolbarSource).toContain('unbindSessionDingTalkTarget')
+    expect(toolbarSource).toContain('unbindSessionWeixinTarget')
+    expect(toolbarSource).toContain('unbindSessionFeishuTarget')
+    expect(toolbarSource).toContain('unbindSessionEnterpriseWeixinTarget')
+  })
 })

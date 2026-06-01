@@ -25,6 +25,10 @@ function setupDingTalkHandlers(ipcMain, dingtalkBridge, configManager) {
     })
   })
 
+  ipcMain.handle('dingtalk:unbindSessionTarget', async (_event, payload = {}) => {
+    return dingtalkBridge.unbindSessionTarget(payload.sessionId)
+  })
+
   ipcMain.handle('dingtalk:getSessionBinding', async (_event, sessionId) => {
     return dingtalkBridge.getSessionBinding(sessionId)
   })

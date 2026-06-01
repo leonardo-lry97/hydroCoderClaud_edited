@@ -1068,6 +1068,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateDingTalkConfig: (config) => ipcRenderer.invoke('dingtalk:updateConfig', config),
   listDingTalkTargets: () => ipcRenderer.invoke('dingtalk:listTargets'),
   bindSessionToDingTalkTarget: (payload) => ipcRenderer.invoke('dingtalk:bindSessionToTarget', payload),
+  unbindSessionDingTalkTarget: (payload) => ipcRenderer.invoke('dingtalk:unbindSessionTarget', payload),
   getSessionDingTalkBinding: (sessionId) => ipcRenderer.invoke('dingtalk:getSessionBinding', sessionId),
   sendDingTalkText: (payload) => ipcRenderer.invoke('dingtalk:sendText', payload),
 

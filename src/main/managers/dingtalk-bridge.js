@@ -951,6 +951,29 @@ class DingTalkBridge {
     }
   }
 
+  unbindSessionTarget(sessionId) {
+    if (!sessionId) return { success: false, error: 'sessionId 不能为空' }
+
+    const target = this._sessionTargets.get(sessionId) || null
+    if (target?.staffId) {
+      this._targetSessionMap.delete(target.staffId)
+      this._clearStaffConversationMapBindings(target.staffId, null)
+    }
+
+    this._sessionTargets.delete(sessionId)
+    this._sessionWebhooks.delete(sessionId)
+    this._desktopPendingBlocks.delete(sessionId)
+    const collector = this.responseCollectors.get(sessionId)
+    if (collector?.timer) {
+      clearTimeout(collector.timer)
+    }
+    this.responseCollectors.delete(sessionId)
+    this._sessionProcessQueues.delete(sessionId)
+
+    this.agentSessionManager?.unbindSessionExternalImSource?.(sessionId)
+    return { success: true }
+  }
+
   async sendTextToTarget({ sessionId, staffId, targetId, displayName, text } = {}) {
     const content = typeof text === 'string' ? text.trim() : ''
     if (!content) {
