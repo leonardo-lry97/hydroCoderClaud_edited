@@ -14,6 +14,10 @@
 | [design-system.md](./design-system.md) | 设计系统 |
 | [image-recognition.md](./image-recognition.md) | 图片识别链路 |
 | [dingtalk-weixin-reuse-evaluation.md](./dingtalk-weixin-reuse-evaluation.md) | 钉钉 / 微信复用评估 |
+| [im-bridge-refactoring.md](./im-bridge-refactoring.md) | IM Bridge 架构（钉钉/飞书/企微/微信 4 渠道） |
+| [im-command-card-unification.md](./im-command-card-unification.md) | IM 命令卡片统一设计（阶段一完成，阶段二/三延后） |
+| [enterprise-weixin-feishu-parity-plan.md](./enterprise-weixin-feishu-parity-plan.md) | 企业微信对齐飞书计划（✅ 已完成） |
+| [session-fields-refactoring-plan.md](./session-fields-refactoring-plan.md) | 会话字段重构方案（✅ 已完成） |
 
 ## 内嵌 App
 

@@ -1,6 +1,22 @@
 # 会话属性字段重构方案
 
-> 2026-05-26 | 版本 v1.7.74+
+> 2026-05-26 | 版本 v1.7.74+ | 最后更新：2026-06-01 | **状态：✅ 已完成**
+
+## 实施状态
+
+7 个步骤已全部实施：
+
+| 步骤 | 内容 | 状态 |
+|------|------|:----:|
+| 第一步 | DB Schema — 新增 `im_channel`、`im_user_id` 列 | ✅ 完成 |
+| 第二步 | Session 模型 — `AgentSession.imChannel` 属性 | ✅ 完成 |
+| 第三步 | Bridge 改造 — type:chat, source:im-inbound, imChannel | ✅ 完成 |
+| 第四步 | 绑定流程 — `bindSessionExternalImSource` / `unbindSessionExternalImSource` | ✅ 完成 |
+| 第五步 | 核心函数清理 — `isExternalImChannel`、`getSessionImChannel`、`getConversationIcon` | ✅ 完成 |
+| 第六步 | 定时任务 & 内嵌 App — 定时任务用 `task_id` 判断 | ✅ 完成 |
+| 第七步 | UI & 预载 — 侧栏/图标/标签/观察模式基于 `imChannel` | ✅ 完成 |
+
+**注意**：旧列 `staff_id` / `conversation_id` 保留兼容（未删除），待所有渠道稳定后可清理。
 
 ## 目标
 

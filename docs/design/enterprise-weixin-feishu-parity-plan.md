@@ -1,5 +1,25 @@
 # 企业微信集成完善设计（对齐飞书）
 
+> 设计时间：2026-05-28 | 最后更新：2026-06-01 | **状态：✅ 已完成**
+
+## 实施状态总结
+
+三批实施均已按计划完成：
+
+| 批次 | 内容 | 状态 |
+|------|------|:----:|
+| 第一批 | 会话与命令闭环（文本消息、/help、/status、/sessions、/new、历史会话选择） | ✅ 完成 |
+| 第二批 | 图片与桌面主动发送（入站/出站图片、quick send、bind/unbind、toolbar） | ✅ 完成 |
+| 第三批 | 事件与回归（enter_chat、disconnected_event、完整测试、手工冒烟） | ✅ 完成 |
+
+**超出原计划额外完成**：
+- ✅ `wecom-cli-manager.js` — 企业微信 CLI 联系人管理
+- ✅ 共享命令层完整接入（`im-command-executor`、`im-command-policy`、`im-session-decision` 等 7 个模块）
+- ✅ `im-session-selectors.js` 会话筛选和映射管理
+- ✅ `im-resume-post-action.js` resume 后激活处理
+
+---
+
 ## 1. 目标
 
 本轮企业微信集成的目标，不是只把 `enterprise-weixin-bridge.js` 补到“能连上”，而是把它补到与飞书渠道同等级可用。

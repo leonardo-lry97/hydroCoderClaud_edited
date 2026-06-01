@@ -1,6 +1,6 @@
 # 主进程设计
 
-> Hydro Desktop v1.7.69+ | [<< 架构总览](../ARCHITECTURE.md) | [代码索引](../code-index/main.md) | [IPC 通道](../code-index/ipc-channels.md) | [集成模块](integrations.md)
+> Hydro Desktop v1.7.74+ | [<< 架构总览](../ARCHITECTURE.md) | [代码索引](../code-index/main.md) | [IPC 通道](../code-index/ipc-channels.md) | [集成模块](integrations.md)
 
 ---
 
@@ -31,16 +31,21 @@
 7. PluginService + Managers ← 插件运行时 + Skills/Agents/MCP/Settings
 8. CapabilityManager        ← 能力市场
 9. UpdateManager            ← 自动更新
-10. DingTalkBridge          ← 钉钉桥接
-11. NotebookManager         ← Notebook 工作台后端能力
-12. EmbeddedAppPreferencesManager ← 内嵌 app API Profile / 模型偏好
-13. ScheduledTaskService    ← 桌面端定时任务调度
-14. WeixinNotifyService     ← 微信 iLink 授权 / 轮询 / 发送
-15. WeixinBridge            ← 微信会话桥接
-16. setupIPCHandlers()      ← IPC 注册 + SessionDatabase 初始化 + scheduledTaskService.start()
-17. powerSaveBlocker.start  ← 防止系统挂起
-18. scheduleUpdateCheck(5s) ← 延迟检查更新
-19. DingTalk.start (3s)     ← 延迟启动钉钉
+10. DingTalkBridge          ← 钉钉桥接（Stream WebSocket）
+11. FeishuBridge             ← 飞书桥接（SDK WebSocket）
+12. EnterpriseWeixinBridge   ← 企业微信桥接（aibot SDK WS）
+13. NotebookManager          ← Notebook 工作台后端能力
+14. EmbeddedAppPreferencesManager ← 内嵌 app API Profile / 模型偏好
+15. ScheduledTaskService     ← 桌面端定时任务调度
+16. WeixinNotifyService      ← 微信 iLink 授权 / 轮询 / 发送
+17. WeixinBridge             ← 微信会话桥接
+18. WecomCliManager          ← 企业微信 CLI 联系人管理
+19. setupIPCHandlers()       ← IPC 注册 + SessionDatabase 初始化 + scheduledTaskService.start()
+19. powerSaveBlocker.start   ← 防止系统挂起
+20. scheduleUpdateCheck(5s)  ← 延迟检查更新
+21. DingTalk.start (3s)      ← 延迟启动钉钉
+22. Feishu.start (3s)        ← 延迟启动飞书
+23. EnterpriseWeixin.start   ← 延迟启动企业微信
 ```
 
 **关键文件**: `src/main/index.js`
@@ -449,6 +454,33 @@ new WeixinNotifyService(configManager)
 - 把微信入站消息写入现有会话，或创建 `source === 'weixin'` 新会话
 - 把 Agent 文本回复、桌面介入内容和图片回推给微信端
 - 向前端广播 `weixin:messageReceived` 与 `weixin:sessionCreated`
+
+### FeishuBridge
+
+> 核心文件：`src/main/managers/feishu-bridge.js`
+
+`FeishuBridge` 负责飞书消息接入 Agent 会话体系：
+
+- 使用 `@larksuiteoapi/node-sdk` WebSocket 长连接
+- 消息接收: 事件订阅回调（`on('message')`）
+- 回复通道: REST API (`client.im.v1.message.create`)
+- 命令层: 自有交互卡片系统（help/status/sessions/history 卡片）
+- 共享模块: `ImSessionMapper`、`ImReplyCollector`、`ImFrontendNotifier`
+- 图片: SDK `image.create` 上传 → `message.create` 发送
+- `FeishuEventClient` 处理卡片动作回调
+
+### EnterpriseWeixinBridge
+
+> 核心文件：`src/main/managers/enterprise-weixin-bridge.js`
+
+`EnterpriseWeixinBridge` 负责企业微信消息接入 Agent 会话体系：
+
+- 使用 `@wecom/aibot-node-sdk` WSClient WebSocket 长连接
+- 消息接收与回复: 同一条 WebSocket（`replyStream` / `replyMedia` / `sendMessage`）
+- 命令层: 完整接入共享命令层 7 个模块
+- 图片: `downloadFile(url, aeskey)` 解密入站 / `uploadMedia` + `replyMedia` 出站
+- 联系人: `WecomCliManager` 通过 `wecom-cli` CLI 工具获取联系人列表
+- 会话管理: `ImSessionMapper` + `_sessionIdentities` + `_sessionTargets`
 
 ---
 

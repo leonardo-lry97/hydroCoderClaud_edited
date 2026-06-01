@@ -1,6 +1,30 @@
 # IM 命令卡片统一设计
 
-> Hydro Desktop v1.7.74+ | 设计时间：2026-05-28
+> Hydro Desktop v1.7.74+ | 设计时间：2026-05-28 | 最后更新：2026-06-01
+
+## 实施状态
+
+| 阶段 | 内容 | 状态 |
+|------|------|:----:|
+| 阶段一 | 飞书内部抽象 → presenter + plain text renderer + card renderer | ⏸️ 部分完成 |
+| 阶段二 | 钉钉接入统一命令卡片 | ❌ 未开始 |
+| 阶段三 | 企业微信接入统一命令卡片 | ❌ 未开始 |
+| 阶段四 | 普通微信接入统一文本 presenter | ❌ 未开始 |
+
+**已完成部分**：
+- ✅ `im-command-presenter.js` — 统一命令文本 presenter（被钉钉和企业微信共享）
+- ✅ `im-command-policy.js` — 命令策略文本（help/status/close/rename 消息）
+- ✅ `im-command-executor.js` — 命令分发框架（被钉钉和企业微信共享）
+- ✅ `im-card-renderers/plain-text-renderer.js` — 纯文本 fallback renderer
+- ✅ `im-card-renderers/feishu-card-renderer.js` — 飞书卡片 renderer 骨架
+
+**未完成部分**：
+- ❌ 飞书现有卡片逻辑（`_buildHelpCard`, `_buildStatusCard` 等）未迁移到 feishu-card-renderer
+- ❌ 钉钉卡片 renderer 未创建
+- ❌ 企业微信模板卡片 renderer 未创建
+- ❌ `im-card-action-adapter.js` 未创建
+
+---
 
 本文定义外部 IM 命令菜单在飞书、钉钉、企业微信之间的统一卡片架构，并明确普通微信在该架构中的 fallback 位置。本文只定义设计与实施边界，不直接替代实现任务清单。
 
