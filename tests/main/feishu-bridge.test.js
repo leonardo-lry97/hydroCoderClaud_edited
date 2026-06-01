@@ -27,6 +27,7 @@ describe('FeishuBridge', () => {
     const mainWindow = {
       isDestroyed: () => false,
       webContents: {
+        isDestroyed: () => false,
         send: (channel, data) => sent.push({ channel, data })
       }
     }
@@ -50,6 +51,8 @@ describe('FeishuBridge', () => {
       updateAgentConversation: vi.fn(),
       updateAgentConversationTitle: vi.fn(),
       createAgentConversation: vi.fn(() => ({ id: 1 })),
+      setImChannel: vi.fn(),
+      clearImIdentity: vi.fn(),
       getAgentConversation: vi.fn((sessionId) => ({
         id: 1,
         session_id: sessionId,
@@ -357,6 +360,38 @@ describe('FeishuBridge', () => {
 
     expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_reply')).toBeUndefined()
     expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_group')).toBe(first.id)
+  })
+
+  it('clears Feishu inbound routing state after unbinding a proactively bound session', () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话', cwd: tempDir })
+    const session = manager.sessions.get(created.id)
+
+    bridge._sessionTargets.set(session.id, {
+      openId: 'ou_target',
+      displayName: '张三'
+    })
+    bridge._targetSessionMap.set('ou_target', session.id)
+    bridge._sessionIdentities.set(session.id, {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+    bridge._sessionMapper.sessionMap.set('ou_target:oc_reply', session.id)
+    bridge._sessionMapper.sessionMap.set('ou_target:oc_group', session.id)
+
+    expect(bridge.unbindSessionTarget(session.id)).toEqual({ success: true })
+
+    expect(bridge._targetSessionMap.get('ou_target')).toBeUndefined()
+    expect(bridge._sessionTargets.get(session.id)).toBeUndefined()
+    expect(bridge._sessionIdentities.get(session.id)).toBeUndefined()
+    expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_reply')).toBeUndefined()
+    expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_group')).toBeUndefined()
+    expect(manager.sessionDatabase.setImChannel).toHaveBeenCalledWith(session.id, null)
+    expect(manager.sessionDatabase.clearImIdentity).toHaveBeenCalledWith(session.id)
   })
 
   it('does not lock a session to Feishu when the proactive send fails', async () => {

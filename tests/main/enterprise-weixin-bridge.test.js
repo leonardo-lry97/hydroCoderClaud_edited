@@ -914,6 +914,38 @@ describe('EnterpriseWeixinBridge', () => {
     expect(bridge._sessionMapper.sessionMap.get('user-a:user-a')).toBeUndefined()
   })
 
+  it('clears enterprise weixin inbound routing state after unbinding a bound session', () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
+    const session = manager.sessions.get(created.id)
+
+    bridge._sessionTargets.set(session.id, {
+      userId: 'user-a',
+      displayName: '雷斯林',
+    })
+    bridge._targetSessionMap.set('user-a', session.id)
+    bridge._sessionIdentities.set(session.id, {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'user-a',
+      chatType: 'single',
+      chatName: '雷斯林',
+    })
+    bridge._sessionMapper.sessionMap.set('user-a:user-a', session.id)
+    bridge._sessionMapper.sessionMap.set('user-a:group-1', session.id)
+
+    expect(bridge.unbindSessionTarget(session.id)).toEqual({ success: true })
+
+    expect(bridge._targetSessionMap.get('user-a')).toBeUndefined()
+    expect(bridge._sessionTargets.get(session.id)).toBeUndefined()
+    expect(bridge._sessionIdentities.get(session.id)).toBeUndefined()
+    expect(bridge._sessionMapper.sessionMap.get('user-a:user-a')).toBeUndefined()
+    expect(bridge._sessionMapper.sessionMap.get('user-a:group-1')).toBeUndefined()
+    expect(manager.sessionDatabase.setImChannel).toHaveBeenCalledWith(session.id, null)
+    expect(manager.sessionDatabase.clearImIdentity).toHaveBeenCalledWith(session.id)
+  })
+
   it('does not forward desktop messages after the bound session is closed and reopened', async () => {
     const { bridge, manager, wsClient } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })

@@ -1643,10 +1643,16 @@ class EnterpriseWeixinBridge {
     if (target?.userId) {
       this._targetSessionMap.delete(target.userId)
     }
+    clearSessionMappingsForSession({
+      sessionMap: this._sessionMapper.sessionMap,
+      sessionId,
+      deleteEntry: (mapKey) => this._sessionMapper.clearSessionState(mapKey),
+    })
     this._sessionTargets.delete(sessionId)
     this._activeSendChunks.delete(sessionId)
     this._desktopPendingImagePaths.delete(sessionId)
     this._replyCollector.clear(sessionId)
+    this._sessionIdentities.delete(sessionId)
     this._agentSessionManager?.unbindSessionExternalImSource?.(sessionId)
     return { success: true }
   }
