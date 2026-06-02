@@ -72,7 +72,7 @@ IM Bridge 系统负责将外部 IM 平台（钉钉、飞书、企业微信、个
 | 交互卡片 | ❌ (文本) | ✅ (飞书卡片) | ❌ (文本) | ❌ |
 | 联系人列表 | 组织 API | 组织 API | wecom-cli | ilink 好友 |
 | SDK 合规 | 部分 (REST 手写) | ✅ | ✅ | N/A |
-| 共享命令层接入 | ✅ | ❌ (自有卡片) | ✅ | ❌ |
+| 共享命令层接入 | ✅ | ✅ | ✅ | ❌ |
 
 ---
 
@@ -128,13 +128,13 @@ IM 消息以 / 开头
 
 | 共享模块 | 钉钉 | 飞书 | 企业微信 | 个人微信 |
 |---------|:----:|:----:|:-------:|:-------:|
-| im-command-executor | ✅ | ❌ 自有 | ✅ | ❌ |
-| im-command-policy | ✅ | ❌ | ✅ | ❌ |
-| im-command-presenter | ✅ | ✅ 部分 | ✅ | ❌ |
-| im-session-command-flow | ✅ | ❌ | ✅ | ❌ |
-| im-session-decision | ❌ 内联 | ❌ 内联 | ✅ | ❌ |
-| im-session-selectors | ✅ | ❌ | ✅ | ❌ |
-| im-resume-post-action | ❌ | ❌ | ✅ | ❌ |
+| im-command-executor | ✅ | ✅ | ✅ | ❌ |
+| im-command-policy | ✅ | ✅ | ✅ | ❌ |
+| im-command-presenter | ✅ | ✅ | ✅ | ❌ |
+| im-session-command-flow | ✅ | ✅ | ✅ | ❌ |
+| im-session-decision | ❌ 内联 | ✅ | ✅ | ❌ |
+| im-session-selectors | ✅ | ✅ | ✅ | ❌ |
+| im-resume-post-action | ❌ | ✅ | ✅ | ❌ |
 | ImSessionMapper | ❌ 自有 | ✅ | ✅ | ❌ |
 | ImReplyCollector | ❌ 内联 | ✅ | ✅ | ❌ |
 | ImFrontendNotifier | ✅ | ✅ | ✅ | ❌ |
@@ -146,7 +146,7 @@ IM 消息以 / 开头
 
 ### 3.1 钉钉 (DingTalk Bridge)
 
-**文件**：`src/main/managers/dingtalk-bridge.js` (1568行) + `dingtalk-commands.js` (422行) + `dingtalk-image.js`
+**文件**：`src/main/managers/dingtalk-bridge.js` (1507行) + `dingtalk-commands.js` (356行) + `dingtalk-image.js`
 
 **连接方式**：`dingtalk-stream-sdk-nodejs` WebSocket Stream
 
@@ -167,27 +167,42 @@ IM 消息以 / 开头
 
 ### 3.2 飞书 (Feishu Bridge)
 
-**文件**：`src/main/managers/feishu-bridge.js` (1288行) + `feishu-event-client.js` + `feishu-message-api.js`
+**文件**：`src/main/managers/feishu-bridge.js` (1800行) + `feishu-event-client.js` + `feishu-message-api.js`
 
 **连接方式**：`@larksuiteoapi/node-sdk` WebSocket 长连接 (protobuf)
 
 **SDK 规范化**：`feishu-message-api.js` 已完成 SDK 重写（-209行），所有 REST API 调用改为使用 SDK `Client` 方法。
 
-**命令层**：使用飞书自有交互卡片系统（未接入共享命令层）
+**命令层**：已接入共享命令层（与飞书自有卡片系统并行）
+- 使用 `dispatchImCommand` 进行命令分发（help/status/close/new/resume/rename/sessions）
+- 使用共享 `resolveCloseCommand` / `resolveRenameCommand` / `activateNewSession` / `resolveResumeSelection`
+- 使用 `ensureHistoryChoiceOrCurrent` 进行会话路由决策
+- 使用 `resolveStrictCurrentSessionId` 获取当前会话
+- 使用 `runResumePostAction` 处理 resume 后激活
+- 使用 `buildImCommandHelpText` / `buildHistoryChoiceMenuText` / `buildSessionActivatingText` 等共享 policy presenter
+
+**卡片层**：同时保留飞书自有交互卡片系统
 - 飞书卡片：`_buildHelpCard` / `_buildStatusCard` / `_buildSessionsCard` / `_buildHistoryChoiceCard`
 - 卡片动作：`FeishuEventClient` 处理 `card.action.trigger` → `_handleCardAction`
-- 命令文本 fallback：`_getHelpText()` 等
+- 部分卡片逻辑已迁移至 `im-card-renderers/feishu-card-renderer.js`
 
 **共享层使用**：
 - ✅ `ImSessionMapper`
 - ✅ `ImReplyCollector`
 - ✅ `ImFrontendNotifier`
 - ✅ `im-utils`
-- ✅ `buildHistoryChoiceMenuText`（部分场景）
+- ✅ `im-command-executor`（`dispatchImCommand` / `resolveRenameCommand`）
+- ✅ `im-command-policy`（`buildImCommandHelpText` / `buildAlreadyConnectedText` / `buildSessionSwitchedText` 等）
+- ✅ `im-command-presenter`（`buildHistoryChoiceMenuText`）
+- ✅ `im-session-command-flow`（`activateNewSession` / `resolveResumeSelection`）
+- ✅ `im-session-decision`（`resolveStrictCurrentSessionId` / `ensureHistoryChoiceOrCurrent`）
+- ✅ `im-session-selectors`（`isMappedCurrentSession` / `clearExactSessionMapping` / `clearSessionMappingsForSession`）
+- ✅ `im-resume-post-action`（`runResumePostAction`）
+- ✅ `im-card-renderers/feishu-card-renderer`（`buildHelpCard` / `buildStatusCard` / `buildHistoryChoiceCard` / `buildResultCard` / `buildCommandButton` / `chunkCardActions` / `attachCardContext` / `buildCardContextValue`）
 
 ### 3.3 企业微信 (Enterprise Weixin Bridge)
 
-**文件**：`src/main/managers/enterprise-weixin-bridge.js` (1759行)
+**文件**：`src/main/managers/enterprise-weixin-bridge.js` (1601行)
 
 **连接方式**：`@wecom/aibot-node-sdk` WSClient WebSocket 长连接
 
@@ -212,7 +227,7 @@ IM 消息以 / 开头
 
 ### 3.4 个人微信 (Weixin Bridge)
 
-**文件**：`src/main/managers/weixin-bridge.js` (591行) + `weixin-notify-service.js`
+**文件**：`src/main/managers/weixin-bridge.js` (548行) + `weixin-notify-service.js`
 
 **连接方式**：HTTP 长轮询（无官方 SDK）
 
@@ -382,7 +397,7 @@ EXTERNAL_IM_CHANNELS = {
 | BaseImBridge 抽象类 | ⏸️ 延后 | 依赖 ImReplyCollector/ImSessionMapper 在钉钉完成迁移 |
 | ImReplyCollector 钉钉回迁 | ⏸️ 延后 | webhook 管道差异大，需真实 IM 测试环境 |
 | ImSessionMapper 钉钉回迁 | ⏸️ 延后 | 同上 |
-| 飞书命令层接入共享层 | ⏸️ 延后 | 飞书已有完整卡片闭环，迁移成本高收益低 |
+| 飞书命令层接入共享层 | ✅ 已完成 | 已接入 dispatchImCommand + 全量共享命令模块，与卡片系统并行运行 |
 | 钉钉交互卡片 | ⏸️ 延后 | 见 `im-command-card-unification.md` 阶段二 |
 | 企业微信交互卡片 | ⏸️ 延后 | 见 `im-command-card-unification.md` 阶段三 |
 | ImQuickSendPanel UI 抽取 | ⏸️ 延后 | 依赖 BaseImBridge |

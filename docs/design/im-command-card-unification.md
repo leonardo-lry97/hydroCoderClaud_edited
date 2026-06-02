@@ -6,20 +6,20 @@
 
 | 阶段 | 内容 | 状态 |
 |------|------|:----:|
-| 阶段一 | 飞书内部抽象 → presenter + plain text renderer + card renderer | ⏸️ 部分完成 |
+| 阶段一 | 飞书内部抽象 → presenter + plain text renderer + card renderer | ✅ 已完成 |
 | 阶段二 | 钉钉接入统一命令卡片 | ❌ 未开始 |
 | 阶段三 | 企业微信接入统一命令卡片 | ❌ 未开始 |
 | 阶段四 | 普通微信接入统一文本 presenter | ❌ 未开始 |
 
 **已完成部分**：
-- ✅ `im-command-presenter.js` — 统一命令文本 presenter（被钉钉和企业微信共享）
-- ✅ `im-command-policy.js` — 命令策略文本（help/status/close/rename 消息）
-- ✅ `im-command-executor.js` — 命令分发框架（被钉钉和企业微信共享）
+- ✅ `im-command-presenter.js` — 统一命令文本 presenter（被钉钉、飞书和企业微信共享）
+- ✅ `im-command-policy.js` — 命令策略文本（help/status/close/rename 消息，被三渠道共享）
+- ✅ `im-command-executor.js` — 命令分发框架（被钉钉、飞书和企业微信共享）
 - ✅ `im-card-renderers/plain-text-renderer.js` — 纯文本 fallback renderer
-- ✅ `im-card-renderers/feishu-card-renderer.js` — 飞书卡片 renderer 骨架
+- ✅ `im-card-renderers/feishu-card-renderer.js` — 飞书卡片 renderer（完整迁移：`buildHistoryChoiceCard`/`buildHelpCard`/`buildStatusCard`/`buildResultCard`/`buildCommandButton`/`chunkCardActions`/`attachCardContext`/`buildCardContextValue`，232 行）
+- ✅ 飞书共享命令层接入 — `dispatchImCommand` + 全量共享模块（`im-command-policy`/`im-session-command-flow`/`im-session-decision`/`im-resume-post-action`），与卡片系统并行
 
 **未完成部分**：
-- ❌ 飞书现有卡片逻辑（`_buildHelpCard`, `_buildStatusCard` 等）未迁移到 feishu-card-renderer
 - ❌ 钉钉卡片 renderer 未创建
 - ❌ 企业微信模板卡片 renderer 未创建
 - ❌ `im-card-action-adapter.js` 未创建
@@ -263,25 +263,19 @@ Bridge 只负责：
 
 ### 6.1 飞书
 
-飞书已具备完整闭环：
+飞书已具备完整闭环，且已完成阶段一迁移：
 
 - `FeishuEventClient` 负责卡片动作入口
 - `FeishuBridge._handleCardAction(...)` 负责动作转命令
-- `FeishuBridge._handleCommand(...)` 是命令中心
+- `FeishuBridge._handleCommand(...)` 是命令中心（现已接入 `dispatchImCommand`）
 - `FeishuMessageAPI.sendCardMessage(...)` 负责卡片发送
 
-飞书实施重点不是补能力，而是将以下逻辑迁移到 presenter / renderer：
+**已迁移到 `im-card-renderers/feishu-card-renderer.js`**：
+- `buildHistoryChoiceCard` / `buildHelpCard` / `buildStatusCard` / `buildResultCard`
+- `buildCommandButton` / `chunkCardActions` / `attachCardContext` / `buildCardContextValue`
 
-- `_getHelpText()`
-- `_buildActiveSessionsText(...)`
-- `_buildStatusText(...)`
-- `_buildHistoryChoiceCard(...)`
-- `_buildSessionsCard(...)`
-- `_buildHelpCard(...)`
-- `_buildStatusCard(...)`
-- `_buildResultCard(...)`
-- `_buildCommandButton(...)`
-- `_chunkCardActions(...)`
+仍留在 `feishu-bridge.js` 内部（文本 fallback，尚未迁移到 presenter）：
+- `_getHelpText()` / `_buildActiveSessionsText(...)` / `_buildStatusText(...)`
 
 ### 6.2 钉钉
 
