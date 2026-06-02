@@ -2924,6 +2924,76 @@ describe('FeishuBridge', () => {
     )
   })
 
+  it('includes a proactively bound Feishu session in /resume before the current chat map is established', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
+    vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([])
+    vi.spyOn(bridge._sessionMapper, 'initPendingChoice').mockImplementation(async (_mapKey, history, onSendChoiceMenu, options) => {
+      await onSendChoiceMenu(options.menuBuilder(history))
+      return { sessionId: null }
+    })
+
+    const created = manager.create({ type: 'chat', source: 'manual', title: '桌面主动绑定会话', cwd: tempDir })
+    const session = manager.sessions.get(created.id)
+
+    bridge._targetSessionMap.set('ou_target', session.id)
+    bridge._sessionTargets.set(session.id, {
+      openId: 'ou_target',
+      displayName: '张三',
+    })
+    manager.sessionDatabase.getAgentConversation.mockImplementation((sessionId) => (
+      sessionId === session.id
+        ? {
+            session_id: session.id,
+            type: 'chat',
+            source: 'manual',
+            title: '桌面主动绑定会话',
+            cwd: tempDir,
+            im_channel: 'feishu',
+            im_user_id: 'ou_target',
+            im_chat_id: '',
+            staff_id: 'ou_target',
+            conversation_id: '',
+            status: 'idle',
+            updated_at: Date.now(),
+          }
+        : null
+    ))
+
+    await bridge._handleCommand('/resume', {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三',
+    })
+
+    expect(sendTextMessage).not.toHaveBeenCalledWith(
+      'open_id',
+      'ou_target',
+      expect.stringContaining('没有历史会话记录')
+    )
+    expect(bridge._sessionMapper.initPendingChoice).toHaveBeenCalledWith(
+      'ou_target:oc_reply',
+      [expect.objectContaining({ session_id: session.id, title: '桌面主动绑定会话' })],
+      expect.any(Function),
+      expect.any(Object)
+    )
+    expect(sendCardMessage).toHaveBeenCalledWith(
+      'open_id',
+      'ou_target',
+      expect.objectContaining({
+        header: expect.objectContaining({
+          title: expect.objectContaining({
+            content: '历史会话'
+          })
+        })
+      })
+    )
+  })
+
   it('falls back to text when sending the help card fails', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)

@@ -776,7 +776,13 @@ class FeishuBridge {
         resume: async ({ args, command }) => {
           const preservePendingSelection = ['history-choice', 'session-entry'].includes(options?.cardValue?.source) &&
             (command === 'resume' || command === 'new')
-          const currentSession = sessionId ? this._agentSessionManager.sessions.get(sessionId) : null
+          let resumeSessionId = sessionId
+          if (!resumeSessionId && context.chatType === 'p2p' && context.senderId) {
+            resumeSessionId = await this._findBoundSessionIdBySenderId(context.senderId, {
+              allowDatabaseFallback: false,
+            })
+          }
+          const currentSession = resumeSessionId ? this._agentSessionManager.sessions.get(resumeSessionId) : null
           if (currentSession?.status === 'streaming') {
             await this._api.sendTextMessage(receiveIdType, receiveId, 'AI 正在响应中，请等待完成后再操作')
             return
@@ -786,7 +792,7 @@ class FeishuBridge {
             chatId: context.chatId,
             chatType: context.chatType,
           })
-          history = this._mergeCurrentSessionIntoHistory(history, sessionId, context)
+          history = this._mergeCurrentSessionIntoHistory(history, resumeSessionId, context)
           if (!history || history.length === 0) {
             await this._api.sendTextMessage(receiveIdType, receiveId, buildNoHistoryText())
             return
@@ -796,7 +802,7 @@ class FeishuBridge {
             const selection = resolveResumeSelection({
               history,
               selectedIndex,
-              currentSessionId: sessionId,
+              currentSessionId: resumeSessionId,
               currentSession,
             })
             if (selection.action === 'invalid_index') {
@@ -868,9 +874,9 @@ class FeishuBridge {
             return
           }
           await this._sessionMapper.initPendingChoice(mapKey, history, async (menuText) => {
-            await this._sendHistoryChoiceMenu(receiveIdType, receiveId, history, sessionId, menuText, context)
+            await this._sendHistoryChoiceMenu(receiveIdType, receiveId, history, resumeSessionId, menuText, context)
           }, {
-            menuBuilder: (sessions) => this._buildHistoryChoiceMenuText(sessions, sessionId)
+            menuBuilder: (sessions) => this._buildHistoryChoiceMenuText(sessions, resumeSessionId)
           })
         },
         rename: async ({ args }) => {
@@ -1433,7 +1439,7 @@ class FeishuBridge {
     }
   }
 
-  async _findBoundSessionIdBySenderId(senderId) {
+  async _findBoundSessionIdBySenderId(senderId, { allowDatabaseFallback = true } = {}) {
     const normalizedSenderId = typeof senderId === 'string' ? senderId.trim() : ''
     if (!normalizedSenderId) return null
     if (this._proactiveRebindSuppressedKeys.has(`${normalizedSenderId}:${normalizedSenderId}`)) {
@@ -1453,7 +1459,7 @@ class FeishuBridge {
       this._sessionTargets.delete(sessionId)
     }
 
-    if (typeof this._sessionDatabase?.listAllAgentConversations !== 'function') {
+    if (!allowDatabaseFallback || typeof this._sessionDatabase?.listAllAgentConversations !== 'function') {
       return null
     }
 
