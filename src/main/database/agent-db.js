@@ -316,13 +316,23 @@ function withAgentOperations(BaseClass) {
      * 仅按 im_channel / im_user_id / im_chat_id 匹配；旧字段迁移另行处理。
      */
     getImSessionsByType(type, staffId, conversationId, limit = 5) {
+      // p2p 场景 im_chat_id 无独立语义，不参与过滤；
+      // 群聊场景传入群 chatId 以区分同一用户在不同群的会话
+      if (conversationId) {
+        return this.db.prepare(`
+          SELECT * FROM agent_conversations
+          WHERE im_channel = ?
+            AND im_user_id = ?
+            AND im_chat_id = ?
+          ORDER BY updated_at DESC LIMIT ?
+        `).all(type, staffId, conversationId, limit)
+      }
       return this.db.prepare(`
         SELECT * FROM agent_conversations
         WHERE im_channel = ?
           AND im_user_id = ?
-          AND im_chat_id = ?
         ORDER BY updated_at DESC LIMIT ?
-      `).all(type, staffId, conversationId, limit)
+      `).all(type, staffId, limit)
     }
 
     /**
