@@ -983,7 +983,6 @@ class EnterpriseWeixinBridge {
         .filter(row => row?.status !== 'closed')
         .filter(row => row?.im_channel === this._imType)
         .filter(row => row?.im_user_id === normalizedUserId)
-        .filter(row => !row?.im_chat_id)
         .sort((a, b) => (b?.updated_at || 0) - (a?.updated_at || 0))[0]
       : null
     if (matched) {

@@ -1483,7 +1483,6 @@ class FeishuBridge {
           .filter(row => row?.status !== 'closed')
           .filter(row => row?.im_channel === 'feishu')
           .filter(row => row?.staff_id === normalizedSenderId)
-          .filter(row => !row?.conversation_id)
           .sort((a, b) => (b?.updated_at || 0) - (a?.updated_at || 0))[0]
         : null
       if (!matched) return null

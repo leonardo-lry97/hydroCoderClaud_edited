@@ -930,7 +930,6 @@ class DingTalkBridge {
         .filter(row => row?.status !== 'closed')
         .filter(row => row?.im_channel === 'dingtalk')
         .filter(row => row?.im_user_id === normalizedStaffId)
-        .filter(row => !row?.im_chat_id)
         .sort((a, b) => (b?.updated_at || 0) - (a?.updated_at || 0))[0]
       : null
     if (matched) {
