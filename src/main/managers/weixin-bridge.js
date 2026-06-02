@@ -51,6 +51,7 @@ class WeixinBridge {
     this.replySendQueues.clear()
     this.desktopPendingBlocks.clear()
     this.inboundMessageQueues.clear()
+    this.sessionMap.clear()
     this._resolveInboundCompletionWaiters()
   }
 

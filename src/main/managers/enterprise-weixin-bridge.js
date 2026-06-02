@@ -211,6 +211,9 @@ class EnterpriseWeixinBridge {
     this._activeSendChunks.clear()
     this._desktopPendingImagePaths.clear()
     this._proactiveRebindSuppressedKeys.clear()
+    this._sessionIdentities.clear()
+    this._sessionTargets.clear()
+    this._targetSessionMap.clear()
 
     if (this._wsClient) {
       try { this._wsClient.disconnect() } catch {}
@@ -1241,6 +1244,10 @@ class EnterpriseWeixinBridge {
     const prev = this._processQueues.get(sessionId) || Promise.resolve()
     const next = prev.then(() => this._processOneMessage(sessionId, frame, message, identity)).catch(err => {
       console.error(`[EnterpriseWeixin] Process error for session ${sessionId}:`, err.message)
+    }).finally(() => {
+      if (this._processQueues.get(sessionId) === next) {
+        this._processQueues.delete(sessionId)
+      }
     })
     this._processQueues.set(sessionId, next)
     return next
@@ -1710,11 +1717,7 @@ class EnterpriseWeixinBridge {
       this._targetSessionMap.delete(target.userId)
     }
     this._sessionTargets.delete(sessionId)
-    const identity = this._sessionIdentities.get(sessionId)
-    if (!identity) return
-    if (identity.chatType === 'single' && !this._sessionTargets.has(sessionId)) {
-      this._sessionIdentities.delete(sessionId)
-    }
+    this._sessionIdentities.delete(sessionId)
   }
 
   _clearProactiveRebindSuppressionForUser(userId) {

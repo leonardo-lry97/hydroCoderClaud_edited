@@ -231,6 +231,7 @@ class DingTalkBridge {
     this._sessionTargets.clear()
     this._targetSessionMap.clear()
     this._desktopPendingBlocks.clear()
+    this.sessionMap.clear()
     console.log('[DingTalk] Bridge stopped')
     this._notifyFrontend('dingtalk:statusChange', this.getStatus())
   }
@@ -1123,6 +1124,11 @@ class DingTalkBridge {
       .catch(() => {})
       .then(() => this._processOneMessage(sessionId, message, webhook, senderNick, opts))
       .catch(err => console.error('[DingTalk] Queue processing error:', err))
+      .finally(() => {
+        if (this._sessionProcessQueues.get(sessionId) === currentTask) {
+          this._sessionProcessQueues.delete(sessionId)
+        }
+      })
     this._sessionProcessQueues.set(sessionId, currentTask)
   }
 

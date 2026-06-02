@@ -230,6 +230,17 @@ class FeishuBridge {
       agentMessage: (sessionId, message) => { this._onAgentMessage(sessionId, message) },
       agentResult: (sessionId) => { this._onAgentResult(sessionId) },
       agentError: (sessionId, error) => { this._onAgentError(sessionId, error) },
+      agentInterrupted: (sessionId, details) => {
+        if (details?.reason === 'host-cleanup') {
+          this._clearSessionIdentity(sessionId)
+        }
+      },
+      agentDeleted: (sessionId) => {
+        this._clearSessionIdentity(sessionId)
+      },
+      agentClosed: (sessionId) => {
+        this._clearSessionIdentity(sessionId)
+      },
     }
     for (const [event, fn] of Object.entries(this._agentListeners)) {
       mgr.on(event, fn)
