@@ -127,7 +127,9 @@ class ImSessionMapper {
         // 同时查询 im_chat_id 为空的会话（桌面主动绑定但尚未收到 IM 回复）
         // 绑定时 bindSessionToTarget 写入空 chatId，但 /status 等查询
         // 使用的是消息上下文中的 chatId（p2p 时等于 open_id），精确匹配会漏掉
-        const strayRows = conversationId
+        // 仅限 p2p/single：群聊场景不需要，避免跨上下文噪音
+        const isDirectChat = identity.chatType === 'p2p' || identity.chatType === 'single'
+        const strayRows = conversationId && isDirectChat
           ? await this._sessionDatabase.getImSessionsByType(
               this._imType,
               staffId,
