@@ -1672,6 +1672,13 @@ class EnterpriseWeixinBridge {
     this._replyCollector.clear(sessionId)
     this._sessionIdentities.delete(sessionId)
     this._agentSessionManager?.unbindSessionExternalImSource?.(sessionId)
+    const bindingAfter = this.getBinding(sessionId)
+    console.log('[EnterpriseWeixin] unbindTarget result:', {
+      sessionId,
+      hasSessionTarget: this._sessionTargets.has(sessionId),
+      hasSessionIdentity: this._sessionIdentities.has(sessionId),
+      bindingAfter,
+    })
     return { success: true }
   }
 
