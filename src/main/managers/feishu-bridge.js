@@ -747,7 +747,6 @@ class FeishuBridge {
           await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionCreatingText())
           await activateNewSession({
             sessionId: newId,
-            pendingMessage: pending,
             clearPendingMessage: () => this._pendingMessages.delete(mapKey),
             notifyMessageReceived: () => {
               this._notifier.notifyMessageReceived({
