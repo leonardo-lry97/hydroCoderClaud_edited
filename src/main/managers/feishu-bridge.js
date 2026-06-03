@@ -1030,7 +1030,9 @@ class FeishuBridge {
   async _ensureSession(identity, message, senderId, chatId, chatType) {
     this._syncSessionDatabase()
     const mapKey = this._sessionMapper.buildKey(identity)
+    console.log('[FeishuBridge] _ensureSession:', JSON.stringify({ mapKey, chatType, senderId, chatId, sessionMapKeys: [...this._sessionMapper.sessionMap.keys()], sessionMapSize: this._sessionMapper.sessionMap.size }))
     let sessionId = await resolveStrictCurrentSessionId(this._sessionMapper, mapKey)
+    console.log('[FeishuBridge] _ensureSession resolveStrict:', JSON.stringify({ mapKey, sessionId }))
     if (sessionId) {
       const reopened = this._agentSessionManager.reopen(sessionId)
       if (reopened) {
@@ -1273,6 +1275,7 @@ class FeishuBridge {
       chatType: targetType === 'chat' ? 'group' : 'p2p',
     })
     this._sessionMapper.sessionMap.set(bindMapKey, sessionId)
+    console.log('[FeishuBridge] bindTarget sessionMap set:', JSON.stringify({ bindMapKey, sessionId, targetType }))
 
     this._sessionIdentities.set(sessionId, {
       senderId: resolvedOpenId,
