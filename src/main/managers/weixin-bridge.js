@@ -5,6 +5,8 @@
 
 const path = require('path')
 const { extractImagePaths, normalizePath, IMAGE_EXTENSIONS, IMAGE_PATH_MAX_DEPTH } = require('./im-utils')
+const { buildImCommandHelpText, buildNoHistoryText } = require('./im-command-policy')
+const { buildHistoryChoiceMenuText } = require('./im-command-presenter')
 
 class WeixinBridge {
   constructor(configManager, agentSessionManager, weixinNotifyService, mainWindow) {
@@ -109,6 +111,11 @@ class WeixinBridge {
     const text = String(message?.text || '').trim()
     const images = Array.isArray(message?.images) ? message.images : []
     if (!text && images.length === 0) return null
+
+    // 命令拦截
+    if (text.startsWith('/')) {
+      return this._handleWeixinCommand(text, message)
+    }
 
     const session = this._ensureSession(message)
     const senderNick = this._getTargetDisplayName(message)
@@ -613,6 +620,53 @@ class WeixinBridge {
       accountId: target.accountId,
       targetId: target.targetId,
       displayName: target.displayName
+    }
+  }
+
+  async _handleWeixinCommand(text, message) {
+    const cmd = text.replace(/^\/+/, '').split(/\s+/)[0].toLowerCase()
+
+    if (cmd === 'help') {
+      return this._replyToWeixin(message, this._cmdHelp())
+    }
+    if (cmd === 'status') {
+      return this._replyToWeixin(message, this._cmdStatus(message))
+    }
+
+    return this._replyToWeixin(message, `未知命令: ${cmd}\n发送 /help 查看可用命令`)
+  }
+
+  _cmdHelp() {
+    return buildImCommandHelpText({
+      title: '微信 Agent 桥接命令:',
+      includeDirectoryArg: false,
+      includeHistoryHint: false,
+    })
+  }
+
+  _cmdStatus(message) {
+    const sessionId = this.sessionMap.get(message.targetId)
+    if (!sessionId) return buildNoHistoryText()
+
+    const session = this.agentSessionManager.sessions.get(sessionId)
+    if (!session) return buildNoHistoryText()
+
+    const dir = session.cwd ? path.basename(session.cwd) : '-'
+    const status = session.status === 'streaming' ? '🟢 执行中' : '⭕ 空闲'
+    return `当前会话状态：\n\n1. ${status} ${session.title || '未命名'} (${dir})`
+  }
+
+  async _replyToWeixin(message, text) {
+    if (!this.weixinNotifyService?.sendText) return
+    try {
+      await this.weixinNotifyService.sendText({
+        accountId: message.accountId,
+        targetId: message.targetId,
+        text,
+        sessionId: this.sessionMap.get(message.targetId) || null,
+      })
+    } catch (err) {
+      console.error('[WeixinBridge] Command reply failed:', err.message)
     }
   }
 
