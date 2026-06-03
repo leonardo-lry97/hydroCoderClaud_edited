@@ -773,7 +773,45 @@ class DingTalkBridge {
       }
     }
 
-    return Array.from(seenUsers.values()).sort((a, b) => a.displayName.localeCompare(b.displayName, 'zh-CN'))
+    const targets = Array.from(seenUsers.values())
+
+    // 附加群列表
+    try {
+      const chats = await this._listBotChats(token)
+      for (const chat of chats) {
+        targets.push({
+          id: chat.chatId,
+          staffId: chat.chatId,
+          userId: chat.chatId,
+          displayName: chat.name || chat.chatId || '',
+          name: chat.name || '',
+          targetType: 'chat',
+          hasContextToken: true,
+        })
+      }
+    } catch (err) {
+      console.warn('[DingTalk] Failed to list bot chats:', err.message)
+    }
+
+    return targets.sort((a, b) => a.displayName.localeCompare(b.displayName, 'zh-CN'))
+  }
+
+  async _listBotChats(token) {
+    const response = await globalThis.fetch(
+      'https://api.dingtalk.com/v1.0/im/bot/chat',
+      {
+        method: 'GET',
+        headers: {
+          'x-acs-dingtalk-access-token': token,
+        },
+      }
+    )
+    if (!response.ok) {
+      throw new Error(`DingTalk list bot chats failed: ${response.status}`)
+    }
+    const result = await response.json()
+    const list = Array.isArray(result?.chatIdList) ? result.chatIdList : []
+    return list.map(chatId => ({ chatId: String(chatId), name: String(chatId) }))
   }
 
   bindTarget(sessionId, { targetId, targetType, displayName } = {}) {
