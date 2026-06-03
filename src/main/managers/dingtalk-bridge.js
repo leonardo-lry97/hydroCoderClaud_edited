@@ -798,20 +798,21 @@ class DingTalkBridge {
 
   async _listBotChats(token) {
     const response = await globalThis.fetch(
-      'https://api.dingtalk.com/v1.0/im/bot/chat',
+      `https://oapi.dingtalk.com/topapi/chat/list?access_token=${encodeURIComponent(token)}`,
       {
-        method: 'GET',
-        headers: {
-          'x-acs-dingtalk-access-token': token,
-        },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
       }
     )
     if (!response.ok) {
       throw new Error(`DingTalk list bot chats failed: ${response.status}`)
     }
     const result = await response.json()
-    const list = Array.isArray(result?.chatIdList) ? result.chatIdList : []
-    return list.map(chatId => ({ chatId: String(chatId), name: String(chatId) }))
+    if (result.errcode) {
+      throw new Error(`DingTalk list bot chats failed: ${result.errcode} ${result.errmsg}`)
+    }
+    const list = Array.isArray(result?.chat_list) ? result.chat_list : []
+    return list.map(chat => ({ chatId: String(chat.conversationId || chat.chatid || chat.chatId), name: chat.title || chat.name || '' }))
   }
 
   bindTarget(sessionId, { targetId, targetType, displayName } = {}) {
