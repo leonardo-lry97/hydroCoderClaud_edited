@@ -888,8 +888,8 @@ class FeishuBridge {
       type: 'chat',
       source: 'im-inbound',
       im_channel: 'feishu',
-      staff_id: dbRow?.staff_id || context.senderId || '',
-      conversation_id: dbRow?.conversation_id || context.chatId || '',
+      staff_id: dbRow?.im_user_id || context.senderId || '',
+      conversation_id: dbRow?.im_chat_id || context.chatId || '',
       status: dbRow?.status || liveSession?.status || 'idle',
     }
 
@@ -1305,7 +1305,7 @@ class FeishuBridge {
     const identityOpenId = identity?.chatType === 'p2p' && typeof identity?.senderId === 'string'
       ? identity.senderId.trim()
       : ''
-    const rowOpenId = typeof row?.staff_id === 'string' ? row.staff_id.trim() : ''
+    const rowOpenId = typeof row?.im_user_id === 'string' ? row.im_user_id.trim() : ''
     const existingOpenId = existingTarget?.openId || identityOpenId || rowOpenId
 
     if (existingOpenId && existingOpenId !== resolvedOpenId) {
@@ -1378,10 +1378,10 @@ class FeishuBridge {
     const target = this._sessionTargets.get(sessionId) || null
     if (!target) {
       const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
-      const openId = typeof row?.staff_id === 'string' ? row.staff_id.trim() : ''
+      const openId = typeof row?.im_user_id === 'string' ? row.im_user_id.trim() : ''
       if (!openId || row?.im_channel !== 'feishu') return null
       const restoredTarget = this._restoreP2PTargetBinding(sessionId, openId, {
-        chatId: typeof row?.conversation_id === 'string' ? row.conversation_id.trim() : ''
+        chatId: typeof row?.im_chat_id === 'string' ? row.im_chat_id.trim() : ''
       })
       return {
         targetId: restoredTarget.openId,
@@ -1447,7 +1447,7 @@ class FeishuBridge {
       const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
       if (liveSession || (row && row.status !== 'closed')) {
         this._restoreP2PTargetBinding(sessionId, normalizedSenderId, {
-          chatId: typeof row?.conversation_id === 'string' ? row.conversation_id.trim() : ''
+          chatId: typeof row?.im_chat_id === 'string' ? row.im_chat_id.trim() : ''
         })
         return sessionId
       }
@@ -1467,14 +1467,14 @@ class FeishuBridge {
         ? rows
           .filter(row => row?.status !== 'closed')
           .filter(row => row?.im_channel === 'feishu')
-          .filter(row => row?.staff_id === normalizedSenderId)
+          .filter(row => row?.im_user_id === normalizedSenderId)
           .sort((a, b) => (b?.updated_at || 0) - (a?.updated_at || 0))[0]
         : null
       if (!matched) return null
       const fallbackSessionId = matched.session_id || matched.sessionId || matched.id || null
       if (!fallbackSessionId) return null
       this._restoreP2PTargetBinding(fallbackSessionId, normalizedSenderId, {
-        chatId: typeof matched?.conversation_id === 'string' ? matched.conversation_id.trim() : ''
+        chatId: typeof matched?.im_chat_id === 'string' ? matched.im_chat_id.trim() : ''
       })
       return fallbackSessionId
     } catch {

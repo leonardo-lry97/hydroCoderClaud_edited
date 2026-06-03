@@ -1093,8 +1093,8 @@ class EnterpriseWeixinBridge {
       type: 'chat',
       source: 'im-inbound',
       im_channel: this._imType,
-      staff_id: dbRow?.staff_id || identity.userId || '',
-      conversation_id: dbRow?.conversation_id || identity.chatId || '',
+      staff_id: dbRow?.im_user_id || identity.userId || '',
+      conversation_id: dbRow?.im_chat_id || identity.chatId || '',
       status: dbRow?.status || liveSession?.status || 'idle',
     }
 

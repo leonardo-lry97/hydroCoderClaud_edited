@@ -610,8 +610,8 @@ class WeixinBridge {
     if (!target) {
       const db = this.agentSessionManager.sessionDatabase
       const row = db?.getAgentConversation?.(sessionId)
-      const targetId = typeof row?.staff_id === 'string' ? row.staff_id.trim() : ''
-      const accountId = typeof row?.conversation_id === 'string' ? row.conversation_id.trim() : ''
+      const targetId = typeof row?.im_user_id === 'string' ? row.im_user_id.trim() : ''
+      const accountId = typeof row?.im_chat_id === 'string' ? row.im_chat_id.trim() : ''
       if (targetId && accountId && row?.im_channel === 'weixin' && row?.status !== 'closed') {
         target = { accountId, targetId, displayName: targetId }
         this.knownTargets.set(sessionId, target)
