@@ -642,7 +642,7 @@ class FeishuBridge {
       senderName: context.senderName || resolvedNames.senderName,
       chatName: context.chatName || resolvedNames.chatName,
     }
-    const normalizedText = this._normalizeCommandText(text, context, options)
+    const normalizedText = this._normalizeCommandText(text, context, {})
 
     const mapKey = this._sessionMapper.buildKey({ userId: context.senderId, chatId: context.chatId })
 
@@ -666,13 +666,9 @@ class FeishuBridge {
 
     await dispatchImCommand({
       text: normalizedText,
-      beforeExecute: ({ command }) => {
-        const preservePendingSelection = ['history-choice', 'session-entry'].includes(options?.cardValue?.source) &&
-          (command === 'resume' || command === 'new')
-        if (!preservePendingSelection) {
-          this._sessionMapper.clearPendingChoice(mapKey)
-          this._pendingMessages.delete(mapKey)
-        }
+      beforeExecute: () => {
+        this._sessionMapper.clearPendingChoice(mapKey)
+        this._pendingMessages.delete(mapKey)
       },
       handlers: {
         help: async () => {
@@ -712,8 +708,6 @@ class FeishuBridge {
           })
         },
         new: async ({ args, command }) => {
-          const preservePendingSelection = ['history-choice', 'session-entry'].includes(options?.cardValue?.source) &&
-            (command === 'resume' || command === 'new')
           const currentSession = sessionId ? this._agentSessionManager.sessions.get(sessionId) : null
           if (currentSession?.status === 'streaming') {
             await this._api.sendTextMessage(receiveIdType, receiveId, 'AI 正在响应中，请等待完成后再操作')
@@ -749,11 +743,8 @@ class FeishuBridge {
             await this._api.sendTextMessage(receiveIdType, receiveId, '创建新会话失败')
             return
           }
-          if (preservePendingSelection) {
-            this._sessionMapper.clearPendingChoice(mapKey)
-          }
+          this._sessionMapper.clearPendingChoice(mapKey)
           await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionCreatingText())
-          const pending = preservePendingSelection ? this._pendingMessages.get(mapKey) : null
           await activateNewSession({
             sessionId: newId,
             pendingMessage: pending,
@@ -775,8 +766,6 @@ class FeishuBridge {
           })
         },
         resume: async ({ args, command }) => {
-          const preservePendingSelection = ['history-choice', 'session-entry'].includes(options?.cardValue?.source) &&
-            (command === 'resume' || command === 'new')
           let resumeSessionId = sessionId
           if (!resumeSessionId && context.chatType === 'p2p' && context.senderId) {
             resumeSessionId = await this._findBoundSessionIdBySenderId(context.senderId, {
@@ -810,7 +799,7 @@ class FeishuBridge {
               await this._api.sendTextMessage(receiveIdType, receiveId, `编号错误：请输入 1-${selection.max} 之间的数字`)
               return
             }
-            const pending = preservePendingSelection ? this._pendingMessages.get(mapKey) : null
+            const pending = null
             if (selection.action === 'already_connected') {
               await this._api.sendTextMessage(
                 receiveIdType,
@@ -834,9 +823,7 @@ class FeishuBridge {
             }
             if (resolvedSessionId) {
               this._proactiveRebindSuppressedKeys.delete(mapKey)
-              if (preservePendingSelection) {
-                this._sessionMapper.clearPendingChoice(mapKey)
-              }
+              this._sessionMapper.clearPendingChoice(mapKey)
               this._sessionIdentities.set(resolvedSessionId, {
                 senderId: context.senderId,
                 senderName: context.senderName || context.senderId,

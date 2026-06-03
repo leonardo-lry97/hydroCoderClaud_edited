@@ -98,7 +98,7 @@ describe('FeishuBridge', () => {
     })
   })
 
-  it.skip('broadcasts disabled status when Feishu bridge is stopped', async () => {
+  it('broadcasts disabled status when Feishu bridge is stopped', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
 
@@ -117,7 +117,7 @@ describe('FeishuBridge', () => {
     })
   })
 
-  it.skip('binds a proactive Feishu target and reuses the same session on the first reply', async () => {
+  it('binds a proactive Feishu target and reuses the same session on the first reply', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendSpy = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
@@ -158,7 +158,7 @@ describe('FeishuBridge', () => {
     expect(manager.sessionDatabase.updateImIdentity).toHaveBeenCalledWith(session.id, expect.objectContaining({ userId: 'ou_target', chatId: 'oc_reply' }))
   })
 
-  it.skip('reuses the proactively bound session on first p2p reply even after in-memory Feishu target mapping is lost', async () => {
+  it('reuses the proactively bound session on first p2p reply even after in-memory Feishu target mapping is lost', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
@@ -226,7 +226,7 @@ describe('FeishuBridge', () => {
     expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_reply')).toBe(session.id)
   })
 
-  it.skip('switches the active Feishu reply binding to the latest desktop session for the same user', async () => {
+  it('switches the active Feishu reply binding to the latest desktop session for the same user', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
@@ -278,7 +278,7 @@ describe('FeishuBridge', () => {
     expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_reply')).toBe(second.id)
   })
 
-  it.skip('switches active Feishu replies when the old inbound session only has a chat map', async () => {
+  it('switches active Feishu replies when the old inbound session only has a chat map', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
@@ -325,7 +325,7 @@ describe('FeishuBridge', () => {
     expect(bridge._sessionMapper.sessionMap.get('ou_target:oc_reply')).toBe(desktop.id)
   })
 
-  it.skip('only clears the old p2p map key when rebinding the same Feishu user to a newer desktop session', async () => {
+  it('only clears the old p2p map key when rebinding the same Feishu user to a newer desktop session', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
@@ -393,7 +393,7 @@ describe('FeishuBridge', () => {
     expect(manager.sessionDatabase.clearImIdentity).toHaveBeenCalledWith(session.id)
   })
 
-  it.skip('does not auto-rebind the same Feishu user after manual unbind', async () => {
+  it('does not auto-rebind the same Feishu user after manual unbind', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
@@ -459,7 +459,7 @@ describe('FeishuBridge', () => {
     expect(bridge._targetSessionMap.get('ou_target')).toBeUndefined()
   })
 
-  it.skip('does not lock a session to Feishu when the proactive send fails', async () => {
+  it('does not lock a session to Feishu when the proactive send fails', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'sendTextMessage').mockRejectedValue(new Error('network down'))
@@ -483,7 +483,7 @@ describe('FeishuBridge', () => {
     expect(manager.sessionDatabase.updateImIdentity).not.toHaveBeenCalledWith(session.id, expect.objectContaining({ userId: 'ou_target', chatId: '' }))
   })
 
-  it.skip('persists the proactive Feishu target identity when binding a normal session', async () => {
+  it('persists the proactive Feishu target identity when binding a normal session', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
 
@@ -498,7 +498,7 @@ describe('FeishuBridge', () => {
     expect(manager.sessionDatabase.updateImIdentity).toHaveBeenCalledWith(session.id, expect.objectContaining({ userId: 'ou_target', chatId: '' }))
   })
 
-  it.skip('locks a normal session to Feishu after first proactive send', async () => {
+  it('locks a normal session to Feishu after first proactive send', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
@@ -520,7 +520,7 @@ describe('FeishuBridge', () => {
     expect(() => manager.bindSessionExternalImSource(session.id, 'weixin')).toThrow(/已绑定feishu渠道/)
   })
 
-  it.skip('rejects sending a Feishu-bound session to another target before network send', async () => {
+  it('rejects sending a Feishu-bound session to another target before network send', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendSpy = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
@@ -548,7 +548,7 @@ describe('FeishuBridge', () => {
     expect(bridge._targetSessionMap.get('ou_target_2')).toBeUndefined()
   })
 
-  it.skip('rejects rebinding a persisted Feishu target after in-memory binding is lost', () => {
+  it('rejects rebinding a persisted Feishu target after in-memory binding is lost', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
 
@@ -578,7 +578,7 @@ describe('FeishuBridge', () => {
     })).toThrow(/当前会话已绑定飞书联系人「ou_target_1」/)
   })
 
-  it.skip('restores a persisted Feishu target binding for toolbar filtering after memory is lost', () => {
+  it('restores a persisted Feishu target binding for toolbar filtering after memory is lost', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
 
@@ -616,7 +616,7 @@ describe('FeishuBridge', () => {
     })
   })
 
-  it.skip('keeps the persisted Feishu target available after /close clears in-memory binding', () => {
+  it('keeps the persisted Feishu target available after /close clears in-memory binding', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
 
@@ -657,7 +657,7 @@ describe('FeishuBridge', () => {
     })
   })
 
-  it.skip('restores Feishu target binding after the session database is injected later', () => {
+  it('restores Feishu target binding after the session database is injected later', () => {
     const { configManager, manager, mainWindow } = createManager()
     const db = manager.sessionDatabase
     manager.sessionDatabase = null
@@ -732,7 +732,7 @@ describe('FeishuBridge', () => {
   it.skip('preserves group-chat context for card actions instead of forcing p2p', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
 
     const created = manager.create({ type: 'feishu', source: 'feishu', title: '群会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
@@ -752,7 +752,7 @@ describe('FeishuBridge', () => {
       chatType: 'chat'
     })
 
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'chat_id',
       'oc_group',
       expect.objectContaining({
@@ -884,7 +884,7 @@ describe('FeishuBridge', () => {
     })
   })
 
-  it.skip('downloads inbound Feishu images and forwards the message to Agent when there is no history', async () => {
+  it('downloads inbound Feishu images and forwards the message to Agent when there is no history', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const downloadedImage = {
@@ -922,7 +922,7 @@ describe('FeishuBridge', () => {
     ])
   })
 
-  it.skip('skips hydrate and display-name resolution for duplicate Feishu message ids', async () => {
+  it('skips hydrate and display-name resolution for duplicate Feishu message ids', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const hydrateSpy = vi.spyOn(bridge, '_hydrateInboundEvent').mockResolvedValue({
@@ -963,7 +963,7 @@ describe('FeishuBridge', () => {
     expect(bridge._enqueueMessage).toHaveBeenCalledTimes(1)
   })
 
-  it.skip('uses readable sender and chat names for default Feishu session titles', async () => {
+  it('uses readable sender and chat names for default Feishu session titles', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
@@ -993,7 +993,7 @@ describe('FeishuBridge', () => {
     )
   })
 
-  it.skip('ignores placeholder Feishu ids when resolving display names', async () => {
+  it('ignores placeholder Feishu ids when resolving display names', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     bridge._api.setCredentials('app-id', 'app-secret')
@@ -1016,7 +1016,7 @@ describe('FeishuBridge', () => {
     })
   })
 
-  it.skip('forwards inbound Feishu post text and images instead of treating them as empty', async () => {
+  it('forwards inbound Feishu post text and images instead of treating them as empty', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const downloadedImage = {
@@ -1055,7 +1055,7 @@ describe('FeishuBridge', () => {
     ])
   })
 
-  it.skip('replies with an explicit notice for unsupported Feishu message types', async () => {
+  it('replies with an explicit notice for unsupported Feishu message types', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -1080,7 +1080,7 @@ describe('FeishuBridge', () => {
     expect(enqueueMessage).not.toHaveBeenCalled()
   })
 
-  it.skip('propagates Feishu startup failures so the caller can treat start as failed', async () => {
+  it('propagates Feishu startup failures so the caller can treat start as failed', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._eventClient, 'connect').mockRejectedValue(new Error('ws failed'))
@@ -1088,7 +1088,7 @@ describe('FeishuBridge', () => {
     await expect(bridge.start()).rejects.toThrow('ws failed')
   })
 
-  it.skip('clears pending Feishu replay state on stop', async () => {
+  it('clears pending Feishu replay state on stop', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
 
@@ -1108,7 +1108,7 @@ describe('FeishuBridge', () => {
     expect(bridge._msgIdCleanupTimer).toBe(null)
   })
 
-  it.skip('treats non-numeric text as history-choice input while a pending choice exists', async () => {
+  it('treats non-numeric text as history-choice input while a pending choice exists', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const handleChoiceReply = vi.spyOn(bridge, '_handleChoiceReply').mockResolvedValue()
@@ -1211,7 +1211,7 @@ describe('FeishuBridge', () => {
     })
   })
 
-  it.skip('reopens mapped Feishu session from agent conversation record instead of creating a new one', async () => {
+  it('reopens mapped Feishu session from agent conversation record instead of creating a new one', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const createSession = vi.spyOn(bridge._sessionMapper, 'createSession')
@@ -1250,7 +1250,7 @@ describe('FeishuBridge', () => {
     expect(createSession).not.toHaveBeenCalled()
   })
 
-  it.skip('sends desktop intervention images back to Feishu on agent result', async () => {
+  it('sends desktop intervention images back to Feishu on agent result', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const uploadImage = vi.spyOn(bridge._api, 'uploadImage').mockResolvedValue('img_uploaded')
@@ -1288,7 +1288,7 @@ describe('FeishuBridge', () => {
     expect(sendImageMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', 'img_uploaded')
   })
 
-  it.skip('treats a bound chat session like a Feishu desktop intervention target', async () => {
+  it('treats a bound chat session like a Feishu desktop intervention target', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const desktopIntervention = vi.spyOn(bridge, '_onDesktopIntervention').mockImplementation(() => {})
@@ -1311,7 +1311,7 @@ describe('FeishuBridge', () => {
     expect(desktopIntervention).toHaveBeenCalledWith(session.id, '桌面继续', undefined)
   })
 
-  it.skip('does not forward desktop intervention for a proactively bound Feishu session without current chat mapping', async () => {
+  it('does not forward desktop intervention for a proactively bound Feishu session without current chat mapping', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -1329,7 +1329,7 @@ describe('FeishuBridge', () => {
     expect(sendTextMessage).not.toHaveBeenCalled()
   })
 
-  it.skip('does not forward Feishu desktop intervention for a reopened history session without current chat mapping', async () => {
+  it('does not forward Feishu desktop intervention for a reopened history session without current chat mapping', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -1368,7 +1368,7 @@ describe('FeishuBridge', () => {
     expect(sendTextMessage).toHaveBeenCalledTimes(1)
   })
 
-  it.skip('blocks desktop intervention from an older Feishu session after rebinding the same user', async () => {
+  it('blocks desktop intervention from an older Feishu session after rebinding the same user', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -1424,7 +1424,7 @@ describe('FeishuBridge', () => {
     )
   })
 
-  it.skip('renames the active Feishu session', async () => {
+  it('renames the active Feishu session', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -1449,7 +1449,7 @@ describe('FeishuBridge', () => {
     expect(sendTextMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', '会话已重命名为：新标题')
   })
 
-  it.skip('treats group-chat mention commands as commands instead of forwarding them into the conversation', async () => {
+  it('treats group-chat mention commands as commands instead of forwarding them into the conversation', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const handleCommand = vi.spyOn(bridge, '_handleCommand').mockResolvedValue()
@@ -1477,7 +1477,7 @@ describe('FeishuBridge', () => {
     expect(enqueueMessage).not.toHaveBeenCalled()
   })
 
-  it.skip('hydrates missing group-chat mention metadata from message detail before command parsing', async () => {
+  it('hydrates missing group-chat mention metadata from message detail before command parsing', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const handleCommand = vi.spyOn(bridge, '_handleCommand').mockResolvedValue()
@@ -1516,7 +1516,7 @@ describe('FeishuBridge', () => {
     expect(enqueueMessage).not.toHaveBeenCalled()
   })
 
-  it.skip('forwards cleaned group-chat text to the desktop frontend without the mention prefix', async () => {
+  it('forwards cleaned group-chat text to the desktop frontend without the mention prefix', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -1548,7 +1548,7 @@ describe('FeishuBridge', () => {
     )).toBe(true)
   })
 
-  it.skip('strips only the robot mention.key token from group-chat text', async () => {
+  it('strips only the robot mention.key token from group-chat text', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -1583,7 +1583,7 @@ describe('FeishuBridge', () => {
     )).toBe(true)
   })
 
-  it.skip('replaces non-robot placeholder mentions with display names in group-chat text', async () => {
+  it('replaces non-robot placeholder mentions with display names in group-chat text', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -1618,7 +1618,7 @@ describe('FeishuBridge', () => {
     )).toBe(true)
   })
 
-  it.skip('treats runtime Feishu group mentions with object ids as robot mentions', async () => {
+  it('treats runtime Feishu group mentions with object ids as robot mentions', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -1656,7 +1656,7 @@ describe('FeishuBridge', () => {
     )).toBe(true)
   })
 
-  it.skip('learns robot mention ids after a name-based fallback match and reuses the stable id later', async () => {
+  it('learns robot mention ids after a name-based fallback match and reuses the stable id later', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -1683,7 +1683,7 @@ describe('FeishuBridge', () => {
     })).toBe(false)
   })
 
-  it.skip('hydrates missing group-chat mention metadata from message detail before forwarding text', async () => {
+  it('hydrates missing group-chat mention metadata from message detail before forwarding text', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -1726,7 +1726,7 @@ describe('FeishuBridge', () => {
     )).toBe(true)
   })
 
-  it.skip('does not strip non-robot mentions from group-chat text', async () => {
+  it('does not strip non-robot mentions from group-chat text', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -1761,7 +1761,7 @@ describe('FeishuBridge', () => {
   it.skip('sends a help card for /help', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
 
     await bridge._handleCommand('/help', {
       senderId: 'ou_xxx',
@@ -1769,7 +1769,7 @@ describe('FeishuBridge', () => {
       chatType: 'p2p'
     })
 
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'open_id',
       'ou_xxx',
       expect.objectContaining({
@@ -1785,7 +1785,7 @@ describe('FeishuBridge', () => {
   it.skip('closes the active Feishu session', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
     const close = vi.spyOn(manager, 'close').mockResolvedValue()
 
     const created = manager.create({ type: 'feishu', source: 'feishu', title: '待关闭会话', cwd: tempDir })
@@ -1805,7 +1805,7 @@ describe('FeishuBridge', () => {
     })
 
     expect(close).toHaveBeenCalledWith(session.id)
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'open_id',
       'ou_xxx',
       expect.objectContaining({
@@ -1824,7 +1824,7 @@ describe('FeishuBridge', () => {
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const close = vi.spyOn(manager, 'close').mockResolvedValue()
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
-    vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
 
     const created = manager.create({ type: 'chat', source: 'manual', title: '桌面主动会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
@@ -1846,7 +1846,7 @@ describe('FeishuBridge', () => {
     expect(sendTextMessage).toHaveBeenCalledWith('open_id', 'ou_target', '当前没有连接会话，无需关闭\n\n发送任意消息可开始新会话')
   })
 
-  it.skip('rejects /close with numbered arguments for Feishu', async () => {
+  it('rejects /close with numbered arguments for Feishu', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const close = vi.spyOn(manager, 'close').mockResolvedValue()
@@ -1875,7 +1875,7 @@ describe('FeishuBridge', () => {
   it.skip('prompts for history after closing the current Feishu session instead of auto-using another proactive binding', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
     const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
     const findBoundSession = vi.spyOn(bridge, '_findBoundSessionIdBySenderId')
     vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([
@@ -1949,7 +1949,7 @@ describe('FeishuBridge', () => {
   it.skip('closes the active group-chat Feishu session from card actions', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
     const close = vi.spyOn(manager, 'close').mockResolvedValue()
 
     const created = manager.create({ type: 'feishu', source: 'feishu', title: '群待关闭会话', cwd: tempDir })
@@ -1971,7 +1971,7 @@ describe('FeishuBridge', () => {
     })
 
     expect(close).toHaveBeenCalledWith(session.id)
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'chat_id',
       'oc_group',
       expect.objectContaining({
@@ -2095,7 +2095,7 @@ describe('FeishuBridge', () => {
     expect(fs.existsSync(session.cwd)).toBe(true)
   })
 
-  it.skip('restores a historical Feishu session with /resume and auto-activates when needed', async () => {
+  it('restores a historical Feishu session with /resume and auto-activates when needed', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -2134,7 +2134,7 @@ describe('FeishuBridge', () => {
     expect(notifySessionCreated).toHaveBeenCalledWith({ sessionId: 'hist-1', nickname: 'ou_xxx' })
   })
 
-  it.skip('reuses resolved Feishu names for slash commands without re-querying display names', async () => {
+  it('reuses resolved Feishu names for slash commands without re-querying display names', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const commandSpy = vi.spyOn(bridge, '_handleCommand').mockResolvedValue()
@@ -2207,7 +2207,7 @@ describe('FeishuBridge', () => {
     )
   })
 
-  it.skip('strips trailing mention suffixes from /resume selection arguments in group chats', async () => {
+  it('strips trailing mention suffixes from /resume selection arguments in group chats', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -2247,7 +2247,7 @@ describe('FeishuBridge', () => {
     )
   })
 
-  it.skip('switches to an already-activated historical Feishu session without auto-hello', async () => {
+  it('switches to an already-activated historical Feishu session without auto-hello', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -2280,7 +2280,7 @@ describe('FeishuBridge', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     bridge._eventClient._connected = true
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
 
     const created = manager.create({ type: 'feishu', source: 'feishu', title: '状态会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
@@ -2298,7 +2298,7 @@ describe('FeishuBridge', () => {
       chatType: 'p2p'
     })
 
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'open_id',
       'ou_xxx',
       expect.objectContaining({
@@ -2321,7 +2321,7 @@ describe('FeishuBridge', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     bridge._eventClient._connected = true
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
     vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([])
 
@@ -2344,7 +2344,7 @@ describe('FeishuBridge', () => {
       chatName: '张三'
     })
 
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'open_id',
       'ou_target',
       expect.objectContaining({
@@ -2367,7 +2367,7 @@ describe('FeishuBridge', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     bridge._eventClient._connected = true
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
 
     await bridge._handleCommand('/status@机器人', {
       senderId: 'ou_group',
@@ -2377,7 +2377,7 @@ describe('FeishuBridge', () => {
       mentions: [{ key: '@_user_1', name: '机器人', id: 'app-id', idType: 'app_id' }]
     })
 
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'chat_id',
       'oc_group',
       expect.objectContaining({
@@ -2444,7 +2444,7 @@ describe('FeishuBridge', () => {
     expect(sendTextMessage).toHaveBeenCalledWith('chat_id', 'oc_group', '会话已重命名为：群聊测试')
   })
 
-  it.skip('sends an explicit Feishu error reply when agent processing fails', async () => {
+  it('sends an explicit Feishu error reply when agent processing fails', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -2465,7 +2465,7 @@ describe('FeishuBridge', () => {
     await expect(doneRejection).resolves.toBeInstanceOf(Error)
   })
 
-  it.skip('streams Feishu agent text chunks through the active collector sendChunk', async () => {
+  it('streams Feishu agent text chunks through the active collector sendChunk', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -2491,7 +2491,7 @@ describe('FeishuBridge', () => {
     expect(sendTextMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', '第一段')
   })
 
-  it.skip('does not duplicate a streamed Feishu reply when agentResult arrives immediately after the chunk', async () => {
+  it('does not duplicate a streamed Feishu reply when agentResult arrives immediately after the chunk', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     let releaseSend = () => {}
@@ -2528,7 +2528,7 @@ describe('FeishuBridge', () => {
     expect(sendTextMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', '今天是 2026年5月23日。')
   })
 
-  it.skip('sends Agent-generated image paths to Feishu after agent result', async () => {
+  it('sends Agent-generated image paths to Feishu after agent result', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const uploadImage = vi.spyOn(bridge._api, 'uploadImage').mockResolvedValue('img_generated')
@@ -2560,7 +2560,7 @@ describe('FeishuBridge', () => {
     expect(sendImageMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', 'img_generated')
   })
 
-  it.skip('sends Feishu images from standard tool_result file resources after agent result', async () => {
+  it('sends Feishu images from standard tool_result file resources after agent result', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const uploadImage = vi.spyOn(bridge._api, 'uploadImage').mockResolvedValue('img_generated')
@@ -2634,7 +2634,7 @@ describe('FeishuBridge', () => {
     expect(sendImageMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', 'img_generated')
   })
 
-  it.skip('does not send duplicate Feishu images when tool_use and normalized tool_result reference the same file', async () => {
+  it('does not send duplicate Feishu images when tool_use and normalized tool_result reference the same file', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const uploadImage = vi.spyOn(bridge._api, 'uploadImage').mockResolvedValue('img_generated')
@@ -2702,7 +2702,7 @@ describe('FeishuBridge', () => {
     expect(sendImageMessage).toHaveBeenCalledWith('open_id', 'ou_xxx', 'img_generated')
   })
 
-  it.skip('removes temporary Feishu image files and directories after forwarding desktop images', async () => {
+  it('removes temporary Feishu image files and directories after forwarding desktop images', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'uploadImage').mockResolvedValue('img_uploaded')
@@ -2748,7 +2748,7 @@ describe('FeishuBridge', () => {
     }
     const manager = new AgentSessionManager(tempMainWindow, configManager)
     const bridge = new FeishuBridge(configManager, manager, tempMainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
     vi.spyOn(bridge._sessionMapper, 'initPendingChoice').mockImplementation(async (_mapKey, history, onSendChoiceMenu, options) => {
       await onSendChoiceMenu(options.menuBuilder(history))
       return { sessionId: null }
@@ -2773,7 +2773,7 @@ describe('FeishuBridge', () => {
       chatType: 'p2p'
     })
 
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'open_id',
       'ou_xxx',
       expect.objectContaining({
@@ -2786,7 +2786,7 @@ describe('FeishuBridge', () => {
     )
   })
 
-  it.skip('does not fall back to legacy title matching for old Feishu history records without stored identity columns', async () => {
+  it('does not fall back to legacy title matching for old Feishu history records without stored identity columns', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -2821,7 +2821,7 @@ describe('FeishuBridge', () => {
   it.skip('shows a historical session choice menu with /resume and no index', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
     vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([
       { session_id: 'hist-1', title: '历史会话 1', updated_at: Date.now() - 60 * 1000 },
       { session_id: 'hist-2', title: '历史会话 2', updated_at: Date.now() - 2 * 60 * 1000 }
@@ -2837,7 +2837,7 @@ describe('FeishuBridge', () => {
       chatType: 'p2p'
     })
 
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'open_id',
       'ou_xxx',
       expect.objectContaining({
@@ -2853,7 +2853,6 @@ describe('FeishuBridge', () => {
   it.skip('includes the current proactively rebound Feishu session in /resume even when DB history lookup is empty', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
     vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([])
     vi.spyOn(bridge._sessionMapper, 'initPendingChoice').mockImplementation(async (_mapKey, history, onSendChoiceMenu, options) => {
@@ -2906,7 +2905,7 @@ describe('FeishuBridge', () => {
       expect.any(Function),
       expect.any(Object)
     )
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'open_id',
       'ou_target',
       expect.objectContaining({
@@ -2922,7 +2921,6 @@ describe('FeishuBridge', () => {
   it.skip('includes a proactively bound Feishu session in /resume before the current chat map is established', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
     vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([])
     vi.spyOn(bridge._sessionMapper, 'initPendingChoice').mockImplementation(async (_mapKey, history, onSendChoiceMenu, options) => {
@@ -2976,7 +2974,7 @@ describe('FeishuBridge', () => {
       expect.any(Function),
       expect.any(Object)
     )
-    expect(sendCardMessage).toHaveBeenCalledWith(
+    expect(sendTextMessage).toHaveBeenCalledWith(
       'open_id',
       'ou_target',
       expect.objectContaining({
@@ -2992,7 +2990,7 @@ describe('FeishuBridge', () => {
   it.skip('falls back to text when sending the help card fails', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    vi.spyOn(bridge._api, 'sendCardMessage').mockRejectedValue(new Error('card failed'))
+    vi.spyOn(bridge._api, 'sendTextMessage').mockRejectedValue(new Error('card failed'))
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
 
     await bridge._handleCommand('/help', {
@@ -3008,7 +3006,7 @@ describe('FeishuBridge', () => {
     )
   })
 
-  it.skip('re-sends the choice menu when replying with an invalid history selection', async () => {
+  it('re-sends the choice menu when replying with an invalid history selection', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -3047,7 +3045,7 @@ describe('FeishuBridge', () => {
     clearTimeout(bridge._sessionMapper._pendingChoices.get('ou_xxx:oc_xxx').timer)
   })
 
-  it.skip('replays the pending user message to the desktop frontend after choosing a historical session', async () => {
+  it('replays the pending user message to the desktop frontend after choosing a historical session', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -3098,7 +3096,7 @@ describe('FeishuBridge', () => {
     )).toBe(true)
   })
 
-  it.skip('reports already-connected when /resume targets the current activated session', async () => {
+  it('reports already-connected when /resume targets the current activated session', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -3253,7 +3251,7 @@ describe('FeishuBridge', () => {
   it.skip('keeps the newly created Feishu session mapped after choosing new from history-choice', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
     const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
 
@@ -3296,7 +3294,7 @@ describe('FeishuBridge', () => {
       text: '继续说'
     })
 
-    expect(sendCardMessage).not.toHaveBeenCalled()
+    expect(sendTextMessage).not.toHaveBeenCalled()
     expect(enqueueMessage).toHaveBeenLastCalledWith(
       session.id,
       { text: '继续说', images: undefined },
@@ -3307,10 +3305,10 @@ describe('FeishuBridge', () => {
     clearTimeout(bridge._sessionMapper._pendingChoices.get('ou_xxx:oc_xxx')?.timer)
   })
 
-  it.skip('keeps the newly created Feishu session mapped after replying 0 to the text history-choice menu', async () => {
+  it('keeps the newly created Feishu session mapped after replying 0 to the text history-choice menu', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
     const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
 
@@ -3353,7 +3351,7 @@ describe('FeishuBridge', () => {
       text: '继续说'
     })
 
-    expect(sendCardMessage).not.toHaveBeenCalled()
+    expect(sendTextMessage).not.toHaveBeenCalled()
     expect(enqueueMessage).toHaveBeenLastCalledWith(
       session.id,
       { text: '继续说', images: undefined },
@@ -3367,7 +3365,7 @@ describe('FeishuBridge', () => {
   it.skip('keeps the resumed Feishu session mapped after choosing history and continues follow-up messages directly', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    const sendCardMessage = vi.spyOn(bridge._api, 'sendCardMessage').mockResolvedValue('om_card')
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_card')
     vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
     const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
     vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([
@@ -3419,7 +3417,7 @@ describe('FeishuBridge', () => {
       text: '继续聊'
     })
 
-    expect(sendCardMessage).not.toHaveBeenCalled()
+    expect(sendTextMessage).not.toHaveBeenCalled()
     expect(enqueueMessage).toHaveBeenLastCalledWith(
       'hist-1',
       { text: '继续聊', images: undefined },
@@ -3430,7 +3428,7 @@ describe('FeishuBridge', () => {
     clearTimeout(bridge._sessionMapper._pendingChoices.get('ou_xxx:oc_xxx')?.timer)
   })
 
-  it.skip('ignores a stale pending choice when the Feishu mapKey already has an active session', async () => {
+  it('ignores a stale pending choice when the Feishu mapKey already has an active session', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const handleChoiceReply = vi.spyOn(bridge, '_handleChoiceReply').mockResolvedValue()
@@ -3464,7 +3462,7 @@ describe('FeishuBridge', () => {
     )
   })
 
-  it.skip('ignores a stale pending choice when the Feishu user is proactively bound to a session', async () => {
+  it('ignores a stale pending choice when the Feishu user is proactively bound to a session', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const handleChoiceReply = vi.spyOn(bridge, '_handleChoiceReply').mockResolvedValue()
@@ -3515,7 +3513,7 @@ describe('FeishuBridge', () => {
     )
   })
 
-  it.skip('reuses the original pending-choice mapKey when a history-choice card callback arrives with a different user id', async () => {
+  it('reuses the original pending-choice mapKey when a history-choice card callback arrives with a different user id', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
 
@@ -3543,7 +3541,7 @@ describe('FeishuBridge', () => {
     clearTimeout(bridge._sessionMapper._pendingChoices.get('ou_original:oc_shared')?.timer)
   })
 
-  it.skip('uses history-choice card value context when callback payload is missing user and chat ids', async () => {
+  it('uses history-choice card value context when callback payload is missing user and chat ids', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const commandSpy = vi.spyOn(bridge, '_handleCommand').mockResolvedValue()
@@ -3575,7 +3573,7 @@ describe('FeishuBridge', () => {
     }))
   })
 
-  it.skip('does not rebind another same-chat session before rename when there is no current connection', async () => {
+  it('does not rebind another same-chat session before rename when there is no current connection', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -3601,7 +3599,7 @@ describe('FeishuBridge', () => {
     expect(sendTextMessage).toHaveBeenCalledWith('open_id', 'ou_new', '当前没有活跃会话，无法重命名')
   })
 
-  it.skip('builds a DingTalk-style Feishu history choice menu with markers and metadata', () => {
+  it('builds a DingTalk-style Feishu history choice menu with markers and metadata', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
 
@@ -3652,7 +3650,7 @@ describe('FeishuBridge', () => {
     expect(historyActionRows[1].actions).toHaveLength(5)
   })
 
-  it.skip('normalizes Feishu command text by removing standalone mention tokens from arguments', () => {
+  it('normalizes Feishu command text by removing standalone mention tokens from arguments', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
 
@@ -3675,7 +3673,7 @@ describe('FeishuBridge', () => {
 })
 
 describe('ImSessionMapper', () => {
-  it.skip('queries history sessions with IM type isolation when database supports it', async () => {
+  it('queries history sessions with IM type isolation when database supports it', async () => {
     const getImSessionsByType = vi.fn(() => [{ session_id: 'f-1', type: 'feishu' }])
     const mapper = new ImSessionMapper({
       agentSessionManager: { sessions: new Map() },
@@ -3695,7 +3693,7 @@ describe('ImSessionMapper', () => {
     expect(result).toEqual([{ session_id: 'f-1', type: 'feishu' }])
   })
 
-  it.skip('treats agent conversation records as the source of truth for active external IM sessions', async () => {
+  it('treats agent conversation records as the source of truth for active external IM sessions', async () => {
     const mapper = new ImSessionMapper({
       agentSessionManager: { sessions: new Map() },
       sessionDatabase: {
@@ -3712,7 +3710,7 @@ describe('ImSessionMapper', () => {
     expect(sessionId).toBe('f-1')
   })
 
-  it.skip('does not fall back to conversation_id-only legacy Feishu history rows', async () => {
+  it('does not fall back to conversation_id-only legacy Feishu history rows', async () => {
     const getImSessionsByType = vi.fn(() => [])
     const listAllAgentConversations = vi.fn(() => [
       {
@@ -3742,7 +3740,7 @@ describe('ImSessionMapper', () => {
     expect(result).toEqual([])
   })
 
-  it.skip('does not include proactively sent p2p Feishu sessions in history before new chatId metadata exists', async () => {
+  it('does not include proactively sent p2p Feishu sessions in history before new chatId metadata exists', async () => {
     const getImSessionsByType = vi.fn(() => [])
     const listAllAgentConversations = vi.fn(() => [
       {
@@ -3774,7 +3772,7 @@ describe('ImSessionMapper', () => {
     expect(result).toEqual([])
   })
 
-  it.skip('returns only exact new-field Feishu history even when proactive p2p rows also exist', async () => {
+  it('returns only exact new-field Feishu history even when proactive p2p rows also exist', async () => {
     const now = Date.now()
     const getImSessionsByType = vi.fn(() => [
       {
@@ -3826,7 +3824,7 @@ describe('ImSessionMapper', () => {
     expect(result.map(row => row.session_id)).toEqual(['f-old-1'])
   })
 
-  it.skip('ignores conversation-only legacy Feishu rows for p2p history when exact new-field rows are absent', async () => {
+  it('ignores conversation-only legacy Feishu rows for p2p history when exact new-field rows are absent', async () => {
     const getImSessionsByType = vi.fn(() => [])
     const listAllAgentConversations = vi.fn(() => [
       {
@@ -3857,7 +3855,7 @@ describe('ImSessionMapper', () => {
     expect(result).toEqual([])
   })
 
-  it.skip('drops stale Feishu map bindings when the database lookup throws', async () => {
+  it('drops stale Feishu map bindings when the database lookup throws', async () => {
     const mapper = new ImSessionMapper({
       agentSessionManager: { sessions: new Map() },
       sessionDatabase: {
@@ -3879,7 +3877,7 @@ describe('ImSessionMapper', () => {
 })
 
 describe('FeishuEventClient', () => {
-  it.skip('extracts image_key from JSON content for image messages', () => {
+  it('extracts image_key from JSON content for image messages', () => {
     const client = new FeishuEventClient()
     const images = client._extractImages({
       message_type: 'image',
@@ -3894,7 +3892,7 @@ describe('FeishuEventClient', () => {
     }])
   })
 
-  it.skip('extracts text and image keys from direct-array post content', () => {
+  it('extracts text and image keys from direct-array post content', () => {
     const client = new FeishuEventClient()
     const messageHandler = vi.fn()
     client.on('message', messageHandler)
@@ -3996,7 +3994,7 @@ describe('FeishuEventClient', () => {
     }))
   })
 
-  it.skip('marks unsupported Feishu message types explicitly', () => {
+  it('marks unsupported Feishu message types explicitly', () => {
     const client = new FeishuEventClient()
     const messageHandler = vi.fn()
     client.on('message', messageHandler)
@@ -4024,7 +4022,7 @@ describe('FeishuEventClient', () => {
     }))
   })
 
-  it.skip('preserves robot mention metadata and leaves text untouched before bridge-level normalization', () => {
+  it('preserves robot mention metadata and leaves text untouched before bridge-level normalization', () => {
     const client = new FeishuEventClient()
     const messageHandler = vi.fn()
     client.on('message', messageHandler)
@@ -4060,7 +4058,7 @@ describe('FeishuEventClient', () => {
     }))
   })
 
-  it.skip('extracts top-level mention metadata from text messages', () => {
+  it('extracts top-level mention metadata from text messages', () => {
     const client = new FeishuEventClient()
     const messageHandler = vi.fn()
     client.on('message', messageHandler)
@@ -4096,7 +4094,7 @@ describe('FeishuEventClient', () => {
     }))
   })
 
-  it.skip('extracts post mentions from group messages', () => {
+  it('extracts post mentions from group messages', () => {
     const client = new FeishuEventClient()
     const messageHandler = vi.fn()
     client.on('message', messageHandler)
@@ -4136,7 +4134,7 @@ describe('FeishuEventClient', () => {
     }))
   })
 
-  it.skip('schedules Feishu watchdog restart when reconnecting stalls', async () => {
+  it('schedules Feishu watchdog restart when reconnecting stalls', async () => {
     vi.useFakeTimers()
     try {
       const client = new FeishuEventClient()
@@ -4154,7 +4152,7 @@ describe('FeishuEventClient', () => {
 })
 
 describe('FeishuMessageAPI', () => {
-  it.skip('returns image_key from the SDK top-level upload response', async () => {
+  it('returns image_key from the SDK top-level upload response', async () => {
     const api = new FeishuMessageAPI()
     api.setCredentials('app-id', 'app-secret')
     const createSpy = vi.spyOn(api._client.im.v1.image, 'create').mockResolvedValue({
@@ -4172,7 +4170,7 @@ describe('FeishuMessageAPI', () => {
     })
   })
 
-  it.skip('keeps the nested upload response fallback for alternate clients', async () => {
+  it('keeps the nested upload response fallback for alternate clients', async () => {
     const api = new FeishuMessageAPI()
     api.setCredentials('app-id', 'app-secret')
     vi.spyOn(api._client.im.v1.image, 'create').mockResolvedValue({
@@ -4182,7 +4180,7 @@ describe('FeishuMessageAPI', () => {
     await expect(api.uploadImage(Buffer.from('pngdata'))).resolves.toBe('img_nested')
   })
 
-  it.skip('downloads message images from the SDK stream wrapper', async () => {
+  it('downloads message images from the SDK stream wrapper', async () => {
     const api = new FeishuMessageAPI()
     api.setCredentials('app-id', 'app-secret')
     const getSpy = vi.spyOn(api._client.im.v1.messageResource, 'get').mockResolvedValue({
@@ -4202,7 +4200,7 @@ describe('FeishuMessageAPI', () => {
     })
   })
 
-  it.skip('loads user display names through the basicBatch endpoint', async () => {
+  it('loads user display names through the basicBatch endpoint', async () => {
     const api = new FeishuMessageAPI()
     api.setCredentials('app-id', 'app-secret')
     const basicBatchSpy = vi.spyOn(api._client.contact.v3.user, 'basicBatch').mockResolvedValue({
@@ -4227,7 +4225,7 @@ describe('FeishuMessageAPI', () => {
     }))
   })
 
-  it.skip('recursively lists all organization members across child departments', async () => {
+  it('recursively lists all organization members across child departments', async () => {
     const api = new FeishuMessageAPI()
     api.setCredentials('app-id', 'app-secret')
 
