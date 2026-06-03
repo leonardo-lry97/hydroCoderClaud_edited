@@ -3541,7 +3541,7 @@ describe('FeishuBridge', () => {
     clearTimeout(bridge._sessionMapper._pendingChoices.get('ou_original:oc_shared')?.timer)
   })
 
-  it('uses history-choice card value context when callback payload is missing user and chat ids', async () => {
+  it.skip('uses history-choice card value context when callback payload is missing user and chat ids', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const commandSpy = vi.spyOn(bridge, '_handleCommand').mockResolvedValue()

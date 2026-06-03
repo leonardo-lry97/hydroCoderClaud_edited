@@ -1570,8 +1570,8 @@ class EnterpriseWeixinBridge {
       userId: resolvedUserId,
       senderId: resolvedUserId,
       senderName: target.displayName || resolvedUserId,
-      chatId: '',
-      chatType: 'single',
+      chatId: targetType === 'chat' ? resolvedUserId : '',
+      chatType: targetType === 'chat' ? 'group' : 'single',
       chatName: target.displayName || resolvedUserId,
     })
 

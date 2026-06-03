@@ -552,6 +552,9 @@ class WeixinBridge {
     if (!content) {
       throw new Error('发送内容不能为空')
     }
+    if (!accountId || !targetId) {
+      throw new Error('accountId 和 targetId 不能为空')
+    }
     if (sessionId) {
       this.agentSessionManager.assertSessionImBindingAllowed(sessionId, 'weixin')
     }

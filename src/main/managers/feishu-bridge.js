@@ -606,28 +606,7 @@ class FeishuBridge {
     }
   }
 
-  async _handleCardAction(event) {
-    const { actionType, actionValue, userId, chatId, chatType } = event
-    console.log('[FeishuBridge] Card action:', actionType)
-    const commandText = this._resolveCardCommand(actionType, actionValue)
-    if (!commandText) return
-    const resolvedContext = this._resolveHistoryChoiceContext({ userId, chatId, chatType, actionValue })
-    if (actionValue?.source === 'history-choice' && resolvedContext.senderId && resolvedContext.chatId) {
-      const mapKey = this._sessionMapper.buildKey({ userId: resolvedContext.senderId, chatId: resolvedContext.chatId })
-      this._sessionMapper.clearPendingChoice(mapKey)
-    }
-    await this._handleCommand(commandText, {
-      senderId: resolvedContext.senderId,
-      senderName: resolvedContext.senderName,
-      chatId: resolvedContext.chatId,
-      chatType: resolvedContext.chatType,
-      chatName: resolvedContext.chatName,
-    }, {
-      cardValue: actionValue,
-    })
-  }
-
-  async _handleCommand(text, context) {
+  async _handleCommand(text, context, cardMeta = {}) {
     this._syncSessionDatabase()
     const needsResolvedSenderName = !context?.senderName && !!context?.senderId
     const needsResolvedChatName = !context?.chatName && !!context?.chatId
@@ -642,7 +621,7 @@ class FeishuBridge {
       senderName: context.senderName || resolvedNames.senderName,
       chatName: context.chatName || resolvedNames.chatName,
     }
-    const normalizedText = this._normalizeCommandText(text, context, {})
+    const normalizedText = this._normalizeCommandText(text, context, cardMeta || {})
 
     const mapKey = this._sessionMapper.buildKey({ userId: context.senderId, chatId: context.chatId })
 
@@ -1293,8 +1272,8 @@ class FeishuBridge {
     this._sessionIdentities.set(sessionId, {
       senderId: resolvedOpenId,
       senderName: target.displayName || resolvedOpenId,
-      chatId: null,
-      chatType: 'p2p',
+      chatId: targetType === 'chat' ? resolvedOpenId : null,
+      chatType: targetType === 'chat' ? 'group' : 'p2p',
       chatName: target.displayName || resolvedOpenId,
     })
     if (this._sessionDatabase?.updateImIdentity) {
