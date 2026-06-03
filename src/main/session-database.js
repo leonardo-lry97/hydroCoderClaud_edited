@@ -196,9 +196,7 @@ class SessionDatabaseBase {
       { name: 'last_bootstrapped_runtime', type: 'TEXT' },
       { name: 'pending_runtime_change', type: "TEXT DEFAULT 'unknown'" },
       { name: 'queued_messages', type: "TEXT DEFAULT '[]'" },
-      { name: 'staff_id', type: 'TEXT' },         // @deprecated → im_user_id
-      { name: 'conversation_id', type: 'TEXT' },   // @deprecated → im_chat_id
-      { name: 'im_user_id', type: 'TEXT' },        // IM 用户标识（staffId / openId）
+      { name: 'im_user_id', type: 'TEXT' },        // IM 用户标识（userId / openId）
       { name: 'im_chat_id', type: 'TEXT' },        // IM 聊天标识（群聊/单聊 ID）
       { name: 'im_channel', type: 'TEXT' },        // IM 平台类型（dingtalk / weixin / feishu / enterprise-weixin）
       { name: 'im_chat_type', type: 'TEXT' },      // IM 会话类型（p2p / single / group）
