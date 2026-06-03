@@ -1016,9 +1016,13 @@ class DingTalkBridge {
     }
     const body = {
       robotCode,
-      userIds: [resolvedStaffId],
       msgKey: 'sampleText',
       msgParam: JSON.stringify({ content })
+    }
+    if (targetType === 'chat') {
+      body.chatIds = [resolvedStaffId]
+    } else {
+      body.userIds = [resolvedStaffId]
     }
     const response = await globalThis.fetch(
       'https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend',
@@ -1036,7 +1040,7 @@ class DingTalkBridge {
       throw new Error(`钉钉主动发送失败: ${response.status} ${JSON.stringify(result)}`)
     }
     if (sessionId) {
-      this.bindTarget(sessionId, { targetId: resolvedStaffId, targetType: 'user', displayName })
+      this.bindTarget(sessionId, { targetId: resolvedStaffId, targetType: targetType || 'user', displayName })
     }
     return { success: true, targetId: resolvedStaffId, result }
   }

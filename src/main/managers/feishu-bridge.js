@@ -1400,9 +1400,11 @@ class FeishuBridge {
       this._agentSessionManager.assertSessionImBindingAllowed(sessionId, 'feishu')
       this._assertSessionTargetAllowed(sessionId, resolvedOpenId, displayName)
     }
-    const messageId = await this._api.sendTextMessage('open_id', resolvedOpenId, content)
+    const receiveIdType = targetType === 'chat' ? 'chat_id' : 'open_id'
+    const bindChatType = targetType === 'chat' ? 'group' : 'p2p'
+    const messageId = await this._api.sendTextMessage(receiveIdType, resolvedOpenId, content)
     if (sessionId) {
-      this.bindTarget(sessionId, { targetId: resolvedOpenId, targetType: 'p2p', displayName })
+      this.bindTarget(sessionId, { targetId: resolvedOpenId, targetType: bindChatType, displayName })
       this._clearProactiveRebindSuppressionForSender(resolvedOpenId)
     }
     return { success: true, messageId, targetId: resolvedOpenId }
