@@ -1014,6 +1014,7 @@ class DingTalkBridge {
     }
     this.responseCollectors.delete(sessionId)
     this._sessionProcessQueues.delete(sessionId)
+    this._sessionIdentities.delete(sessionId)
 
     this.agentSessionManager?.unbindSessionExternalImSource?.(sessionId)
     return { success: true }
