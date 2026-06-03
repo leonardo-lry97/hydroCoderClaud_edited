@@ -928,6 +928,8 @@ const unbindDingTalkTarget = async () => {
     if (result?.error || result?.success === false) {
       throw new Error(result?.error || t('agent.imQuickUnbindFailed'))
     }
+    selectedDingTalkTargetId.value = null
+    dingtalkTargets.value = []
     closeDingTalkDropdown()
     notifyImBindingUpdated()
   } catch (err) {
@@ -949,6 +951,8 @@ const unbindWeixinTarget = async () => {
     if (result?.error || result?.success === false) {
       throw new Error(result?.error || t('agent.imQuickUnbindFailed'))
     }
+    selectedWeixinTargetId.value = null
+    weixinTargets.value = []
     closeWeixinDropdown()
     notifyImBindingUpdated()
   } catch (err) {
@@ -970,6 +974,8 @@ const unbindFeishuTarget = async () => {
     if (result?.error || result?.success === false) {
       throw new Error(result?.error || t('agent.imQuickUnbindFailed'))
     }
+    selectedFeishuTargetId.value = null
+    feishuTargets.value = []
     closeFeishuDropdown()
     notifyImBindingUpdated()
   } catch (err) {
@@ -991,6 +997,8 @@ const unbindEnterpriseWeixinTarget = async () => {
     if (result?.error || result?.success === false) {
       throw new Error(result?.error || t('agent.imQuickUnbindFailed'))
     }
+    selectedEnterpriseWeixinTargetId.value = null
+    enterpriseWeixinTargets.value = []
     closeEnterpriseWeixinDropdown()
     notifyImBindingUpdated()
   } catch (err) {
