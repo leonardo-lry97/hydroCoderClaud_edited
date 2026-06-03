@@ -212,6 +212,41 @@ class FeishuMessageAPI {
   }
 
   /**
+   * 列出 bot 所在的群聊
+   * @param {object} [options]
+   * @returns {Promise<Array<object>>}
+   */
+  async listChats(options = {}) {
+    this._assertReady()
+    const limit = Number.isFinite(options.limit) ? Math.min(Math.max(1, Math.floor(options.limit)), 200) : 200
+    const pageSize = Math.min(Math.max(Number(options.pageSize) || 20, 1), 50)
+    const chats = []
+    let pageToken = ''
+    do {
+      const r = await this._client.im.v1.chat.list({
+        params: { page_size: pageSize, page_token: pageToken || undefined },
+      })
+      const batch = Array.isArray(r?.data?.items) ? r.data.items : []
+      for (const item of batch) {
+        if (!item?.chat_id) continue
+        chats.push({
+          id: item.chat_id,
+          chatId: item.chat_id,
+          targetId: item.chat_id,
+          targetType: 'chat',
+          displayName: item.name || item.chat_id || '',
+          name: item.name || '',
+          avatarUrl: item.avatar || null,
+          memberCount: Number(item.member_count || 0),
+        })
+        if (chats.length >= limit) break
+      }
+      pageToken = r?.data?.page_token || ''
+    } while (pageToken && chats.length < limit)
+    return chats
+  }
+
+  /**
    * 上传图片
    * @param {Buffer|string} source - 文件 buffer 或磁盘路径
    * @param {string} [imageType] - message|avatar（默认 message）

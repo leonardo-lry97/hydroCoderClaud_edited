@@ -1203,7 +1203,9 @@ class FeishuBridge {
 
   async listSendableTargets({ limit = Number.MAX_SAFE_INTEGER } = {}) {
     const users = await this._api.listUsers?.({ limit }) || []
-    return Promise.all(users.map(async (user) => {
+    const chats = await this._api.listChats?.({ limit: Math.min(limit, 100) }).catch(() => []) || []
+
+    const userResults = await Promise.all(users.map(async (user) => {
       let displayName = this._normalizeFeishuDisplayName(
         user.displayName || user.name || user.nickname || user.realName || '',
         user.openId
@@ -1231,8 +1233,21 @@ class FeishuBridge {
         jobTitle: user.jobTitle || '',
         avatarUrl: user.avatarUrl || null,
         hasContextToken: true,
+        targetType: 'user',
       }
     }))
+
+    // 附加群列表（targetType='chat'）
+    const chatTargets = chats.map(chat => ({
+      id: chat.chatId,
+      openId: chat.chatId,
+      displayName: chat.displayName || chat.name || chat.chatId || '',
+      name: chat.name || '',
+      targetType: 'chat',
+      hasContextToken: true,
+    }))
+
+    return [...userResults, ...chatTargets]
   }
 
   bindTarget(sessionId, { targetId, targetType, displayName } = {}) {
