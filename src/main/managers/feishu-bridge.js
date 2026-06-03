@@ -1258,13 +1258,11 @@ class FeishuBridge {
     }))
   }
 
-  bindSessionToTarget(sessionId, { openId, targetId, displayName } = {}) {
+  bindTarget(sessionId, { targetId, targetType, displayName } = {}) {
     this._syncSessionDatabase()
-    const resolvedOpenId = typeof (openId || targetId) === 'string'
-      ? (openId || targetId).trim()
-      : ''
+    const resolvedOpenId = typeof targetId === 'string' ? targetId.trim() : ''
     if (!sessionId || !resolvedOpenId) {
-      throw new Error('sessionId 和 openId 不能为空')
+      throw new Error('sessionId 和 targetId 不能为空')
     }
     const session = this._agentSessionManager.sessions.get(sessionId)
       || this._sessionDatabase?.getAgentConversation?.(sessionId)
@@ -1359,7 +1357,7 @@ class FeishuBridge {
     }
   }
 
-  unbindSessionTarget(sessionId) {
+  unbindTarget(sessionId) {
     if (!sessionId) return { success: false, error: 'sessionId 不能为空' }
     const target = this._sessionTargets.get(sessionId) || null
     const identity = this._sessionIdentities.get(sessionId) || null
@@ -1388,7 +1386,7 @@ class FeishuBridge {
     return { success: true }
   }
 
-  getSessionBinding(sessionId) {
+  getBinding(sessionId) {
     this._syncSessionDatabase()
     const target = this._sessionTargets.get(sessionId) || null
     if (!target) {
@@ -1411,16 +1409,17 @@ class FeishuBridge {
     }
   }
 
-  async sendTextToTarget({ sessionId, openId, targetId, displayName, text } = {}) {
+  async sendToTarget({ sessionId, targetId, targetType, displayName, text } = {}) {
     this._syncSessionDatabase()
     const content = typeof text === 'string' ? text.trim() : ''
     if (!content) {
       throw new Error('发送内容不能为空')
     }
-    const candidateOpenId = openId || targetId || this._sessionTargets.get(sessionId)?.openId || ''
-    const resolvedOpenId = typeof candidateOpenId === 'string' ? candidateOpenId.trim() : ''
+    const resolvedOpenId = typeof (targetId || this._sessionTargets.get(sessionId)?.openId || '') === 'string'
+      ? (targetId || this._sessionTargets.get(sessionId)?.openId || '').trim()
+      : ''
     if (!resolvedOpenId) {
-      throw new Error('openId 不能为空')
+      throw new Error('targetId 不能为空')
     }
     if (sessionId) {
       this._agentSessionManager.assertSessionImBindingAllowed(sessionId, 'feishu')
@@ -1428,7 +1427,7 @@ class FeishuBridge {
     }
     const messageId = await this._api.sendTextMessage('open_id', resolvedOpenId, content)
     if (sessionId) {
-      this.bindSessionToTarget(sessionId, { openId: resolvedOpenId, displayName })
+      this.bindTarget(sessionId, { targetId: resolvedOpenId, targetType: 'p2p', displayName })
       this._clearProactiveRebindSuppressionForSender(resolvedOpenId)
     }
     return { success: true, messageId, targetId: resolvedOpenId }

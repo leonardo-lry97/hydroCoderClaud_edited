@@ -232,19 +232,19 @@ describe('WeixinBridge', () => {
     const firstSession = manager.create({ type: 'chat', source: 'manual', title: '会话 A' })
     const secondSession = manager.create({ type: 'chat', source: 'manual', title: '会话 B' })
 
-    bridge.bindSessionToTarget(firstSession.id, {
+    bridge.bindTarget(firstSession.id, {
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
       displayName: '雷斯林'
     })
-    bridge.bindSessionToTarget(secondSession.id, {
+    bridge.bindTarget(secondSession.id, {
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
       displayName: '雷斯林'
     })
 
-    expect(bridge.getSessionBinding(firstSession.id)).toBe(null)
-    expect(bridge.getSessionBinding(secondSession.id)).toEqual({
+    expect(bridge.getBinding(firstSession.id)).toBe(null)
+    expect(bridge.getBinding(secondSession.id)).toEqual({
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
       displayName: '雷斯林'
@@ -257,7 +257,7 @@ describe('WeixinBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
     const session = manager.sessions.get(created.id)
 
-    bridge.bindSessionToTarget(session.id, {
+    bridge.bindTarget(session.id, {
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
       displayName: '雷斯林'
@@ -276,7 +276,7 @@ describe('WeixinBridge', () => {
     const session = manager.sessions.get(created.id)
 
     bridge.weixinNotifyService.sendText.mockRejectedValueOnce(new Error('send failed'))
-    await expect(bridge.sendTextToTarget({
+    await expect(bridge.sendToTarget({
       sessionId: session.id,
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
@@ -285,12 +285,12 @@ describe('WeixinBridge', () => {
     })).rejects.toThrow(/send failed/)
 
     expect(session.imChannel).toBeNull()
-    expect(bridge.getSessionBinding(session.id)).toBe(null)
+    expect(bridge.getBinding(session.id)).toBe(null)
     expect(manager.sessionDatabase.updateAgentConversation).not.toHaveBeenCalledWith(session.id, {
             imChannel: 'weixin'
     })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: session.id,
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
@@ -299,7 +299,7 @@ describe('WeixinBridge', () => {
     })
 
     expect(session.imChannel).toBe('weixin')
-    expect(bridge.getSessionBinding(session.id)).toEqual({
+    expect(bridge.getBinding(session.id)).toEqual({
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
       displayName: '雷斯林'
@@ -310,7 +310,7 @@ describe('WeixinBridge', () => {
     const { bridge, manager, sent } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
 
-    bridge.bindSessionToTarget(created.id, {
+    bridge.bindTarget(created.id, {
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
       displayName: '雷斯林'
@@ -334,21 +334,21 @@ describe('WeixinBridge', () => {
     const firstSession = manager.create({ type: 'chat', source: 'manual', title: '会话 A' })
     const secondSession = manager.create({ type: 'chat', source: 'manual', title: '会话 B' })
 
-    bridge.bindSessionToTarget(firstSession.id, {
+    bridge.bindTarget(firstSession.id, {
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
       displayName: '雷斯林'
     })
-    bridge.bindSessionToTarget(secondSession.id, {
+    bridge.bindTarget(secondSession.id, {
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
       displayName: '雷斯林'
     })
 
-    bridge.unbindSessionTarget(firstSession.id)
+    bridge.unbindTarget(firstSession.id)
 
     expect(bridge.sessionMap.get('acc-1:user-a')).toBe(secondSession.id)
-    expect(bridge.getSessionBinding(secondSession.id)).toEqual({
+    expect(bridge.getBinding(secondSession.id)).toEqual({
       accountId: 'acc-1',
       targetId: 'acc-1:user-a',
       displayName: '雷斯林'

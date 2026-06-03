@@ -52,8 +52,8 @@ function setupWeixinNotifyHandlers(ipcMain, weixinNotifyService, weixinBridge, m
   }))
 
   ipcMain.handle('weixin-notify:sendText', handleTrusted(async (payload = {}) => {
-    if (weixinBridge?.sendTextToTarget) {
-      return await weixinBridge.sendTextToTarget(payload)
+    if (weixinBridge?.sendToTarget) {
+      return await weixinBridge.sendToTarget(payload)
     }
     return await weixinNotifyService.sendText(payload)
   }))
@@ -62,20 +62,20 @@ function setupWeixinNotifyHandlers(ipcMain, weixinNotifyService, weixinBridge, m
   // 会话与微信目标绑定
   // ========================================
   if (weixinBridge) {
-    ipcMain.handle('weixin-notify:bindSessionToTarget', handleTrusted(async (payload = {}) => {
-      return weixinBridge.bindSessionToTarget(payload.sessionId, {
+    ipcMain.handle('weixin-notify:bindTarget', handleTrusted(async (payload = {}) => {
+      return weixinBridge.bindTarget(payload.sessionId, {
         accountId: payload.accountId,
         targetId: payload.targetId,
         displayName: payload.displayName
       })
     }))
 
-    ipcMain.handle('weixin-notify:unbindSessionTarget', handleTrusted(async (payload = {}) => {
-      return weixinBridge.unbindSessionTarget(payload.sessionId)
+    ipcMain.handle('weixin-notify:unbindTarget', handleTrusted(async (payload = {}) => {
+      return weixinBridge.unbindTarget(payload.sessionId)
     }))
 
-    ipcMain.handle('weixin-notify:getSessionBinding', handleTrusted(async (sessionId) => {
-      const binding = weixinBridge.getSessionBinding(sessionId)
+    ipcMain.handle('weixin-notify:getBinding', handleTrusted(async (sessionId) => {
+      const binding = weixinBridge.getBinding(sessionId)
       return binding || null
     }))
   }

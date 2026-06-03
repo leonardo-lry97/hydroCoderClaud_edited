@@ -666,7 +666,7 @@ describe('EnterpriseWeixinBridge', () => {
     const { bridge, manager, wsClient } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
 
-    const result = await bridge.sendTextToTarget({
+    const result = await bridge.sendToTarget({
       sessionId: created.id,
       userId: 'user-b',
       displayName: 'HydroCoder',
@@ -678,7 +678,7 @@ describe('EnterpriseWeixinBridge', () => {
       msgtype: 'markdown',
       markdown: { content: '任务已完成' },
     })
-    expect(bridge.getSessionBinding(created.id)).toEqual({
+    expect(bridge.getBinding(created.id)).toEqual({
       targetId: 'user-b',
       userId: 'user-b',
       displayName: 'HydroCoder',
@@ -694,7 +694,7 @@ describe('EnterpriseWeixinBridge', () => {
       { session_id: 'hist-1', title: '历史会话 1', updated_at: Date.now() - 1000 },
     ])
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: created.id,
       userId: 'user-a',
       displayName: '雷斯林',
@@ -735,7 +735,7 @@ describe('EnterpriseWeixinBridge', () => {
     expect(bridge._sessionMapper._pendingChoices.has(mapKey)).toBe(true)
     expect(bridge._pendingInboundMessages.has(mapKey)).toBe(true)
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: created.id,
       userId: 'user-a',
       displayName: '雷斯林',
@@ -859,7 +859,7 @@ describe('EnterpriseWeixinBridge', () => {
     const first = manager.create({ type: 'chat', source: 'manual', title: '会话1' })
     const second = manager.create({ type: 'chat', source: 'manual', title: '会话2' })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: first.id,
       userId: 'user-a',
       displayName: '雷斯林',
@@ -877,7 +877,7 @@ describe('EnterpriseWeixinBridge', () => {
       chatName: '雷斯林',
     })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: second.id,
       userId: 'user-a',
       displayName: '雷斯林',
@@ -922,7 +922,7 @@ describe('EnterpriseWeixinBridge', () => {
     const first = manager.create({ type: 'chat', source: 'manual', title: '会话1' })
     const second = manager.create({ type: 'chat', source: 'manual', title: '会话2' })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: first.id,
       userId: 'user-a',
       displayName: '雷斯林',
@@ -939,7 +939,7 @@ describe('EnterpriseWeixinBridge', () => {
       chatName: '雷斯林',
     })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: second.id,
       userId: 'user-a',
       displayName: '雷斯林',
@@ -971,7 +971,7 @@ describe('EnterpriseWeixinBridge', () => {
     bridge._sessionMapper.sessionMap.set('user-a:user-a', session.id)
     bridge._sessionMapper.sessionMap.set('user-a:group-1', session.id)
 
-    expect(bridge.unbindSessionTarget(session.id)).toEqual({ success: true })
+    expect(bridge.unbindTarget(session.id)).toEqual({ success: true })
 
     expect(bridge._targetSessionMap.get('user-a')).toBeUndefined()
     expect(bridge._sessionTargets.get(session.id)).toBeUndefined()
@@ -987,11 +987,11 @@ describe('EnterpriseWeixinBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
     const session = manager.sessions.get(created.id)
 
-    bridge.bindSessionToTarget(session.id, {
+    bridge.bindTarget(session.id, {
       userId: 'user-a',
       displayName: '雷斯林',
     })
-    bridge.unbindSessionTarget(session.id)
+    bridge.unbindTarget(session.id)
 
     manager.sessionDatabase.listAllAgentConversations.mockReturnValue([
       {
@@ -1027,7 +1027,7 @@ describe('EnterpriseWeixinBridge', () => {
       status: 'idle',
     })
 
-    expect(bridge.getSessionBinding(created.id)).toBe(null)
+    expect(bridge.getBinding(created.id)).toBe(null)
   })
 
   it('restores a proactive enterprise weixin binding without fabricating single chat id', () => {
@@ -1061,7 +1061,7 @@ describe('EnterpriseWeixinBridge', () => {
     const { bridge, manager, wsClient } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: created.id,
       userId: 'user-a',
       displayName: '雷斯林',
@@ -1080,7 +1080,7 @@ describe('EnterpriseWeixinBridge', () => {
     })
 
     expect(wsClient.sendMessage).toHaveBeenCalledTimes(1)
-    expect(bridge.getSessionBinding(created.id)).toEqual(
+    expect(bridge.getBinding(created.id)).toEqual(
       expect.objectContaining({
         targetId: 'user-a',
         userId: 'user-a',
@@ -1095,7 +1095,7 @@ describe('EnterpriseWeixinBridge', () => {
     const current = manager.create({ type: 'chat', source: 'manual', title: '当前会话' })
     const history = manager.create({ type: 'chat', source: 'manual', title: '历史会话' })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: current.id,
       userId: 'user-a',
       displayName: '雷斯林',
@@ -1179,7 +1179,7 @@ describe('EnterpriseWeixinBridge', () => {
     const { bridge, manager } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: created.id,
       userId: 'user-a',
       displayName: '雷斯林',

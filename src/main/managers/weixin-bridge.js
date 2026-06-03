@@ -440,7 +440,7 @@ class WeixinBridge {
     if (!sessionId) return
 
     try {
-      this.bindSessionToTarget(sessionId, {
+      this.bindTarget(sessionId, {
         accountId: message.accountId || message.target?.accountId,
         targetId: message.targetId,
         displayName: this._getTargetDisplayName(message)
@@ -496,7 +496,7 @@ class WeixinBridge {
   /**
    * 将普通 chat 会话绑定到微信目标，建立双向通道
    */
-  bindSessionToTarget(sessionId, { accountId, targetId, displayName } = {}) {
+  bindTarget(sessionId, { accountId, targetId, displayName } = {}) {
     if (!sessionId || !accountId || !targetId) {
       throw new Error('sessionId, accountId 和 targetId 不能为空')
     }
@@ -540,7 +540,7 @@ class WeixinBridge {
     return { success: true, target }
   }
 
-  async sendTextToTarget({ sessionId, accountId, targetId, displayName, text } = {}) {
+  async sendToTarget({ sessionId, accountId, targetId, displayName, text } = {}) {
     const content = typeof text === 'string' ? text.trim() : ''
     if (!content) {
       throw new Error('发送内容不能为空')
@@ -557,7 +557,7 @@ class WeixinBridge {
     })
 
     if (sessionId) {
-      this.bindSessionToTarget(sessionId, {
+      this.bindTarget(sessionId, {
         accountId: result?.target?.accountId || accountId,
         targetId: result?.target?.id || targetId,
         displayName: displayName || result?.target?.displayName
@@ -570,7 +570,7 @@ class WeixinBridge {
   /**
    * 解除会话与微信目标的绑定
    */
-  unbindSessionTarget(sessionId) {
+  unbindTarget(sessionId) {
     if (!sessionId) return { success: false, error: 'sessionId 不能为空' }
     const target = this.knownTargets.get(sessionId) || this.sessionTargets.get(sessionId)
     if (target?.targetId && this.sessionMap.get(target.targetId) === sessionId) {
@@ -594,7 +594,7 @@ class WeixinBridge {
   /**
    * 获取会话的微信绑定信息
    */
-  getSessionBinding(sessionId) {
+  getBinding(sessionId) {
     if (!sessionId) return null
     let target = this.knownTargets.get(sessionId) || this.sessionTargets.get(sessionId) || null
     if (!target) {

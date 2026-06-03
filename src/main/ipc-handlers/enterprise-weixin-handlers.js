@@ -31,20 +31,20 @@ function setupEnterpriseWeixinHandlers(ipcMain, bridge, configManager, wecomCliM
     }
   })
 
-  ipcMain.handle('enterprise-weixin:bindSessionToTarget', async (_event, payload = {}) => {
-    return bridge.bindSessionToTarget(payload.sessionId, {
-      userId: payload.userId || payload.targetId,
-      targetId: payload.targetId,
+  ipcMain.handle('enterprise-weixin:bindTarget', async (_event, payload = {}) => {
+    return bridge.bindTarget(payload.sessionId, {
+      targetId: payload.targetId || payload.userId,
+      targetType: payload.targetType || 'user',
       displayName: payload.displayName,
     })
   })
 
-  ipcMain.handle('enterprise-weixin:unbindSessionTarget', async (_event, payload = {}) => {
-    return bridge.unbindSessionTarget(payload.sessionId)
+  ipcMain.handle('enterprise-weixin:unbindTarget', async (_event, payload = {}) => {
+    return bridge.unbindTarget(payload.sessionId)
   })
 
-  ipcMain.handle('enterprise-weixin:getSessionBinding', async (_event, sessionId) => {
-    return bridge.getSessionBinding(sessionId)
+  ipcMain.handle('enterprise-weixin:getBinding', async (_event, sessionId) => {
+    return bridge.getBinding(sessionId)
   })
 
   ipcMain.handle('enterprise-weixin-cli:getStatus', async () => {

@@ -17,20 +17,20 @@ function setupDingTalkHandlers(ipcMain, dingtalkBridge, configManager) {
     return dingtalkBridge.listTargets()
   })
 
-  ipcMain.handle('dingtalk:bindSessionToTarget', async (_event, payload = {}) => {
-    return dingtalkBridge.bindSessionToTarget(payload.sessionId, {
-      staffId: payload.staffId,
-      targetId: payload.targetId,
+  ipcMain.handle('dingtalk:bindTarget', async (_event, payload = {}) => {
+    return dingtalkBridge.bindTarget(payload.sessionId, {
+      targetId: payload.targetId || payload.staffId,
+      targetType: payload.targetType || 'user',
       displayName: payload.displayName
     })
   })
 
-  ipcMain.handle('dingtalk:unbindSessionTarget', async (_event, payload = {}) => {
-    return dingtalkBridge.unbindSessionTarget(payload.sessionId)
+  ipcMain.handle('dingtalk:unbindTarget', async (_event, payload = {}) => {
+    return dingtalkBridge.unbindTarget(payload.sessionId)
   })
 
-  ipcMain.handle('dingtalk:getSessionBinding', async (_event, sessionId) => {
-    return dingtalkBridge.getSessionBinding(sessionId)
+  ipcMain.handle('dingtalk:getBinding', async (_event, sessionId) => {
+    return dingtalkBridge.getBinding(sessionId)
   })
 
 }

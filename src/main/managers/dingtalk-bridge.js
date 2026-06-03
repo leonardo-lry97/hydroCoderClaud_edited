@@ -776,10 +776,8 @@ class DingTalkBridge {
     return Array.from(seenUsers.values()).sort((a, b) => a.displayName.localeCompare(b.displayName, 'zh-CN'))
   }
 
-  bindSessionToTarget(sessionId, { staffId, targetId, displayName } = {}) {
-    const resolvedStaffId = typeof (staffId || targetId) === 'string'
-      ? String(staffId || targetId).trim()
-      : ''
+  bindTarget(sessionId, { targetId, targetType, displayName } = {}) {
+    const resolvedStaffId = typeof targetId === 'string' ? String(targetId).trim() : ''
     if (!sessionId || !resolvedStaffId) {
       throw new Error('sessionId 和 staffId 不能为空')
     }
@@ -947,7 +945,7 @@ class DingTalkBridge {
     return null
   }
 
-  getSessionBinding(sessionId) {
+  getBinding(sessionId) {
     const target = this._sessionTargets.get(sessionId) || null
     if (!target) {
       const row = this.agentSessionManager.sessionDatabase?.getAgentConversation?.(sessionId)
@@ -974,7 +972,7 @@ class DingTalkBridge {
     }
   }
 
-  unbindSessionTarget(sessionId) {
+  unbindTarget(sessionId) {
     if (!sessionId) return { success: false, error: 'sessionId 不能为空' }
 
     const target = this._sessionTargets.get(sessionId) || null
@@ -997,16 +995,16 @@ class DingTalkBridge {
     return { success: true }
   }
 
-  async sendTextToTarget({ sessionId, staffId, targetId, displayName, text } = {}) {
+  async sendToTarget({ sessionId, targetId, targetType, displayName, text } = {}) {
     const content = typeof text === 'string' ? text.trim() : ''
     if (!content) {
       throw new Error('发送内容不能为空')
     }
-    const resolvedStaffId = typeof (staffId || targetId || this._sessionTargets.get(sessionId)?.staffId) === 'string'
-      ? String(staffId || targetId || this._sessionTargets.get(sessionId)?.staffId).trim()
+    const resolvedStaffId = typeof (targetId || this._sessionTargets.get(sessionId)?.staffId) === 'string'
+      ? String(targetId || this._sessionTargets.get(sessionId)?.staffId).trim()
       : ''
     if (!resolvedStaffId) {
-      throw new Error('staffId 不能为空')
+      throw new Error('targetId 不能为空')
     }
     if (sessionId) {
       this.agentSessionManager.assertSessionImBindingAllowed(sessionId, 'dingtalk')
@@ -1040,7 +1038,7 @@ class DingTalkBridge {
       throw new Error(`钉钉主动发送失败: ${response.status} ${JSON.stringify(result)}`)
     }
     if (sessionId) {
-      this.bindSessionToTarget(sessionId, { staffId: resolvedStaffId, displayName })
+      this.bindTarget(sessionId, { targetId: resolvedStaffId, targetType: 'user', displayName })
     }
     return { success: true, targetId: resolvedStaffId, result }
   }

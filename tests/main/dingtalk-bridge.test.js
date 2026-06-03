@@ -54,8 +54,8 @@ describe('DingTalkBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
     const session = manager.sessions.get(created.id)
 
-    bridge.bindSessionToTarget(session.id, {
-      staffId: 'staff-1',
+    bridge.bindTarget(session.id, {
+      targetId: 'staff-1',
       targetId: 'staff-1',
       displayName: '张三'
     })
@@ -147,15 +147,15 @@ describe('DingTalkBridge', () => {
       json: async () => ({ errcode: 500, errmsg: 'fail' })
     })))
 
-    await expect(bridge.sendTextToTarget({
+    await expect(bridge.sendToTarget({
       sessionId: session.id,
-      staffId: 'staff-1',
+      targetId: 'staff-1',
       displayName: '张三',
       text: '任务已完成'
     })).rejects.toThrow(/钉钉主动发送失败/)
 
     expect(session.source).toBe('manual')
-    expect(bridge.getSessionBinding(session.id)).toBe(null)
+    expect(bridge.getBinding(session.id)).toBe(null)
     expect(manager.sessionDatabase.updateAgentConversation).not.toHaveBeenCalledWith(session.id, {
       source: 'dingtalk'
     })
@@ -168,22 +168,22 @@ describe('DingTalkBridge', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    bridge.bindSessionToTarget(session.id, {
-      staffId: 'staff-1',
+    bridge.bindTarget(session.id, {
+      targetId: 'staff-1',
       displayName: '张三'
     })
 
-    await expect(bridge.sendTextToTarget({
+    await expect(bridge.sendToTarget({
       sessionId: session.id,
-      staffId: 'staff-2',
+      targetId: 'staff-2',
       displayName: '李四',
       text: '任务已完成'
     })).rejects.toThrow(/当前会话已绑定钉钉联系人「张三」/)
 
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(bridge.getSessionBinding(session.id)).toEqual({
+    expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'staff-1',
-      staffId: 'staff-1',
+      targetId: 'staff-1',
       displayName: '张三'
     })
     expect(bridge._targetSessionMap.get('staff-2')).toBeUndefined()
@@ -213,8 +213,8 @@ describe('DingTalkBridge', () => {
         : null
     ))
 
-    expect(() => bridge.bindSessionToTarget(session.id, {
-      staffId: 'staff-2',
+    expect(() => bridge.bindTarget(session.id, {
+      targetId: 'staff-2',
       displayName: '李四'
     })).toThrow(/当前会话已绑定钉钉联系人「staff-1」/)
   })
@@ -243,9 +243,9 @@ describe('DingTalkBridge', () => {
         : null
     ))
 
-    expect(bridge.getSessionBinding(session.id)).toEqual({
+    expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'staff-1',
-      staffId: 'staff-1',
+      targetId: 'staff-1',
       displayName: 'staff-1'
     })
     expect(bridge._targetSessionMap.get('staff-1')).toBe(session.id)
@@ -267,9 +267,9 @@ describe('DingTalkBridge', () => {
       json: async () => ({ success: true })
     })))
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: session.id,
-      staffId: 'staff-1',
+      targetId: 'staff-1',
       displayName: '张三',
       text: '任务已完成'
     })
@@ -350,9 +350,9 @@ describe('DingTalkBridge', () => {
       json: async () => ({ success: true })
     })))
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: session.id,
-      staffId: 'staff-1',
+      targetId: 'staff-1',
       displayName: '张三',
       text: '任务已完成'
     })
@@ -468,9 +468,9 @@ describe('DingTalkBridge', () => {
       json: async () => ({ success: true })
     })))
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: first.id,
-      staffId: 'staff-1',
+      targetId: 'staff-1',
       displayName: '张三',
       text: '第一条'
     })
@@ -483,9 +483,9 @@ describe('DingTalkBridge', () => {
 
     bridge._targetSessionMap.clear()
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: second.id,
-      staffId: 'staff-1',
+      targetId: 'staff-1',
       displayName: '张三',
       text: '第二条'
     })
@@ -518,9 +518,9 @@ describe('DingTalkBridge', () => {
       json: async () => ({ success: true })
     })))
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: session.id,
-      staffId: 'staff-1',
+      targetId: 'staff-1',
       displayName: '张三',
       text: '任务已完成'
     })
@@ -572,8 +572,8 @@ describe('DingTalkBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: 'Notebook 会话' })
     const session = manager.sessions.get(created.id)
 
-    bridge.bindSessionToTarget(session.id, {
-      staffId: 'staff-1',
+    bridge.bindTarget(session.id, {
+      targetId: 'staff-1',
       displayName: '张三'
     })
 
@@ -623,8 +623,8 @@ describe('DingTalkBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '桌面会话' })
     const session = manager.sessions.get(created.id)
 
-    bridge.bindSessionToTarget(session.id, {
-      staffId: 'staff-1',
+    bridge.bindTarget(session.id, {
+      targetId: 'staff-1',
       displayName: '张三'
     })
     bridge.sessionMap.set('staff-1:conv-1', session.id)
@@ -637,7 +637,7 @@ describe('DingTalkBridge', () => {
 
     expect(reply).toContain('会话已关闭')
     expect(bridge.sessionMap.get('staff-1:conv-1')).toBeUndefined()
-    expect(bridge.getSessionBinding(session.id)).toBe(null)
+    expect(bridge.getBinding(session.id)).toBe(null)
     expect(bridge._targetSessionMap.get('staff-1')).toBeUndefined()
   })
 
@@ -672,9 +672,9 @@ describe('DingTalkBridge', () => {
       json: async () => ({ success: true })
     })))
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: session.id,
-      staffId: 'staff-1',
+      targetId: 'staff-1',
       displayName: '张三',
       text: '任务已完成'
     })
@@ -689,7 +689,7 @@ describe('DingTalkBridge', () => {
 
     expect(bridge._targetSessionMap.get('staff-1')).toBeUndefined()
     expect(bridge.sessionMap.get('staff-1:conv-1')).toBeUndefined()
-    expect(bridge.getSessionBinding(session.id)).toBe(null)
+    expect(bridge.getBinding(session.id)).toBe(null)
 
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
     const createNewSessionSpy = vi.spyOn(bridge, '_createNewSession').mockResolvedValue('new-session-id')
@@ -707,8 +707,8 @@ describe('DingTalkBridge', () => {
 
     const created = manager.create({ type: 'chat', source: 'manual', title: '桌面会话' })
     const session = manager.sessions.get(created.id)
-    bridge.bindSessionToTarget(session.id, {
-      staffId: 'staff-1',
+    bridge.bindTarget(session.id, {
+      targetId: 'staff-1',
       displayName: '张三'
     })
 
@@ -824,8 +824,8 @@ describe('DingTalkBridge', () => {
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
     const created = manager.create({ type: 'chat', source: 'manual', title: 'Notebook 会话' })
     const session = manager.sessions.get(created.id)
-    bridge.bindSessionToTarget(session.id, {
-      staffId: 'staff-1',
+    bridge.bindTarget(session.id, {
+      targetId: 'staff-1',
       displayName: '张三'
     })
     manager.sessionDatabase.getAgentConversation.mockImplementation((sessionId) => (

@@ -73,7 +73,7 @@ function setupImBridgeHandlers(ipcMain, bridge, configManager, prefix) {
 
   // 主动发送文本
   ipcMain.handle(`${prefix}:sendText`, async (_event, payload = {}) => {
-    return bridge.sendTextToTarget(payload)
+    return bridge.sendToTarget(payload)
   })
 }
 

@@ -125,18 +125,18 @@ describe('FeishuBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '桌面会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
 
-    const sendResult = await bridge.sendTextToTarget({
+    const sendResult = await bridge.sendToTarget({
       sessionId: session.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '任务已完成'
     })
 
     expect(sendSpy).toHaveBeenCalledWith('open_id', 'ou_target', '任务已完成')
     expect(sendResult).toMatchObject({ success: true, targetId: 'ou_target', messageId: 'om_send_1' })
-    expect(bridge.getSessionBinding(session.id)).toEqual({
+    expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'ou_target',
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三'
     })
 
@@ -167,9 +167,9 @@ describe('FeishuBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '桌面会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: session.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '任务已完成'
     })
@@ -235,9 +235,9 @@ describe('FeishuBridge', () => {
     const first = manager.create({ type: 'chat', source: 'manual', title: '会话1', cwd: tempDir })
     const second = manager.create({ type: 'chat', source: 'manual', title: '会话2', cwd: tempDir })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: first.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '第一条'
     })
@@ -251,9 +251,9 @@ describe('FeishuBridge', () => {
       chatName: '张三'
     })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: second.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '第二条'
     })
@@ -297,9 +297,9 @@ describe('FeishuBridge', () => {
     })
     expect(bridge._targetSessionMap.get('ou_target')).toBeUndefined()
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: desktop.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '从新桌面会话发送'
     })
@@ -334,9 +334,9 @@ describe('FeishuBridge', () => {
     const first = manager.create({ type: 'chat', source: 'manual', title: '会话1', cwd: tempDir })
     const second = manager.create({ type: 'chat', source: 'manual', title: '会话2', cwd: tempDir })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: first.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '第一条'
     })
@@ -351,9 +351,9 @@ describe('FeishuBridge', () => {
       chatName: '张三'
     })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: second.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '第二条'
     })
@@ -369,7 +369,7 @@ describe('FeishuBridge', () => {
     const session = manager.sessions.get(created.id)
 
     bridge._sessionTargets.set(session.id, {
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三'
     })
     bridge._targetSessionMap.set('ou_target', session.id)
@@ -383,7 +383,7 @@ describe('FeishuBridge', () => {
     bridge._sessionMapper.sessionMap.set('ou_target:oc_reply', session.id)
     bridge._sessionMapper.sessionMap.set('ou_target:oc_group', session.id)
 
-    expect(bridge.unbindSessionTarget(session.id)).toEqual({ success: true })
+    expect(bridge.unbindTarget(session.id)).toEqual({ success: true })
 
     expect(bridge._targetSessionMap.get('ou_target')).toBeUndefined()
     expect(bridge._sessionTargets.get(session.id)).toBeUndefined()
@@ -402,13 +402,13 @@ describe('FeishuBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: session.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '任务已完成'
     })
-    bridge.unbindSessionTarget(session.id)
+    bridge.unbindTarget(session.id)
 
     manager.sessionDatabase.getAgentConversation.mockImplementation((sessionId) => ({
       id: 1,
@@ -468,15 +468,15 @@ describe('FeishuBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
 
-    await expect(bridge.sendTextToTarget({
+    await expect(bridge.sendToTarget({
       sessionId: session.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '任务已完成'
     })).rejects.toThrow('network down')
 
     expect(session.source).toBe('manual')
-    expect(bridge.getSessionBinding(session.id)).toBe(null)
+    expect(bridge.getBinding(session.id)).toBe(null)
     expect(bridge._targetSessionMap.get('ou_target')).toBeUndefined()
     expect(manager.sessionDatabase.updateAgentConversation).not.toHaveBeenCalledWith(session.id, {
       source: 'feishu'
@@ -491,8 +491,8 @@ describe('FeishuBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
 
-    bridge.bindSessionToTarget(session.id, {
-      openId: 'ou_target',
+    bridge.bindTarget(session.id, {
+      targetId: 'ou_target',
       displayName: '张三'
     })
 
@@ -507,9 +507,9 @@ describe('FeishuBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: session.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '任务已完成'
     })
@@ -529,22 +529,22 @@ describe('FeishuBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
 
-    bridge.bindSessionToTarget(session.id, {
-      openId: 'ou_target_1',
+    bridge.bindTarget(session.id, {
+      targetId: 'ou_target_1',
       displayName: '张三'
     })
 
-    await expect(bridge.sendTextToTarget({
+    await expect(bridge.sendToTarget({
       sessionId: session.id,
-      openId: 'ou_target_2',
+      targetId: 'ou_target_2',
       displayName: '李四',
       text: '任务已完成'
     })).rejects.toThrow(/当前会话已绑定飞书联系人「张三」/)
 
     expect(sendSpy).not.toHaveBeenCalled()
-    expect(bridge.getSessionBinding(session.id)).toEqual({
+    expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'ou_target_1',
-      openId: 'ou_target_1',
+      targetId: 'ou_target_1',
       displayName: '张三'
     })
     expect(bridge._targetSessionMap.get('ou_target_2')).toBeUndefined()
@@ -574,8 +574,8 @@ describe('FeishuBridge', () => {
         : null
     ))
 
-    expect(() => bridge.bindSessionToTarget(session.id, {
-      openId: 'ou_target_2',
+    expect(() => bridge.bindTarget(session.id, {
+      targetId: 'ou_target_2',
       displayName: '李四'
     })).toThrow(/当前会话已绑定飞书联系人「ou_target_1」/)
   })
@@ -604,9 +604,9 @@ describe('FeishuBridge', () => {
         : null
     ))
 
-    expect(bridge.getSessionBinding(session.id)).toEqual({
+    expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'ou_target',
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: 'ou_target'
     })
     expect(bridge._targetSessionMap.get('ou_target')).toBe(session.id)
@@ -626,8 +626,8 @@ describe('FeishuBridge', () => {
     const created = manager.create({ type: 'chat', source: 'feishu', title: '桌面会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
 
-    bridge.bindSessionToTarget(session.id, {
-      openId: 'ou_target',
+    bridge.bindTarget(session.id, {
+      targetId: 'ou_target',
       displayName: '张三'
     })
     bridge._clearSessionIdentity(session.id)
@@ -646,9 +646,9 @@ describe('FeishuBridge', () => {
         : null
     ))
 
-    expect(bridge.getSessionBinding(session.id)).toEqual({
+    expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'ou_target',
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: 'ou_target'
     })
     expect(bridge._targetSessionMap.get('ou_target')).toBe(session.id)
@@ -685,9 +685,9 @@ describe('FeishuBridge', () => {
         : null
     ))
 
-    expect(bridge.getSessionBinding(session.id)).toEqual({
+    expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'ou_target',
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: 'ou_target'
     })
   })
@@ -696,7 +696,7 @@ describe('FeishuBridge', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'listUsers').mockResolvedValue([
-      { openId: 'ou_target', userId: 'user-1', displayName: '', name: '' }
+      { targetId: 'ou_target', userId: 'user-1', displayName: '', name: '' }
     ])
 
     const targets = await bridge.listSendableTargets()
@@ -704,7 +704,7 @@ describe('FeishuBridge', () => {
     expect(targets).toEqual([
       expect.objectContaining({
         id: 'ou_target',
-        openId: 'ou_target',
+        targetId: 'ou_target',
         displayName: '',
         name: ''
       })
@@ -715,7 +715,7 @@ describe('FeishuBridge', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     vi.spyOn(bridge._api, 'listUsers').mockResolvedValue([
-      { openId: 'ou_target', userId: 'user-1', displayName: 'ou_target', name: 'ou_target' }
+      { targetId: 'ou_target', userId: 'user-1', displayName: 'ou_target', name: 'ou_target' }
     ])
     vi.spyOn(bridge._api, 'getUserInfo').mockResolvedValue({
       name: '张越胜'
@@ -727,7 +727,7 @@ describe('FeishuBridge', () => {
     expect(targets).toEqual([
       expect.objectContaining({
         id: 'ou_target',
-        openId: 'ou_target',
+        targetId: 'ou_target',
         displayName: '张越胜',
         name: '张越胜'
       })
@@ -1265,7 +1265,7 @@ describe('FeishuBridge', () => {
     const session = manager.create({ type: 'feishu', source: 'feishu', title: '飞书会话', cwd: tempDir })
     bridge._sessionMapper.sessionMap.set('ou_xxx:oc_xxx', session.id)
     bridge._sessionTargets.set(session.id, {
-      openId: 'ou_xxx',
+      targetId: 'ou_xxx',
       displayName: '张三'
     })
     bridge._targetSessionMap.set('ou_xxx', session.id)
@@ -1300,8 +1300,8 @@ describe('FeishuBridge', () => {
 
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通桌面会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
-    bridge.bindSessionToTarget(session.id, {
-      openId: 'ou_target',
+    bridge.bindTarget(session.id, {
+      targetId: 'ou_target',
       displayName: '张三'
     })
 
@@ -1323,8 +1323,8 @@ describe('FeishuBridge', () => {
 
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通桌面会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
-    bridge.bindSessionToTarget(session.id, {
-      openId: 'ou_target',
+    bridge.bindTarget(session.id, {
+      targetId: 'ou_target',
       displayName: '张三'
     })
 
@@ -1341,9 +1341,9 @@ describe('FeishuBridge', () => {
 
     const current = manager.create({ type: 'chat', source: 'manual', title: '当前桌面会话', cwd: tempDir })
     const history = manager.create({ type: 'chat', source: 'manual', title: '历史桌面会话', cwd: tempDir })
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: current.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '当前绑定'
     })
@@ -1363,7 +1363,7 @@ describe('FeishuBridge', () => {
       chatName: '张三'
     })
     bridge._sessionTargets.set(history.id, {
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三'
     })
 
@@ -1381,9 +1381,9 @@ describe('FeishuBridge', () => {
     const first = manager.create({ type: 'chat', source: 'manual', title: '会话1', cwd: tempDir })
     const second = manager.create({ type: 'chat', source: 'manual', title: '会话2', cwd: tempDir })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: first.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '第一条'
     })
@@ -1397,9 +1397,9 @@ describe('FeishuBridge', () => {
       chatName: '张三'
     })
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: second.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '第二条'
     })
@@ -1834,8 +1834,8 @@ describe('FeishuBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '桌面主动会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
     session.queryGenerator = {}
-    bridge.bindSessionToTarget(session.id, {
-      openId: 'ou_target',
+    bridge.bindTarget(session.id, {
+      targetId: 'ou_target',
       displayName: '张三'
     })
     bridge._sessionMapper.sessionMap.delete('ou_target:oc_reply')
@@ -1909,7 +1909,7 @@ describe('FeishuBridge', () => {
     })
     bridge._targetSessionMap.set('ou_target', oldBound.id)
     bridge._sessionTargets.set(oldBound.id, {
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三'
     })
 
@@ -2334,9 +2334,9 @@ describe('FeishuBridge', () => {
     const session = manager.sessions.get(created.id)
     session.queryGenerator = {}
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: session.id,
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
       text: '任务已完成'
     })
@@ -2940,7 +2940,7 @@ describe('FeishuBridge', () => {
 
     bridge._targetSessionMap.set('ou_target', session.id)
     bridge._sessionTargets.set(session.id, {
-      openId: 'ou_target',
+      targetId: 'ou_target',
       displayName: '张三',
     })
     manager.sessionDatabase.getAgentConversation.mockImplementation((sessionId) => (
@@ -3479,9 +3479,9 @@ describe('FeishuBridge', () => {
     const created = manager.create({ type: 'chat', source: 'manual', title: '桌面会话', cwd: tempDir })
     const session = manager.sessions.get(created.id)
 
-    await bridge.sendTextToTarget({
+    await bridge.sendToTarget({
       sessionId: session.id,
-      openId: 'ou_xxx',
+      targetId: 'ou_xxx',
       displayName: '张三',
       text: '任务已完成'
     })
@@ -4281,10 +4281,10 @@ describe('FeishuMessageAPI', () => {
       'ou_sales_a'
     ])
     expect(users).toEqual([
-      expect.objectContaining({ openId: 'ou_dup', displayName: '张三' }),
-      expect.objectContaining({ openId: 'ou_sales', displayName: '销售' }),
-      expect.objectContaining({ openId: 'ou_eng', displayName: '工程师' }),
-      expect.objectContaining({ openId: 'ou_sales_a', displayName: '研发A' })
+      expect.objectContaining({ targetId: 'ou_dup', displayName: '张三' }),
+      expect.objectContaining({ targetId: 'ou_sales', displayName: '销售' }),
+      expect.objectContaining({ targetId: 'ou_eng', displayName: '工程师' }),
+      expect.objectContaining({ targetId: 'ou_sales_a', displayName: '研发A' })
     ])
   })
 })

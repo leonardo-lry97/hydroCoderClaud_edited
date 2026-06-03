@@ -17,20 +17,20 @@ function setupFeishuHandlers(ipcMain, feishuBridge, configManager) {
     return feishuBridge.listSendableTargets(payload)
   })
 
-  ipcMain.handle('feishu:bindSessionToTarget', async (_event, payload = {}) => {
-    return feishuBridge.bindSessionToTarget(payload.sessionId, {
-      openId: payload.openId || payload.targetId,
-      targetId: payload.targetId,
+  ipcMain.handle('feishu:bindTarget', async (_event, payload = {}) => {
+    return feishuBridge.bindTarget(payload.sessionId, {
+      targetId: payload.targetId || payload.openId,
+      targetType: payload.targetType || 'user',
       displayName: payload.displayName
     })
   })
 
-  ipcMain.handle('feishu:unbindSessionTarget', async (_event, payload = {}) => {
-    return feishuBridge.unbindSessionTarget(payload.sessionId)
+  ipcMain.handle('feishu:unbindTarget', async (_event, payload = {}) => {
+    return feishuBridge.unbindTarget(payload.sessionId)
   })
 
-  ipcMain.handle('feishu:getSessionBinding', async (_event, sessionId) => {
-    return feishuBridge.getSessionBinding(sessionId)
+  ipcMain.handle('feishu:getBinding', async (_event, sessionId) => {
+    return feishuBridge.getBinding(sessionId)
   })
 
 }

@@ -1492,37 +1492,37 @@ class EnterpriseWeixinBridge {
     }
   }
 
-  async sendTextToTarget({ sessionId, userId, targetId, displayName, text } = {}) {
+  async sendToTarget({ sessionId, targetId, targetType, text, displayName } = {}) {
     this._syncSessionDatabase()
     const content = typeof text === 'string' ? text.trim() : ''
     if (!content) throw new Error('发送内容不能为空')
 
-    const resolvedUserId = typeof (userId || targetId) === 'string' ? (userId || targetId).trim() : ''
-    if (!resolvedUserId) throw new Error('userId 不能为空')
+    const resolvedId = typeof targetId === 'string' ? targetId.trim() : ''
+    if (!resolvedId) throw new Error('targetId 不能为空')
     if (!this._wsClient || !this._connected) throw new Error('企业微信未连接')
 
     if (sessionId) {
       this._agentSessionManager.assertSessionImBindingAllowed(sessionId, this._imType)
-      this._assertSessionTargetAllowed(sessionId, resolvedUserId, displayName)
+      this._assertSessionTargetAllowed(sessionId, resolvedId, displayName)
     }
 
-    await this._wsClient.sendMessage(resolvedUserId, {
+    await this._wsClient.sendMessage(resolvedId, {
       msgtype: 'markdown',
       markdown: { content },
     })
 
     if (sessionId) {
-      this.bindSessionToTarget(sessionId, { userId: resolvedUserId, displayName })
+      this.bindTarget(sessionId, { targetId: resolvedId, targetType: targetType || 'user', displayName })
     }
 
-    return { success: true, targetId: resolvedUserId }
+    return { success: true, targetId: resolvedId }
   }
 
-  bindSessionToTarget(sessionId, { userId, targetId, displayName } = {}) {
+  bindTarget(sessionId, { targetId, targetType, displayName } = {}) {
     this._syncSessionDatabase()
-    const resolvedUserId = typeof (userId || targetId) === 'string' ? (userId || targetId).trim() : ''
+    const resolvedUserId = typeof targetId === 'string' ? targetId.trim() : ''
     if (!sessionId || !resolvedUserId) {
-      throw new Error('sessionId 和 userId 不能为空')
+      throw new Error('sessionId 和 targetId 不能为空')
     }
 
     const session = this._agentSessionManager.sessions.get(sessionId)
@@ -1615,7 +1615,7 @@ class EnterpriseWeixinBridge {
     })
   }
 
-  getSessionBinding(sessionId) {
+  getBinding(sessionId) {
     this._syncSessionDatabase()
     const target = this._sessionTargets.get(sessionId) || null
     if (!target) {
@@ -1637,7 +1637,7 @@ class EnterpriseWeixinBridge {
     }
   }
 
-  unbindSessionTarget(sessionId) {
+  unbindTarget(sessionId) {
     if (!sessionId) return { success: false, error: 'sessionId 不能为空' }
     const target = this._sessionTargets.get(sessionId) || null
     const identity = this._sessionIdentities.get(sessionId) || null
