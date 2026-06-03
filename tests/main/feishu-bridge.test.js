@@ -718,10 +718,6 @@ describe('FeishuBridge', () => {
 
     const targets = await bridge.listSendableTargets()
 
-    console.log('DEBUG targets:', JSON.stringify(targets))
-    console.log('DEBUG getUserInfo mock calls:', bridge._api.getUserInfo.mock?.calls?.length ?? 'no mock')
-    console.log('DEBUG typeof getUserInfo:', typeof bridge._api.getUserInfo)
-
     expect(bridge._api.getUserInfo).toHaveBeenCalledWith('ou_target')
     expect(targets).toEqual([
       expect.objectContaining({
