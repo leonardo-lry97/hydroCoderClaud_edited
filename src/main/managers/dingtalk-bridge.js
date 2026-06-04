@@ -184,6 +184,7 @@ class DingTalkBridge {
     try {
       await this._connect(appKey, appSecret)
       this._loadKnownChats()
+      this._migrateGroupImUserId()
       return true
     } catch (err) {
       const shouldKeepReconnecting = preserveRuntimeState || (!this._stopped && !!this.client)
@@ -565,7 +566,7 @@ class DingTalkBridge {
     }
 
     // 查找或创建 Agent 会话
-    const result = await this._ensureSession(senderStaffId, senderNick, conversationId, conversationTitle)
+    const result = await this._ensureSession(senderStaffId, senderNick, conversationId, conversationTitle, conversationType)
 
     // 有历史会话需要用户选择：发送菜单并等待
     if (result && result.needsChoice) {
@@ -638,7 +639,7 @@ class DingTalkBridge {
    * - DB 有历史记录 → 返回 { needsChoice: true, sessions } 让用户选择
    * - 无历史 → 新建并返回 sessionId
    */
-  async _ensureSession(staffId, nickname, conversationId, conversationTitle) {
+  async _ensureSession(staffId, nickname, conversationId, conversationTitle, conversationType = '1') {
     const mapKey = `${staffId}:${conversationId || 'default'}`
     let sessionId = this.sessionMap.get(mapKey)
 
@@ -730,13 +731,13 @@ class DingTalkBridge {
     }
 
     // 无历史会话 → 新建
-    return this._createNewSession(staffId, nickname, conversationId, conversationTitle, mapKey)
+    return this._createNewSession(staffId, nickname, conversationId, conversationTitle, mapKey, { conversationType })
   }
 
   /**
    * 新建 Agent 会话（供 _ensureSession 和 _handlePendingChoice 共用）
    */
-  async _createNewSession(staffId, nickname, conversationId, conversationTitle, mapKey, { cwd } = {}) {
+  async _createNewSession(staffId, nickname, conversationId, conversationTitle, mapKey, { cwd, conversationType = '1' } = {}) {
     const title = conversationTitle
       ? `钉钉 · ${conversationTitle} · ${nickname || staffId}`
       : `钉钉 · ${nickname || staffId}`
@@ -756,7 +757,8 @@ class DingTalkBridge {
 
     const db = this.agentSessionManager.sessionDatabase
     if (db && conversationId) {
-      db.updateImIdentity(sessionId, { userId: staffId, chatId: conversationId, chatType: 'p2p' })
+      const isGroupChat = String(conversationType) === '2'
+      db.updateImIdentity(sessionId, { userId: isGroupChat ? '' : staffId, chatId: conversationId, chatType: isGroupChat ? 'group' : 'p2p' })
     }
 
     console.log(`[DingTalk] Created session ${sessionId} for ${nickname}(${staffId}) in conversation ${conversationTitle || conversationId}`)
@@ -766,6 +768,26 @@ class DingTalkBridge {
     })
 
     return sessionId
+  }
+
+  _migrateGroupImUserId() {
+    const db = this.agentSessionManager.sessionDatabase
+    if (!db?.db) return
+    try {
+      const info = db.db.prepare(`
+        UPDATE agent_conversations
+        SET im_user_id = ''
+        WHERE im_channel = 'dingtalk'
+          AND im_chat_type IN ('group', 'chat')
+          AND im_user_id != ''
+          AND im_user_id IS NOT NULL
+      `).run()
+      if (info.changes > 0) {
+        console.log(`[DingTalk] Migrated ${info.changes} group session im_user_id to empty`)
+      }
+    } catch (err) {
+      console.warn('[DingTalk] Failed to migrate group im_user_id:', err.message)
+    }
   }
 
   _loadKnownChats() {
@@ -869,7 +891,8 @@ class DingTalkBridge {
     this._targetSessionMap.set(resolvedStaffId, sessionId)
     if (this.agentSessionManager.sessionDatabase?.updateImIdentity) {
       try {
-        this.agentSessionManager.sessionDatabase.updateImIdentity(sessionId, { userId: resolvedStaffId, chatId: targetType === 'chat' ? resolvedStaffId : '', chatType: targetType === 'chat' ? 'group' : 'p2p' })
+        const isGroupChat = targetType === 'chat'
+        this.agentSessionManager.sessionDatabase.updateImIdentity(sessionId, { userId: isGroupChat ? '' : resolvedStaffId, chatId: isGroupChat ? resolvedStaffId : '', chatType: isGroupChat ? 'group' : 'p2p' })
       } catch (err) {
         console.warn('[DingTalk] Failed to persist proactive target identity:', err.message)
       }

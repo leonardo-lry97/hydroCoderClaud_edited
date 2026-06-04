@@ -177,6 +177,7 @@ class EnterpriseWeixinBridge {
         await this._connect(botId, secret)
         this._startMsgIdCleanup()
         this._loadKnownChats()
+        this._migrateGroupImUserId()
         console.log('[EnterpriseWeixin] Bridge started successfully')
         return true
       } catch (err) {
@@ -1587,7 +1588,8 @@ class EnterpriseWeixinBridge {
 
     if (this._sessionDatabase?.updateImIdentity) {
       try {
-        this._sessionDatabase.updateImIdentity(sessionId, { userId: resolvedUserId, chatId: targetType === 'chat' ? resolvedUserId : '', chatType: targetType === 'chat' ? 'group' : 'single' })
+        const isGroupChat = targetType === 'chat'
+        this._sessionDatabase.updateImIdentity(sessionId, { userId: isGroupChat ? '' : resolvedUserId, chatId: isGroupChat ? resolvedUserId : '', chatType: isGroupChat ? 'group' : 'single' })
       } catch (err) {
         console.warn('[EnterpriseWeixin] Failed to persist bound target identity:', err.message)
       }
@@ -1717,6 +1719,27 @@ class EnterpriseWeixinBridge {
     }
   }
 
+  _migrateGroupImUserId() {
+    this._syncSessionDatabase()
+    const db = this._sessionDatabase
+    if (!db?.db) return
+    try {
+      const info = db.db.prepare(`
+        UPDATE agent_conversations
+        SET im_user_id = ''
+        WHERE im_channel = ?
+          AND im_chat_type IN ('group', 'chat')
+          AND im_user_id != ''
+          AND im_user_id IS NOT NULL
+      `).run(this._imType)
+      if (info.changes > 0) {
+        console.log(`[EnterpriseWeixin] Migrated ${info.changes} group session im_user_id to empty`)
+      }
+    } catch (err) {
+      console.warn('[EnterpriseWeixin] Failed to migrate group im_user_id:', err.message)
+    }
+  }
+
   _loadKnownChats() {
     this._syncSessionDatabase()
     if (!this._sessionDatabase?.getKnownChats) return
@@ -1791,7 +1814,8 @@ class EnterpriseWeixinBridge {
     }
 
     try {
-      this._sessionDatabase.updateImIdentity(sessionId, { userId: normalizedUserId, chatId: normalizedChatId, chatType: normalizedChatId ? 'group' : 'single' })
+      const isGroupChat = this._sessionIdentities.get(sessionId)?.chatType === 'group'
+      this._sessionDatabase.updateImIdentity(sessionId, { userId: isGroupChat ? '' : normalizedUserId, chatId: normalizedChatId, chatType: isGroupChat ? 'group' : 'single' })
     } catch (err) {
       console.warn('[EnterpriseWeixin] Failed to persist chat context:', err.message)
     }

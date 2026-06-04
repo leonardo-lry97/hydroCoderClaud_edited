@@ -694,7 +694,7 @@ describe('DingTalkBridge', () => {
     const result = await bridge._ensureSession('staff-1', '张三', 'conv-1', '测试群')
 
     expect(result).toBe('new-session-id')
-    expect(createNewSessionSpy).toHaveBeenCalledWith('staff-1', '张三', 'conv-1', '测试群', 'staff-1:conv-1')
+    expect(createNewSessionSpy).toHaveBeenCalledWith('staff-1', '张三', 'conv-1', '测试群', 'staff-1:conv-1', expect.any(Object))
   })
 
   it('does not mark a proactively bound DingTalk session as current in resume menu without an active chat map', async () => {
