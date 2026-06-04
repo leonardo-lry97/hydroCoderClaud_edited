@@ -668,6 +668,11 @@ class DingTalkBridge {
         // 会话状态正常（idle/streaming）→ 恢复
         const session = this.agentSessionManager.reopen(sessionId)
         if (session) {
+          // 恢复 imChannel（老会话可能缺）
+          if (!session.imChannel) {
+            session.imChannel = 'dingtalk'
+            try { db?.setImChannel?.(sessionId, 'dingtalk') } catch {}
+          }
           // 更新会话的 conversationId（确保会话属于当前钉钉对话）
           if (!session.meta) session.meta = {}
           session.meta.conversationId = conversationId

@@ -995,6 +995,10 @@ class FeishuBridge {
     if (sessionId) {
       const reopened = this._agentSessionManager.reopen(sessionId)
       if (reopened) {
+        if (!reopened.imChannel) {
+          reopened.imChannel = 'feishu'
+          try { this._sessionDatabase?.setImChannel?.(sessionId, 'feishu') } catch {}
+        }
         return sessionId
       }
       this._clearSessionIdentity(sessionId)
@@ -1018,6 +1022,11 @@ class FeishuBridge {
           chatType,
           chatName: identity.chatName || null,
         })
+        const proactiveSession = this._agentSessionManager.sessions.get(proactiveSessionId)
+        if (proactiveSession && !proactiveSession.imChannel) {
+          proactiveSession.imChannel = 'feishu'
+          try { this._sessionDatabase?.setImChannel?.(proactiveSessionId, 'feishu') } catch {}
+        }
         if (this._sessionDatabase?.updateImIdentity) {
           try {
             this._sessionDatabase.updateImIdentity(proactiveSessionId, { userId: senderId || '', chatId: chatId || '', chatType: 'p2p' })
@@ -1704,8 +1713,8 @@ class FeishuBridge {
           UPDATE agent_conversations
           SET im_channel = 'feishu'
           WHERE (im_channel IS NULL OR im_channel = '')
-            AND im_chat_type IN ('p2p', 'chat')
-            AND (im_user_id LIKE 'ou\_%' ESCAPE '\\' OR im_user_id = '')
+            AND (im_chat_type IN ('p2p', 'chat') OR im_chat_type IS NULL)
+            AND (im_user_id LIKE 'ou\_%' ESCAPE '\\' OR im_user_id = '' OR im_user_id IS NULL)
         `).run()
         if (info.changes > 0) {
           console.log(`[FeishuBridge] Fixed im_channel for ${info.changes} sessions in DB`)
