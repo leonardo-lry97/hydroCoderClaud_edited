@@ -281,29 +281,17 @@ class FeishuBridge {
       this._processedMsgIds.set(msgId, Date.now())
     }
 
-    const resolvedNames = await this._resolveFeishuDisplayNames({
-      senderId,
-      senderName,
-      chatId,
-      chatType,
-      chatName,
-    })
-
     if (unsupported) {
       await this._sendUnsupportedMessageNotice(senderId, chatId, chatType, msgType)
       return
     }
 
+    // 命令提前分发——跳过展示名 API 解析，大幅减少延迟
     const normalizedText = this._normalizeInboundText(text, { chatType, mentions })
-    console.log('[FeishuBridge] inbound text normalization:', JSON.stringify({
-      msgId,
-      chatType,
-      msgType,
-      hasText: !!text,
-      mentionCount: Array.isArray(mentions) ? mentions.length : 0,
-      hasNormalizedText: !!normalizedText,
-    }))
     if (normalizedText && normalizedText.startsWith('/')) {
+      const resolvedNames = (!senderName || !chatName)
+        ? await this._resolveFeishuDisplayNames({ senderId, senderName, chatId, chatType, chatName })
+        : { senderName, chatName }
       this._handleCommand(normalizedText, {
         senderId,
         senderName: resolvedNames.senderName || senderId,
@@ -313,6 +301,15 @@ class FeishuBridge {
       }, { mentions }).catch(() => {})
       return
     }
+
+    // 非命令消息才完整解析展示名
+    const resolvedNames = await this._resolveFeishuDisplayNames({
+      senderId,
+      senderName,
+      chatId,
+      chatType,
+      chatName,
+    })
 
     // 历史会话选择
     const mapKey = this._sessionMapper.buildKey({ userId: senderId, chatId, chatType })
