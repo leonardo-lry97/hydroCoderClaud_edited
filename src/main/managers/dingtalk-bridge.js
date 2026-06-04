@@ -441,14 +441,6 @@ class DingTalkBridge {
 
     console.log('[DingTalk] _handleDingTalkMessage: msgId:', msgId, 'msgtype:', msgtype, 'text:', text?.content?.substring(0, 50))
 
-    // 被动收集群聊：群消息入站时记录 chatId（工具栏列群用）
-    if (String(conversationType) === '2' && conversationId) {
-      this._knownChats.set(conversationId, {
-        chatId: conversationId,
-        name: conversationTitle || conversationId || '',
-      })
-    }
-
     // 消息去重：SDK 未及时收到 ACK 时会重投同一条消息
     if (msgId && this._processedMsgIds.has(msgId)) {
       console.log(`[DingTalk] Duplicate message ${msgId}, skipping`)
@@ -456,6 +448,18 @@ class DingTalkBridge {
     }
     if (msgId) {
       this._processedMsgIds.set(msgId, Date.now())
+    }
+
+    // 被动收集群聊：群消息入站时记录 chatId（工具栏列群用）
+    // 放在去重之后，避免重投消息无 conversationTitle 时覆盖好名字
+    if (String(conversationType) === '2' && conversationId) {
+      const existing = this._knownChats.get(conversationId)
+      if (!existing || conversationTitle) {
+        this._knownChats.set(conversationId, {
+          chatId: conversationId,
+          name: conversationTitle || existing?.name || conversationId || '',
+        })
+      }
     }
 
     // 命令拦截：文本消息以 / 开头时作为命令处理，不进入 Agent 对话

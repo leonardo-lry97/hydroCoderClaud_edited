@@ -1273,7 +1273,7 @@ class FeishuBridge {
     const isGroup = targetType === 'chat' || targetType === 'group'
     const bindMapKey = this._sessionMapper.buildKey({
       userId: resolvedOpenId,
-      chatId: isGroup ? resolvedOpenId : resolvedOpenId,
+      chatId: isGroup ? resolvedOpenId : null,
       chatType: isGroup ? 'group' : 'p2p',
     })
     this._sessionMapper.sessionMap.set(bindMapKey, sessionId)

@@ -184,8 +184,8 @@ describe('FeishuBridge', () => {
       source: 'im-inbound',
       im_channel: 'feishu',
       status: 'idle',
-      staff_id: 'ou_target',
-      conversation_id: '',
+      im_user_id: 'ou_target',
+      im_chat_id: '',
       cwd_auto: 0,
       message_count: 0,
       total_cost_usd: 0,
@@ -200,8 +200,8 @@ describe('FeishuBridge', () => {
         source: 'im-inbound',
         im_channel: 'feishu',
         title: '桌面会话',
-        staff_id: 'ou_target',
-        conversation_id: '',
+        im_user_id: 'ou_target',
+        im_chat_id: '',
         status: 'idle',
         updated_at: Date.now()
       }
@@ -565,8 +565,9 @@ describe('FeishuBridge', () => {
             type: 'chat',
             source: 'feishu',
             title: '桌面会话',
-            staff_id: 'ou_target_1',
-            conversation_id: '',
+            im_user_id: 'ou_target_1',
+            im_chat_id: '',
+            im_channel: 'feishu',
             status: 'idle'
           }
         : null
@@ -595,8 +596,8 @@ describe('FeishuBridge', () => {
             source: 'im-inbound',
             im_channel: 'feishu',
             title: '桌面会话',
-            staff_id: 'ou_target',
-            conversation_id: '',
+            im_user_id: 'ou_target',
+            im_chat_id: '',
             status: 'idle'
           }
         : null
@@ -636,8 +637,8 @@ describe('FeishuBridge', () => {
             source: 'im-inbound',
             im_channel: 'feishu',
             title: '桌面会话',
-            staff_id: 'ou_target',
-            conversation_id: 'oc_reply',
+            im_user_id: 'ou_target',
+            im_chat_id: 'oc_reply',
             status: 'closed'
           }
         : null
@@ -674,8 +675,8 @@ describe('FeishuBridge', () => {
             source: 'im-inbound',
             im_channel: 'feishu',
             title: '桌面会话',
-            staff_id: 'ou_target',
-            conversation_id: '',
+            im_user_id: 'ou_target',
+            im_chat_id: '',
             status: 'idle'
           }
         : null
@@ -1311,7 +1312,7 @@ describe('FeishuBridge', () => {
     expect(desktopIntervention).toHaveBeenCalledWith(session.id, '桌面继续', undefined)
   })
 
-  it('does not forward desktop intervention for a proactively bound Feishu session without current chat mapping', async () => {
+  it('forwards desktop intervention for a proactively bound Feishu P2P session', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
@@ -1326,7 +1327,7 @@ describe('FeishuBridge', () => {
     bridge._onDesktopIntervention(session.id, '桌面继续', undefined)
     await bridge._onAgentResult(session.id)
 
-    expect(sendTextMessage).not.toHaveBeenCalled()
+    expect(sendTextMessage).toHaveBeenCalled()
   })
 
   it('does not forward Feishu desktop intervention for a reopened history session without current chat mapping', async () => {

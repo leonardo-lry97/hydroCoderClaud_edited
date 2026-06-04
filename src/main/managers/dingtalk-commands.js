@@ -152,11 +152,10 @@ module.exports = {
     const db = this.agentSessionManager.sessionDatabase
     if (!db || !conversationId) return '📭 没有历史会话记录'
     const limit = this.configManager.getConfig()?.dingtalk?.maxHistorySessions || 5
-    const isGroupChat = String(conversationType) === '2'
-    const queryUserId = isGroupChat ? '' : senderStaffId
     const exactSessions = db.getImSessionsByType
-      ? db.getImSessionsByType('dingtalk', queryUserId, conversationId, limit)
-      : db.getDingTalkSessions(queryUserId, conversationId, limit)
+      ? db.getImSessionsByType('dingtalk', senderStaffId, conversationId, limit)
+      : db.getDingTalkSessions(senderStaffId, conversationId, limit)
+    const isGroupChat = String(conversationType) === '2'
     const boundHistoryRow = isGroupChat ? null : getCurrentBoundHistoryRow(this, db, senderStaffId)
     let sessions = mergeDingTalkHistoryRows(exactSessions, boundHistoryRow ? [boundHistoryRow] : []).slice(0, limit)
 
@@ -272,11 +271,10 @@ module.exports = {
     const db = this.agentSessionManager.sessionDatabase
     if (!db || !conversationId) return '📭 没有历史会话记录'
     const limit = this.configManager.getConfig()?.dingtalk?.maxHistorySessions || 5
-    const isGroupChat = String(conversationType) === '2'
-    const queryUserId = isGroupChat ? '' : senderStaffId
     const exactSessions = db.getImSessionsByType
-      ? db.getImSessionsByType('dingtalk', queryUserId, conversationId, limit)
-      : db.getDingTalkSessions(queryUserId, conversationId, limit)
+      ? db.getImSessionsByType('dingtalk', senderStaffId, conversationId, limit)
+      : db.getDingTalkSessions(senderStaffId, conversationId, limit)
+    const isGroupChat = String(conversationType) === '2'
     const boundHistoryRow = isGroupChat ? null : getCurrentBoundHistoryRow(this, db, senderStaffId)
     let sessions = mergeDingTalkHistoryRows(exactSessions, boundHistoryRow ? [boundHistoryRow] : []).slice(0, limit)
     if (currentSessionId) {
