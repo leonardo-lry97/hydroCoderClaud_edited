@@ -2139,7 +2139,7 @@ describe('FeishuBridge', () => {
     expect(notifySessionCreated).toHaveBeenCalledWith({ sessionId: 'hist-1', nickname: 'ou_xxx' })
   })
 
-  it('reuses resolved Feishu names for slash commands without re-querying display names', async () => {
+  it('dispatches slash commands with raw names to avoid API calls for display name resolution', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     const commandSpy = vi.spyOn(bridge, '_handleCommand').mockResolvedValue()
@@ -2162,14 +2162,14 @@ describe('FeishuBridge', () => {
 
     expect(commandSpy).toHaveBeenCalledWith('/resume 1', {
       senderId: 'ou_xxx',
-      senderName: '张三',
+      senderName: 'ou_xxx',
       chatId: 'oc_xxx',
       chatType: 'p2p',
-      chatName: '项目群',
+      chatName: 'oc_xxx',
     }, {
       mentions: [],
     })
-    expect(resolveNamesSpy).toHaveBeenCalledTimes(1)
+    expect(resolveNamesSpy).not.toHaveBeenCalled()
   })
 
   it('ignores mention tokens embedded in /resume command arguments', async () => {

@@ -286,18 +286,15 @@ class FeishuBridge {
       return
     }
 
-    // 命令提前分发——跳过展示名 API 解析，大幅减少延迟
+    // 命令提前分发——跳过展示名 API 解析（命令不需要展示名）
     const normalizedText = this._normalizeInboundText(text, { chatType, mentions })
     if (normalizedText && normalizedText.startsWith('/')) {
-      const resolvedNames = (!senderName || !chatName)
-        ? await this._resolveFeishuDisplayNames({ senderId, senderName, chatId, chatType, chatName })
-        : { senderName, chatName }
       this._handleCommand(normalizedText, {
         senderId,
-        senderName: resolvedNames.senderName || senderId,
+        senderName: senderName || senderId,
         chatId,
         chatType,
-        chatName: resolvedNames.chatName || chatId,
+        chatName: chatName || chatId,
       }, { mentions }).catch(() => {})
       return
     }
