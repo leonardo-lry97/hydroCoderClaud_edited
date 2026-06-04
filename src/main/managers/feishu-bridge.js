@@ -274,7 +274,7 @@ class FeishuBridge {
   // ─── 消息处理 ───
 
   async _handleFeishuMessage(event) {
-    this._tLastInbound = Date.now()
+    this._tLastInbound = this._eventClient._lastEventAt || Date.now()
     const initialMsgId = event?.msgId || event?.raw?.message?.message_id || ''
     if (initialMsgId) {
       if (this._processedMsgIds.has(initialMsgId)) return

@@ -59,6 +59,7 @@ class FeishuEventClient extends EventEmitter {
 
     this._eventDispatcher.register({
       'im.message.receive_v1': (data) => {
+        this._lastEventAt = Date.now()
         this._handleImMessage(data)
       },
     })
@@ -128,6 +129,7 @@ class FeishuEventClient extends EventEmitter {
 
   /** @private */
   _handleImMessage(data) {
+    const t0 = Date.now()
     try {
       // SDK EventDispatcher 传回的是扁平结构：
       // { schema, event_id, event_type, message: { message_id, message_type, chat_id, chat_type, content }, sender: { sender_id: { open_id, ... } } }
@@ -155,7 +157,7 @@ class FeishuEventClient extends EventEmitter {
         raw: data,
       }
 
-      console.log('[FeishuEventClient] Emitting message')
+      console.log(`[FeishuEventClient] handleImMessage: ${Date.now() - t0}ms, Emitting message`)
       this.emit('message', parsed)
     } catch (err) {
       console.error('[FeishuEventClient] Handle IM message error:', err)
