@@ -102,7 +102,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
 import { useProviders } from '@composables/useProviders'
 import { useLocale } from '@composables/useLocale'
@@ -152,6 +152,11 @@ const rules = computed(() => ({
 onMounted(async () => {
   await initLocale()
   await loadProviders()
+})
+
+// KeepAlive 激活时刷新（嵌入在 model-settings 多 tab 页面）
+onActivated(() => {
+  loadProviders()
 })
 
 const handleClose = () => {

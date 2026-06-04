@@ -57,7 +57,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
 import { useProfiles } from '@composables/useProfiles'
 import { useProviders } from '@composables/useProviders'
@@ -88,6 +88,11 @@ const testingModal = ref(false)
 onMounted(async () => {
   await initLocale()
   await Promise.all([loadProfiles(), loadProviders()])
+})
+
+// KeepAlive 激活时刷新（嵌入在 model-settings 多 tab 页面）
+onActivated(() => {
+  Promise.all([loadProfiles(), loadProviders()])
 })
 
 const handleClose = () => {
