@@ -132,6 +132,7 @@ class FeishuBridge {
     this._sessionMapper = this._createSessionMapper(cfg)
     this._api.setCredentials(cfg.appId, cfg.appSecret)
     this._restoreSessionImChannel()
+    this._freshStart = true
     this._bindEventClientEvents()
     this._startMsgIdCleanupTimer()
     this._migrateGroupImUserId()
@@ -1251,6 +1252,7 @@ class FeishuBridge {
         console.warn('[FeishuBridge] Failed to persist bound Feishu target identity:', err.message)
       }
     }
+    this._freshStart = false
     return { success: true, target }
   }
 
@@ -1412,6 +1414,7 @@ class FeishuBridge {
   async _findBoundSessionIdBySenderId(senderId, { allowDatabaseFallback = true } = {}) {
     const normalizedSenderId = typeof senderId === 'string' ? senderId.trim() : ''
     if (!normalizedSenderId) return null
+    if (this._freshStart) return null
     if (this._proactiveRebindSuppressedKeys.has(`${normalizedSenderId}:${normalizedSenderId}`)) {
       return null
     }
