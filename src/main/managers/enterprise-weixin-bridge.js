@@ -1632,13 +1632,15 @@ class EnterpriseWeixinBridge {
     const target = this._sessionTargets.get(sessionId) || null
     if (!target) {
       const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
-      const userId = row?.im_channel === this._imType && typeof row?.im_user_id === 'string'
-        ? row.im_user_id.trim()
-        : ''
-      if (!userId || row?.im_channel !== this._imType) return null
+      if (row?.im_channel !== this._imType) return null
+      const userId = typeof row?.im_user_id === 'string' ? row.im_user_id.trim() : ''
+      const chatId = typeof row?.im_chat_id === 'string' ? row.im_chat_id.trim() : ''
+      const isGroupChat = row?.im_chat_type === 'group' || row?.im_chat_type === 'chat'
+      const targetId = isGroupChat && chatId ? chatId : userId
+      if (!targetId) return null
       return {
-        targetId: userId,
-        displayName: userId,
+        targetId,
+        displayName: targetId,
       }
     }
     return {
@@ -1690,27 +1692,26 @@ class EnterpriseWeixinBridge {
 
     for (const [sessionId, session] of this._agentSessionManager.sessions.entries()) {
       const row = this._sessionDatabase.getAgentConversation(sessionId)
-      const userId = row?.im_channel === this._imType && typeof row?.im_user_id === 'string'
-        ? row.im_user_id.trim()
-        : ''
-      if (!userId || row?.im_channel !== this._imType) continue
+      if (row?.im_channel !== this._imType) continue
+      const userId = typeof row?.im_user_id === 'string' ? row.im_user_id.trim() : ''
+      const chatId = typeof row?.im_chat_id === 'string' ? row.im_chat_id.trim() : ''
+      const isGroupChat = row?.im_chat_type === 'group' || row?.im_chat_type === 'chat'
+      const targetId = isGroupChat && chatId ? chatId : userId
+      if (!targetId) continue
 
       this._sessionTargets.set(sessionId, {
-        userId,
-        displayName: userId,
+        userId: targetId,
+        displayName: targetId,
       })
-      this._targetSessionMap.set(userId, sessionId)
+      this._targetSessionMap.set(targetId, sessionId)
       if (!this._sessionIdentities.has(sessionId)) {
-        const restoredChatId = typeof row?.im_chat_id === 'string' && row.im_chat_id.trim()
-          ? row.im_chat_id.trim()
-          : ''
         this._sessionIdentities.set(sessionId, {
-          userId,
-          senderId: userId,
-          senderName: userId,
-          chatId: restoredChatId,
-          chatType: restoredChatId ? 'group' : 'single',
-          chatName: userId,
+          userId: targetId,
+          senderId: targetId,
+          senderName: targetId,
+          chatId: isGroupChat ? chatId : '',
+          chatType: isGroupChat ? 'group' : 'single',
+          chatName: targetId,
         })
       }
       if (session && !session.imChannel) {

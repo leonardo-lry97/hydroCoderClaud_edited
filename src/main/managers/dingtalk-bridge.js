@@ -1023,16 +1023,18 @@ class DingTalkBridge {
     const target = this._sessionTargets.get(sessionId) || null
     if (!target) {
       const row = this.agentSessionManager.sessionDatabase?.getAgentConversation?.(sessionId)
-      const staffId = row?.im_channel === 'dingtalk' && typeof row?.im_user_id === 'string'
-        ? row.im_user_id.trim()
-        : ''
-      if (!staffId || row?.status === 'closed') return null
+      if (row?.im_channel !== 'dingtalk') return null
+      const staffId = typeof row?.im_user_id === 'string' ? row.im_user_id.trim() : ''
+      const chatId = typeof row?.im_chat_id === 'string' ? row.im_chat_id.trim() : ''
+      const isGroupChat = row?.im_chat_type === 'group' || row?.im_chat_type === 'chat'
+      const targetId = isGroupChat && chatId ? chatId : staffId
+      if (!targetId || row?.status === 'closed') return null
       const restoredTarget = {
-        staffId,
-        displayName: staffId
+        staffId: targetId,
+        displayName: targetId
       }
       this._sessionTargets.set(sessionId, restoredTarget)
-      this._targetSessionMap.set(staffId, sessionId)
+      this._targetSessionMap.set(targetId, sessionId)
       return {
         targetId: restoredTarget.staffId,
         displayName: restoredTarget.displayName
