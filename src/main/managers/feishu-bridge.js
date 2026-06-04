@@ -62,6 +62,15 @@ class FeishuBridge {
     this._api = new FeishuMessageAPI()
     this._eventClient = new FeishuEventClient()
 
+    // 入站→出站延迟计时
+    this._tLastInbound = 0
+    const _origSendText = this._api.sendTextMessage.bind(this._api)
+    this._api.sendTextMessage = async (...args) => {
+      const elapsed = this._tLastInbound ? (Date.now() - this._tLastInbound) : -1
+      if (elapsed >= 0) console.log(`[FeishuBridge] inbound->outbound start: ${elapsed}ms`)
+      return _origSendText(...args)
+    }
+
     this._notifier = new ImFrontendNotifier(mainWindow, 'feishu')
     this._replyCollector = new ImReplyCollector({ maxTextLength: 6000 })
     this._sessionMapper = new ImSessionMapper({
@@ -265,6 +274,7 @@ class FeishuBridge {
   // ─── 消息处理 ───
 
   async _handleFeishuMessage(event) {
+    this._tLastInbound = Date.now()
     const initialMsgId = event?.msgId || event?.raw?.message?.message_id || ''
     if (initialMsgId) {
       if (this._processedMsgIds.has(initialMsgId)) return
