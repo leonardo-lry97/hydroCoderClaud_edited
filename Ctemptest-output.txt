@@ -1,0 +1,612 @@
+
+> cc-desktop@1.7.74 test
+> vitest run --reporter=verbose tests/main/feishu-bridge.test.js
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mC:/workspace/develop/HydroCoder/cc-desktop[39m
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mbinds a proactive Feishu target and reuses the same session on the first reply
+[22m[39m[AgentSession] Created session 450e0031-c85e-4849-a07d-010395ae3f64, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-7ICFtZ
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"450e0031-c85e-4849-a07d-010395ae3f64","targetType":"p2p"}
+[FeishuBridge] _ensureSession: {"mapKey":"ou_target:oc_reply","chatType":"p2p","senderId":"ou_target","chatId":"oc_reply","sessionMapKeys":["ou_target:null"],"sessionMapSize":1}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_target:oc_reply","sessionId":null}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mreuses the proactively bound session on first p2p reply even after in-memory Feishu target mapping is lost
+[22m[39m[AgentSession] Created session 1519fe1d-dee0-4cf9-84eb-cd393d9fd888, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-7aGEBS
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"1519fe1d-dee0-4cf9-84eb-cd393d9fd888","targetType":"p2p"}
+[FeishuBridge] _ensureSession: {"mapKey":"ou_target:oc_reply","chatType":"p2p","senderId":"ou_target","chatId":"oc_reply","sessionMapKeys":["ou_target:null"],"sessionMapSize":1}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_target:oc_reply","sessionId":null}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mswitches the active Feishu reply binding to the latest desktop session for the same user
+[22m[39m[AgentSession] Created session f8f18c9c-800c-47ec-8f73-a8b3db3a7297, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-fWABbI
+[AgentSession] Created session 38bf2d14-e43d-40ce-9227-618f7a7f7851, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-fWABbI
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"f8f18c9c-800c-47ec-8f73-a8b3db3a7297","targetType":"p2p"}
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"38bf2d14-e43d-40ce-9227-618f7a7f7851","targetType":"p2p"}
+[FeishuBridge] _ensureSession: {"mapKey":"ou_target:oc_reply","chatType":"p2p","senderId":"ou_target","chatId":"oc_reply","sessionMapKeys":["ou_target:null"],"sessionMapSize":1}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_target:oc_reply","sessionId":null}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mswitches active Feishu replies when the old inbound session only has a chat map
+[22m[39m[AgentSession] Created session 6177fafa-3537-4f21-8adc-2e4c056edb54, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-n0hfTf
+[AgentSession] Created session fb1cbded-ad11-4565-94dc-5ac8bec5d663, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-n0hfTf
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"fb1cbded-ad11-4565-94dc-5ac8bec5d663","targetType":"p2p"}
+[FeishuBridge] _ensureSession: {"mapKey":"ou_target:oc_reply","chatType":"p2p","senderId":"ou_target","chatId":"oc_reply","sessionMapKeys":["ou_target:null"],"sessionMapSize":1}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_target:oc_reply","sessionId":null}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2monly clears the old p2p map key when rebinding the same Feishu user to a newer desktop session
+[22m[39m[AgentSession] Created session bc62767d-4c5d-4985-8251-3412797cefa8, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-gniFlX
+[AgentSession] Created session 6eb51b1d-a032-49fc-9bb9-c5f155e6e700, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-gniFlX
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"bc62767d-4c5d-4985-8251-3412797cefa8","targetType":"p2p"}
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"6eb51b1d-a032-49fc-9bb9-c5f155e6e700","targetType":"p2p"}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mclears Feishu inbound routing state after unbinding a proactively bound session
+[22m[39m[AgentSession] Created session 7a1e5998-cfb9-4ef9-828b-c94d9c4ec6cd, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-pUzhrj
+[FeishuBridge] unbindTarget result: {
+  sessionId: [32m'7a1e5998-cfb9-4ef9-828b-c94d9c4ec6cd'[39m,
+  hasSessionTarget: [33mfalse[39m,
+  hasSessionIdentity: [33mfalse[39m,
+  bindingAfter: [1mnull[22m
+}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mdoes not auto-rebind the same Feishu user after manual unbind
+[22m[39m[AgentSession] Created session e811d4ba-93ce-40a9-9026-edb9538ffff5, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-Rm1399
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"e811d4ba-93ce-40a9-9026-edb9538ffff5","targetType":"p2p"}
+[FeishuBridge] unbindTarget result: {
+  sessionId: [32m'e811d4ba-93ce-40a9-9026-edb9538ffff5'[39m,
+  hasSessionTarget: [33mfalse[39m,
+  hasSessionIdentity: [33mfalse[39m,
+  bindingAfter: [1mnull[22m
+}
+[FeishuBridge] _ensureSession: {"mapKey":"ou_target:ou_target","chatType":"p2p","senderId":"ou_target","chatId":"ou_target","sessionMapKeys":[],"sessionMapSize":0}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_target:ou_target","sessionId":null}
+[AgentSession] Created session 4634c699-1b4a-42b5-8d4c-0f7ea6f025f7, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-Rm1399\feishu\conv-4634c699
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mdoes not lock a session to Feishu when the proactive send fails
+[22m[39m[AgentSession] Created session 3f0d6b9f-8cc8-483e-b66a-8f6c930a7e23, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-K95eOA
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mpersists the proactive Feishu target identity when binding a normal session
+[22m[39m[AgentSession] Created session f91bb58a-2820-456d-b0ac-12098f0ae2af, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-Mgp4ZQ
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"f91bb58a-2820-456d-b0ac-12098f0ae2af"}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mlocks a normal session to Feishu after first proactive send
+[22m[39m[AgentSession] Created session 20f24eb0-8e40-46e3-b776-87b1975495ee, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-Vgwqfa
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"20f24eb0-8e40-46e3-b776-87b1975495ee","targetType":"p2p"}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mrejects sending a Feishu-bound session to another target before network send
+[22m[39m[AgentSession] Created session 8c8eaa6f-0336-4fde-ac19-bfad3db7740a, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-KSvrei
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target_1:null","sessionId":"8c8eaa6f-0336-4fde-ac19-bfad3db7740a"}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mrejects rebinding a persisted Feishu target after in-memory binding is lost
+[22m[39m[AgentSession] Created session c247d1f4-3273-4843-a909-d09e06b65767, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-HB4KjO
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mrestores a persisted Feishu target binding for toolbar filtering after memory is lost
+[22m[39m[AgentSession] Created session c0d9150c-27fa-4f69-9516-cd6befe9b383, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-TE4Izu
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mkeeps the persisted Feishu target available after /close clears in-memory binding
+[22m[39m[AgentSession] Created session b2ce1809-556c-4d32-b38e-0da43868a652, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-nQnuXb
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"b2ce1809-556c-4d32-b38e-0da43868a652"}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mrestores Feishu target binding after the session database is injected later
+[22m[39m[AgentSession] Created session 9bb6d032-a3f6-477d-ac9b-b093cdd4156f, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-NBXetV
+
+[90mstderr[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mkeeps Feishu target names empty instead of falling back to openId
+[22m[39m[FeishuBridge] Failed to hydrate proactive target name: {"openId":"ou_target","error":"Feishu credentials not configured"}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mdownloads inbound Feishu images and forwards the message to Agent when there is no history
+[22m[39m[FeishuBridge] _ensureSession: {"mapKey":"ou_xxx:oc_xxx","chatType":"p2p","senderId":"ou_xxx","chatId":"oc_xxx","sessionMapKeys":[],"sessionMapSize":0}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_xxx:oc_xxx","sessionId":null}
+[AgentSession] Created session cf56b93d-4fb3-4aa3-87f4-8d869890b483, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-shNy3u\feishu\conv-cf56b93d
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"cf56b93d-4fb3-4aa3-87f4-8d869890b483","chatType":"p2p","imagesCount":1}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mskips hydrate and display-name resolution for duplicate Feishu message ids
+[22m[39m[FeishuBridge] notify frontend messageReceived: {"sessionId":"s-dup","chatType":"p2p","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2muses readable sender and chat names for default Feishu session titles
+[22m[39m[info]: [ [32m'client ready'[39m ]
+[FeishuBridge] _ensureSession: {"mapKey":"ou_xxx:oc_xxx","chatType":"p2p","senderId":"ou_xxx","chatId":"oc_xxx","sessionMapKeys":[],"sessionMapSize":0}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_xxx:oc_xxx","sessionId":null}
+[AgentSession] Created session 49f929a9-c0a2-42a4-ba41-6d7138472658, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-npbzTC\feishu\conv-49f929a9
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"49f929a9-c0a2-42a4-ba41-6d7138472658","chatType":"p2p","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mignores placeholder Feishu ids when resolving display names
+[22m[39m[info]: [ [32m'client ready'[39m ]
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mforwards inbound Feishu post text and images instead of treating them as empty
+[22m[39m[FeishuBridge] _ensureSession: {"mapKey":"ou_xxx:oc_xxx","chatType":"p2p","senderId":"ou_xxx","chatId":"oc_xxx","sessionMapKeys":[],"sessionMapSize":0}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_xxx:oc_xxx","sessionId":null}
+[AgentSession] Created session ff87dea5-6ddb-4972-8aa1-66ae67b21d6e, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-87dhSR\feishu\conv-ff87dea5
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"ff87dea5-6ddb-4972-8aa1-66ae67b21d6e","chatType":"p2p","imagesCount":1}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mpropagates Feishu startup failures so the caller can treat start as failed
+[22m[39m[info]: [ [32m'client ready'[39m ]
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mreopens mapped Feishu session from agent conversation record instead of creating a new one
+[22m[39m[FeishuBridge] _ensureSession: {"mapKey":"ou_xxx:oc_xxx","chatType":"p2p","senderId":"ou_xxx","chatId":"oc_xxx","sessionMapKeys":["ou_xxx:oc_xxx"],"sessionMapSize":1}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_xxx:oc_xxx","sessionId":"live-db-session"}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2msends desktop intervention images back to Feishu on agent result
+[22m[39m[AgentSession] Created session 6f4fd271-a654-4e91-a752-685b96c4b7cd, type: feishu, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-IaMcv1
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mtreats a bound chat session like a Feishu desktop intervention target
+[22m[39m[AgentSession] Created session 679c5dda-73e3-4cc6-999c-e48c55bc0f78, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-vQY9kV
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"679c5dda-73e3-4cc6-999c-e48c55bc0f78"}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mforwards desktop intervention for a proactively bound Feishu P2P session
+[22m[39m[AgentSession] Created session 6271419a-c5d4-4ca3-b9ee-424e62fcf8d9, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-nhYtXV
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"6271419a-c5d4-4ca3-b9ee-424e62fcf8d9"}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mdoes not forward Feishu desktop intervention for a reopened history session without current chat mapping
+[22m[39m[AgentSession] Created session 7db8d5d4-b690-4dbd-9ed0-042e81ffa39d, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-mbNy2A
+[AgentSession] Created session 5bf266a4-d24f-4e9c-bdff-f256b74a5cb0, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-mbNy2A
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"7db8d5d4-b690-4dbd-9ed0-042e81ffa39d","targetType":"p2p"}
+[FeishuBridge] Desktop intervention blocked for session 5bf266a4-d24f-4e9c-bdff-f256b74a5cb0: not current connected session
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mblocks desktop intervention from an older Feishu session after rebinding the same user
+[22m[39m[AgentSession] Created session b1607041-6c1e-4718-b5a9-3569132b44a8, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-1aF4MU
+[AgentSession] Created session 635cf071-0919-4fd1-9682-b9adc1230621, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-1aF4MU
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"b1607041-6c1e-4718-b5a9-3569132b44a8","targetType":"p2p"}
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_target:null","sessionId":"635cf071-0919-4fd1-9682-b9adc1230621","targetType":"p2p"}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mrenames the active Feishu session
+[22m[39m[AgentSession] Created session 510a4fbf-1ab2-4be0-9236-896bbf7eada5, type: feishu, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-ItqGyX
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mhydrates missing group-chat mention metadata from message detail before command parsing
+[22m[39m[FeishuBridge] hydrated inbound event: {"msgId":"om_group_rename_missing_mentions","hydratedMentionCount":1,"hydratedTextLength":21}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mforwards cleaned group-chat text to the desktop frontend without the mention prefix
+[22m[39m[FeishuBridge] _ensureSession: {"mapKey":"oc_group","chatType":"chat","senderId":"ou_group","chatId":"oc_group","sessionMapKeys":[],"sessionMapSize":0}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"oc_group","sessionId":null}
+[AgentSession] Created session 76b4f942-891c-40cc-bf30-c21f1576c0ac, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-72YSoL\feishu\conv-76b4f942
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"76b4f942-891c-40cc-bf30-c21f1576c0ac","chatType":"chat","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mstrips only the robot mention.key token from group-chat text
+[22m[39m[FeishuBridge] _ensureSession: {"mapKey":"oc_group","chatType":"chat","senderId":"ou_group","chatId":"oc_group","sessionMapKeys":[],"sessionMapSize":0}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"oc_group","sessionId":null}
+[AgentSession] Created session 8a818e07-522f-4f83-b342-e2c15554f2cf, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-xplLaf\feishu\conv-8a818e07
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"8a818e07-522f-4f83-b342-e2c15554f2cf","chatType":"chat","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mreplaces non-robot placeholder mentions with display names in group-chat text
+[22m[39m[FeishuBridge] _ensureSession: {"mapKey":"oc_group","chatType":"chat","senderId":"ou_group","chatId":"oc_group","sessionMapKeys":[],"sessionMapSize":0}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"oc_group","sessionId":null}
+[AgentSession] Created session 3b695c33-c5af-4207-a5fa-84a9b8559fd0, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-Skwjh2\feishu\conv-3b695c33
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"3b695c33-c5af-4207-a5fa-84a9b8559fd0","chatType":"chat","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mtreats runtime Feishu group mentions with object ids as robot mentions
+[22m[39m[FeishuBridge] _ensureSession: {"mapKey":"oc_group","chatType":"group","senderId":"ou_group","chatId":"oc_group","sessionMapKeys":[],"sessionMapSize":0}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"oc_group","sessionId":null}
+[AgentSession] Created session 2470df9c-3d44-4248-9071-457404d85b57, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-EeXhGB\feishu\conv-2470df9c
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"2470df9c-3d44-4248-9071-457404d85b57","chatType":"group","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mhydrates missing group-chat mention metadata from message detail before forwarding text
+[22m[39m[FeishuBridge] hydrated inbound event: {"msgId":"om_group_text_missing_mentions","hydratedMentionCount":1,"hydratedTextLength":11}
+[FeishuBridge] _ensureSession: {"mapKey":"oc_group","chatType":"chat","senderId":"ou_group","chatId":"oc_group","sessionMapKeys":[],"sessionMapSize":0}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"oc_group","sessionId":null}
+[AgentSession] Created session 139c9af6-4aa5-4a53-aa5c-7e5ddeabaa4d, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-Qmfi0C\feishu\conv-139c9af6
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"139c9af6-4aa5-4a53-aa5c-7e5ddeabaa4d","chatType":"chat","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mdoes not strip non-robot mentions from group-chat text
+[22m[39m[FeishuBridge] _ensureSession: {"mapKey":"oc_group","chatType":"chat","senderId":"ou_group","chatId":"oc_group","sessionMapKeys":[],"sessionMapSize":0}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"oc_group","sessionId":null}
+[AgentSession] Created session 26341042-c4cd-4ec1-b6b4-49383ceb6085, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-Hrr7b9\feishu\conv-26341042
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"26341042-c4cd-4ec1-b6b4-49383ceb6085","chatType":"chat","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mrejects /close with numbered arguments for Feishu
+[22m[39m[AgentSession] Created session d5eb747d-290d-4163-9190-6328a67056aa, type: feishu, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-YdTdUo
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mcreates a new Feishu session with /new
+[22m[39m[AgentSession] Created session 0fff2ac9-1f31-47ef-b71b-6c3361261d77, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-v4XXJv\feishu\conv-0fff2ac9
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2muses readable sender and chat names when creating a new Feishu session with /new
+[22m[39m[info]: [ [32m'client ready'[39m ]
+[AgentSession] Created session 2a4d69c2-313e-4b69-81a1-9270e95e1557, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-snGeXB\feishu\conv-2a4d69c2
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mcreates a new Feishu session under a requested relative directory with /new [目录]
+[22m[39m[AgentSession] Created session 8a5b652d-e6ff-4f8e-b327-3820f7cdb719, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-2v3hYb\feishu\项目A
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mignores trailing mention tokens in /new command arguments
+[22m[39m[AgentSession] Created session 168afcf2-6009-42fb-873f-e35a791e2409, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-u97zQ5\feishu\项目A @机器人
+
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mbroadcasts disabled status when Feishu bridge is stopped
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mbinds a proactive Feishu target and reuses the same session on the first reply
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mreuses the proactively bound session on first p2p reply even after in-memory Feishu target mapping is lost
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mswitches the active Feishu reply binding to the latest desktop session for the same user
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mswitches active Feishu replies when the old inbound session only has a chat map
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22monly clears the old p2p map key when rebinding the same Feishu user to a newer desktop session
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mclears Feishu inbound routing state after unbinding a proactively bound session
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdoes not auto-rebind the same Feishu user after manual unbind
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdoes not lock a session to Feishu when the proactive send fails
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mpersists the proactive Feishu target identity when binding a normal session
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mlocks a normal session to Feishu after first proactive send
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mrejects sending a Feishu-bound session to another target before network send
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mrejects rebinding a persisted Feishu target after in-memory binding is lost
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mrestores a persisted Feishu target binding for toolbar filtering after memory is lost
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mkeeps the persisted Feishu target available after /close clears in-memory binding
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mrestores Feishu target binding after the session database is injected later
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mkeeps Feishu target names empty instead of falling back to openId
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mhydrates Feishu proactive target names from user detail when list results only contain openId
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdownloads inbound Feishu images and forwards the message to Agent when there is no history
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mskips hydrate and display-name resolution for duplicate Feishu message ids
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22muses readable sender and chat names for default Feishu session titles
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mignores placeholder Feishu ids when resolving display names
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mforwards inbound Feishu post text and images instead of treating them as empty
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mreplies with an explicit notice for unsupported Feishu message types
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mpropagates Feishu startup failures so the caller can treat start as failed
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mclears pending Feishu replay state on stop
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mtreats non-numeric text as history-choice input while a pending choice exists
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mreopens mapped Feishu session from agent conversation record instead of creating a new one
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22msends desktop intervention images back to Feishu on agent result
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mtreats a bound chat session like a Feishu desktop intervention target
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mforwards desktop intervention for a proactively bound Feishu P2P session
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdoes not forward Feishu desktop intervention for a reopened history session without current chat mapping
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mblocks desktop intervention from an older Feishu session after rebinding the same user
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mrenames the active Feishu session
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mtreats group-chat mention commands as commands instead of forwarding them into the conversation
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mhydrates missing group-chat mention metadata from message detail before command parsing
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mforwards cleaned group-chat text to the desktop frontend without the mention prefix
+ [31m×[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mstrips only the robot mention.key token from group-chat text
+[31m   → expected "_enqueueMessage" to be called with arguments: [ …(5) ][90m
+
+Received: 
+
+[1m  1st _enqueueMessage call:
+
+[22m[2m  Array [[22m
+[2m    "8a818e07-522f-4f83-b342-e2c15554f2cf",[22m
+[2m    Object {[22m
+[2m      "images": undefined,[22m
+[32m-     "text": "你好 @张三",[90m
+[31m+     "text": "你好",[90m
+[2m    },[22m
+[2m    "ou_group",[22m
+[2m    "oc_group",[22m
+[2m    "chat",[22m
+[2m  ][22m
+[31m[90m
+
+Number of calls: [1m1[22m
+[31m[39m
+ [31m×[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mreplaces non-robot placeholder mentions with display names in group-chat text
+[31m   → expected "_enqueueMessage" to be called with arguments: [ …(5) ][90m
+
+Received: 
+
+[1m  1st _enqueueMessage call:
+
+[22m[2m  Array [[22m
+[2m    "3b695c33-c5af-4207-a5fa-84a9b8559fd0",[22m
+[2m    Object {[22m
+[2m      "images": undefined,[22m
+[32m-     "text": "@张越胜 你好",[90m
+[31m+     "text": "你好",[90m
+[2m    },[22m
+[2m    "ou_group",[22m
+[2m    "oc_group",[22m
+[2m    "chat",[22m
+[2m  ][22m
+[31m[90m
+
+Number of calls: [1m1[22m
+[31m[39m
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mtreats runtime Feishu group mentions with object ids as robot mentions
+ [31m×[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mlearns robot mention ids after a name-based fallback match and reuses the stable id later
+[31m   → bridge._isRobotMention is not a function[39m
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mhydrates missing group-chat mention metadata from message detail before forwarding text
+ [31m×[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdoes not strip non-robot mentions from group-chat text
+[31m   → expected "_enqueueMessage" to be called with arguments: [ …(5) ][90m
+
+Received: 
+
+[1m  1st _enqueueMessage call:
+
+[22m[2m  Array [[22m
+[2m    "26341042-c4cd-4ec1-b6b4-49383ceb6085",[22m
+[2m    Object {[22m
+[2m      "images": undefined,[22m
+[32m-     "text": "@张三 请继续分析",[90m
+[31m+     "text": "请继续分析",[90m
+[2m    },[22m
+[2m    "ou_group",[22m
+[2m    "oc_group",[22m
+[2m    "chat",[22m
+[2m  ][22m
+[31m[90m
+
+Number of calls: [1m1[22m
+[31m[39m
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mrejects /close with numbered arguments for Feishu
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mcreates a new Feishu session with /new
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22muses readable sender and chat names when creating a new Feishu session with /new
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mcreates a new Feishu session under a requested relative directory with /new [目录]
+ [31m×[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mignores trailing mention tokens in /new command arguments
+[31m   → expected 'C:\Users\ynzys\AppData\Local\Temp\hyd…' to be 'C:\Users\ynzys\AppData\Local\Temp\hyd…' // Object.is equality[39m
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mrestores a historical Feishu session with /resume and auto-activates when needed
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdispatches slash commands with raw names to avoid API calls for display name resolution
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2msends an explicit Feishu error reply when agent processing fails
+[22m[39m[AgentSession] Created session 9924e878-f1f4-4f0e-8ac6-04c08acf7db4, type: feishu, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-v2qLER
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mstreams Feishu agent text chunks through the active collector sendChunk
+[22m[39m[AgentSession] Created session 65697f34-b649-4361-9714-9ca0989fcc89, type: feishu, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-ZBcHsK
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mdoes not duplicate a streamed Feishu reply when agentResult arrives immediately after the chunk
+[22m[39m[AgentSession] Created session 21f2529f-aa74-42bc-9e56-1ecf118d1878, type: feishu, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-aGf79E
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2msends Agent-generated image paths to Feishu after agent result
+[22m[39m[AgentSession] Created session 51636faa-90a8-4e9a-a3cc-1d12b34a869a, type: feishu, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-GkqKBb
+
+ [31m×[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mignores mention tokens embedded in /resume command arguments[33m 10008[2mms[22m[39m
+[31m   → Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mswitches to an already-activated historical Feishu session without auto-hello
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22msends an explicit Feishu error reply when agent processing fails
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mstreams Feishu agent text chunks through the active collector sendChunk
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdoes not duplicate a streamed Feishu reply when agentResult arrives immediately after the chunk
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22msends Agent-generated image paths to Feishu after agent result
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2msends Feishu images from standard tool_result file resources after agent result
+[22m[39m[AgentSession] Created session 74aa7dea-da38-440a-b5fe-79633b81c885, type: feishu, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-shQBuL
+
+[90mstderr[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2msends Feishu images from standard tool_result file resources after agent result
+[22m[39m[AgentSession] Failed to persist tool result: TypeError: this.sessionDatabase.updateAgentMessageToolOutput is not a function
+    at AgentSessionManager._processMessage [90m(C:\workspace\develop\HydroCoder\cc-desktop\[39msrc\main\agent-session-manager.js:2066:34[90m)[39m
+    at [90mC:\workspace\develop\HydroCoder\cc-desktop\[39mtests\main\feishu-bridge.test.js:2591:19
+    at [90mfile:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:533:5
+    at runTest [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1056:11[90m)[39m
+    at runSuite [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1205:15[90m)[39m
+    at runSuite [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1205:15[90m)[39m
+    at runFiles [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1262:5[90m)[39m
+    at startTests [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1271:3[90m)[39m
+    at [90mfile:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4mvitest[24m/dist/chunks/runBaseTests.3qpJUEJM.js:126:11
+    at withEnv [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4mvitest[24m/dist/chunks/runBaseTests.3qpJUEJM.js:90:5[90m)[39m
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mdoes not send duplicate Feishu images when tool_use and normalized tool_result reference the same file
+[22m[39m[AgentSession] Created session e860bfeb-7ea4-4701-be59-d6d7f0d3d061, type: feishu, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-snk1GR
+
+[90mstderr[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mdoes not send duplicate Feishu images when tool_use and normalized tool_result reference the same file
+[22m[39m[AgentSession] Failed to persist tool result: TypeError: this.sessionDatabase.updateAgentMessageToolOutput is not a function
+    at AgentSessionManager._processMessage [90m(C:\workspace\develop\HydroCoder\cc-desktop\[39msrc\main\agent-session-manager.js:2066:34[90m)[39m
+    at [90mC:\workspace\develop\HydroCoder\cc-desktop\[39mtests\main\feishu-bridge.test.js:2673:19
+    at [90mfile:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:533:5
+    at runTest [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1056:11[90m)[39m
+    at runSuite [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1205:15[90m)[39m
+    at runSuite [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1205:15[90m)[39m
+    at runFiles [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1262:5[90m)[39m
+    at startTests [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1271:3[90m)[39m
+    at [90mfile:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4mvitest[24m/dist/chunks/runBaseTests.3qpJUEJM.js:126:11
+    at withEnv [90m(file:///C:/workspace/develop/HydroCoder/cc-desktop/[39mnode_modules/[4mvitest[24m/dist/chunks/runBaseTests.3qpJUEJM.js:90:5[90m)[39m
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mkeeps the newly created Feishu session mapped after replying 0 to the text history-choice menu
+[22m[39m[AgentSession] Created session 05e17c1a-a728-45cb-81b9-f6b2ad8e91b7, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-dgoRoI\feishu\conv-05e17c1a
+[FeishuBridge] _ensureSession: {"mapKey":"ou_xxx:oc_xxx","chatType":"p2p","senderId":"ou_xxx","chatId":"oc_xxx","sessionMapKeys":["ou_xxx:oc_xxx"],"sessionMapSize":1}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_xxx:oc_xxx","sessionId":"05e17c1a-a728-45cb-81b9-f6b2ad8e91b7"}
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"05e17c1a-a728-45cb-81b9-f6b2ad8e91b7","chatType":"p2p","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mignores a stale pending choice when the Feishu mapKey already has an active session
+[22m[39m[FeishuBridge] _ensureSession: {"mapKey":"ou_xxx:oc_xxx","chatType":"p2p","senderId":"ou_xxx","chatId":"oc_xxx","sessionMapKeys":["ou_xxx:oc_xxx"],"sessionMapSize":1}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_xxx:oc_xxx","sessionId":"hist-1"}
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"hist-1","chatType":"p2p","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mignores a stale pending choice when the Feishu user is proactively bound to a session
+[22m[39m[AgentSession] Created session 9f57fc47-0d5b-42e2-8b60-6a43a38208ad, type: chat, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-pE2QZx
+[FeishuBridge] bindTarget sessionMap set: {"bindMapKey":"ou_xxx:null","sessionId":"9f57fc47-0d5b-42e2-8b60-6a43a38208ad","targetType":"p2p"}
+[FeishuBridge] _ensureSession: {"mapKey":"ou_xxx:oc_xxx","chatType":"p2p","senderId":"ou_xxx","chatId":"oc_xxx","sessionMapKeys":["ou_xxx:null","ou_xxx:oc_xxx"],"sessionMapSize":2}
+[FeishuBridge] _ensureSession resolveStrict: {"mapKey":"ou_xxx:oc_xxx","sessionId":"9f57fc47-0d5b-42e2-8b60-6a43a38208ad"}
+[FeishuBridge] notify frontend messageReceived: {"sessionId":"9f57fc47-0d5b-42e2-8b60-6a43a38208ad","chatType":"p2p","imagesCount":0}
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuBridge[2m > [22m[2mdoes not rebind another same-chat session before rename when there is no current connection
+[22m[39m[AgentSession] Created session 3947063c-fedb-4031-bf10-ddda477a1032, type: feishu, cwd: C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-pnhnRB
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuEventClient[2m > [22m[2mextracts text and image keys from direct-array post content
+[22m[39m[FeishuEventClient] event_type: im.message.receive_v1 message_type: post
+[FeishuEventClient] Emitting message
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuEventClient[2m > [22m[2mmarks unsupported Feishu message types explicitly
+[22m[39m[FeishuEventClient] event_type: im.message.receive_v1 message_type: file
+[FeishuEventClient] Emitting message
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuEventClient[2m > [22m[2mpreserves robot mention metadata and leaves text untouched before bridge-level normalization
+[22m[39m[FeishuEventClient] event_type: im.message.receive_v1 message_type: text
+[FeishuEventClient] Emitting message
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuEventClient[2m > [22m[2mextracts top-level mention metadata from text messages
+[22m[39m[FeishuEventClient] event_type: im.message.receive_v1 message_type: text
+[FeishuEventClient] Emitting message
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuEventClient[2m > [22m[2mextracts post mentions from group messages
+[22m[39m[FeishuEventClient] event_type: im.message.receive_v1 message_type: post
+[FeishuEventClient] Emitting message
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuMessageAPI[2m > [22m[2mreturns image_key from the SDK top-level upload response
+[22m[39m[info]: [ [32m'client ready'[39m ]
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuMessageAPI[2m > [22m[2mkeeps the nested upload response fallback for alternate clients
+[22m[39m[info]: [ [32m'client ready'[39m ]
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuMessageAPI[2m > [22m[2mdownloads message images from the SDK stream wrapper
+[22m[39m[info]: [ [32m'client ready'[39m ]
+
+[90mstdout[2m | tests/main/feishu-bridge.test.js[2m > [22m[2mFeishuMessageAPI[2m > [22m[2mloads user display names through the basicBatch endpoint
+[22m[39m[info]: [ [32m'client ready'[39m ]
+
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22msends Feishu images from standard tool_result file resources after agent result
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdoes not send duplicate Feishu images when tool_use and normalized tool_result reference the same file
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mremoves temporary Feishu image files and directories after forwarding desktop images
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdoes not fall back to legacy title matching for old Feishu history records without stored identity columns
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mre-sends the choice menu when replying with an invalid history selection
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mreplays the pending user message to the desktop frontend after choosing a historical session
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mreports already-connected when /resume targets the current activated session
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mkeeps the newly created Feishu session mapped after replying 0 to the text history-choice menu
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mignores a stale pending choice when the Feishu mapKey already has an active session
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mignores a stale pending choice when the Feishu user is proactively bound to a session
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdoes not rebind another same-chat session before rename when there is no current connection
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mbuilds a DingTalk-style Feishu history choice menu with markers and metadata
+ [31m×[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mnormalizes Feishu command text by removing standalone mention tokens from arguments
+[31m   → expected '/new 项目A @机器人' to be '/new 项目A' // Object.is equality[39m
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mImSessionMapper[2m > [22mqueries history sessions with IM type isolation when database supports it
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mImSessionMapper[2m > [22mtreats agent conversation records as the source of truth for active external IM sessions
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mImSessionMapper[2m > [22mdoes not fall back to conversation_id-only legacy Feishu history rows
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mImSessionMapper[2m > [22mdoes not include proactively sent p2p Feishu sessions in history before new chatId metadata exists
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mImSessionMapper[2m > [22mreturns only exact new-field Feishu history even when proactive p2p rows also exist
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mImSessionMapper[2m > [22mignores conversation-only legacy Feishu rows for p2p history when exact new-field rows are absent
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mImSessionMapper[2m > [22mdrops stale Feishu map bindings when the database lookup throws
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuEventClient[2m > [22mextracts image_key from JSON content for image messages
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuEventClient[2m > [22mextracts text and image keys from direct-array post content
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuEventClient[2m > [22mmarks unsupported Feishu message types explicitly
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuEventClient[2m > [22mpreserves robot mention metadata and leaves text untouched before bridge-level normalization
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuEventClient[2m > [22mextracts top-level mention metadata from text messages
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuEventClient[2m > [22mextracts post mentions from group messages
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuEventClient[2m > [22mtransitions to disconnected state when Feishu connection is lost
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuMessageAPI[2m > [22mreturns image_key from the SDK top-level upload response
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuMessageAPI[2m > [22mkeeps the nested upload response fallback for alternate clients
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuMessageAPI[2m > [22mdownloads message images from the SDK stream wrapper
+ [32m✓[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuMessageAPI[2m > [22mloads user display names through the basicBatch endpoint
+
+[31m⎯⎯⎯⎯⎯⎯⎯[1m[7m Failed Tests 7 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mstrips only the robot mention.key token from group-chat text
+[31m[1mAssertionError[22m: expected "_enqueueMessage" to be called with arguments: [ …(5) ][90m
+
+Received: 
+
+[1m  1st _enqueueMessage call:
+
+[22m[2m  Array [[22m
+[2m    "8a818e07-522f-4f83-b342-e2c15554f2cf",[22m
+[2m    Object {[22m
+[2m      "images": undefined,[22m
+[32m-     "text": "你好 @张三",[90m
+[31m+     "text": "你好",[90m
+[2m    },[22m
+[2m    "ou_group",[22m
+[2m    "oc_group",[22m
+[2m    "chat",[22m
+[2m  ][22m
+[31m[90m
+
+Number of calls: [1m1[22m
+[31m[39m
+[36m [2m❯[22m tests/main/feishu-bridge.test.js:[2m1577:28[22m[39m
+    [90m1575| [39m    const session = Array.from(manager.sessions.values())[0]
+    [90m1576| [39m    expect(session).toBeTruthy()
+    [90m1577| [39m    expect(enqueueMessage).toHaveBeenCalledWith(
+    [90m   | [39m                           [31m^[39m
+    [90m1578| [39m      session.id,
+    [90m1579| [39m      { text: '你好 @张三', images: undefined },
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mreplaces non-robot placeholder mentions with display names in group-chat text
+[31m[1mAssertionError[22m: expected "_enqueueMessage" to be called with arguments: [ …(5) ][90m
+
+Received: 
+
+[1m  1st _enqueueMessage call:
+
+[22m[2m  Array [[22m
+[2m    "3b695c33-c5af-4207-a5fa-84a9b8559fd0",[22m
+[2m    Object {[22m
+[2m      "images": undefined,[22m
+[32m-     "text": "@张越胜 你好",[90m
+[31m+     "text": "你好",[90m
+[2m    },[22m
+[2m    "ou_group",[22m
+[2m    "oc_group",[22m
+[2m    "chat",[22m
+[2m  ][22m
+[31m[90m
+
+Number of calls: [1m1[22m
+[31m[39m
+[36m [2m❯[22m tests/main/feishu-bridge.test.js:[2m1612:28[22m[39m
+    [90m1610| [39m    const session = Array.from(manager.sessions.values())[0]
+    [90m1611| [39m    expect(session).toBeTruthy()
+    [90m1612| [39m    expect(enqueueMessage).toHaveBeenCalledWith(
+    [90m   | [39m                           [31m^[39m
+    [90m1613| [39m      session.id,
+    [90m1614| [39m      { text: '@张越胜 你好', images: undefined },
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mlearns robot mention ids after a name-based fallback match and reuses the stable id later
+[31m[1mTypeError[22m: bridge._isRobotMention is not a function[39m
+[36m [2m❯[22m tests/main/feishu-bridge.test.js:[2m1669:19[22m[39m
+    [90m1667| [39m    manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
+    [90m1668| [39m
+    [90m1669| [39m    expect(bridge._isRobotMention({
+    [90m   | [39m                  [31m^[39m
+    [90m1670| [39m      key: '@_user_1',
+    [90m1671| [39m      name: 'Hydro Desktop',
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mdoes not strip non-robot mentions from group-chat text
+[31m[1mAssertionError[22m: expected "_enqueueMessage" to be called with arguments: [ …(5) ][90m
+
+Received: 
+
+[1m  1st _enqueueMessage call:
+
+[22m[2m  Array [[22m
+[2m    "26341042-c4cd-4ec1-b6b4-49383ceb6085",[22m
+[2m    Object {[22m
+[2m      "images": undefined,[22m
+[32m-     "text": "@张三 请继续分析",[90m
+[31m+     "text": "请继续分析",[90m
+[2m    },[22m
+[2m    "ou_group",[22m
+[2m    "oc_group",[22m
+[2m    "chat",[22m
+[2m  ][22m
+[31m[90m
+
+Number of calls: [1m1[22m
+[31m[39m
+[36m [2m❯[22m tests/main/feishu-bridge.test.js:[2m1752:28[22m[39m
+    [90m1750| [39m    const session = Array.from(manager.sessions.values())[0]
+    [90m1751| [39m    expect(session).toBeTruthy()
+    [90m1752| [39m    expect(enqueueMessage).toHaveBeenCalledWith(
+    [90m   | [39m                           [31m^[39m
+    [90m1753| [39m      session.id,
+    [90m1754| [39m      { text: '@张三 请继续分析', images: undefined },
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mignores trailing mention tokens in /new command arguments
+[31m[1mAssertionError[22m: expected 'C:\Users\ynzys\AppData\Local\Temp\hyd…' to be 'C:\Users\ynzys\AppData\Local\Temp\hyd…' // Object.is equality[39m
+
+Expected: [32m"C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-u97zQ5\feishu\项目A"[39m
+Received: [31m"C:\Users\ynzys\AppData\Local\Temp\hydro-feishu-bridge-u97zQ5\feishu\项目A[7m @机器人[27m"[39m
+
+[36m [2m❯[22m tests/main/feishu-bridge.test.js:[2m2080:25[22m[39m
+    [90m2078| [39m
+    [90m2079| [39m    const session = Array.from(manager.sessions.values())[0]
+    [90m2080| [39m    expect(session.cwd).toBe(path.join(tempDir, 'feishu', '项目A'))
+    [90m   | [39m                        [31m^[39m
+    [90m2081| [39m    expect(fs.existsSync(session.cwd)).toBe(true)
+    [90m2082| [39m  })
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mignores mention tokens embedded in /resume command arguments
+[31m[1mError[22m: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/main/feishu-bridge.test.js[2m > [22mFeishuBridge[2m > [22mnormalizes Feishu command text by removing standalone mention tokens from arguments
+[31m[1mAssertionError[22m: expected '/new 项目A @机器人' to be '/new 项目A' // Object.is equality[39m
+
+Expected: [32m"/new 项目A"[39m
+Received: [31m"/new 项目A[7m @机器人[27m"[39m
+
+[36m [2m❯[22m tests/main/feishu-bridge.test.js:[2m3658:101[22m[39m
+    [90m3656| [39m    const chatContext = { chatType: 'chat' }
+    [90m3657| [39m    const robotMentions = [{ key: '@_user_1', name: '机器人', id: 'app…
+    [90m3658| [39m    expect(bridge._normalizeCommandText('/new 项目A @机器人', chatCont…
+    [90m   | [39m                                                                                                    [31m^[39m
+    [90m3659| [39m    expect(bridge._normalizeCommandText('/new 项目A@机器人', chatConte…
+    [90m3660| [39m    expect(bridge._normalizeCommandText('/resume @机器人 1', chatConte…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m7 failed[39m[22m[2m | [22m[1m[32m80 passed[39m[22m[2m | [22m[33m34 skipped[39m[90m (121)[39m
+[2m   Start at [22m 15:49:56
+[2m   Duration [22m 10.86s[2m (transform 148ms, setup 39ms, collect 271ms, tests 10.18s, environment 0ms, prepare 86ms)[22m
+

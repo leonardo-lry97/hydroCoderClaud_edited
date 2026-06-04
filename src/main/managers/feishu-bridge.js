@@ -91,8 +91,6 @@ class FeishuBridge {
     /** @type {Set<string>} mapKey values that should choose history before proactive p2p rebinding */
     this._proactiveRebindSuppressedKeys = new Set()
     this._activeSendChunks = new Map()
-    this._knownRobotMentionIds = new Set()
-
     this._agentListeners = null
     this._eventListeners = null
     this._msgIdCleanupTimer = null
@@ -152,7 +150,6 @@ class FeishuBridge {
     this._targetSessionMap.clear()
     this._proactiveRebindSuppressedKeys.clear()
     this._activeSendChunks.clear()
-    this._knownRobotMentionIds.clear()
   }
 
   async restart() { await this.stop(); return this.start() }
@@ -942,8 +939,7 @@ class FeishuBridge {
       chatType: context?.chatType,
       mentions: options?.mentions
     })
-    const commandText = this._stripRobotMentionArtifactsForCommandText(normalizedSourceText, options?.mentions)
-    const parts = commandText.trim().split(/\s+/).filter(Boolean)
+    const parts = normalizedSourceText.trim().split(/\s+/).filter(Boolean)
     if (parts.length === 0) return ''
     const [cmd, ...args] = parts
     return [cmd, ...args].join(' ').trim()
@@ -953,115 +949,30 @@ class FeishuBridge {
     if (typeof text !== 'string') return ''
     const trimmed = text.trim()
     if (!trimmed) return trimmed
-    const robotMentions = this._buildRobotMentionTokens(mentions)
-    const userMentions = this._buildNonRobotMentionReplacements(mentions)
-    if (robotMentions.length === 0) return trimmed
+    const tokens = this._buildAllMentionTokens(mentions)
+    if (tokens.length === 0) return trimmed
 
     let normalized = trimmed
-    for (const mention of robotMentions) {
-      if (!mention) continue
-      normalized = normalized.split(mention).join('')
-    }
-
-    for (const { key, display } of userMentions) {
-      if (!key || !display) continue
-      normalized = normalized.split(key).join(display)
+    for (const token of tokens) {
+      if (!token) continue
+      normalized = normalized.split(token).join('')
     }
 
     return normalized.replace(/\s+/g, ' ').trim()
   }
 
-  _buildRobotMentionTokens(mentions) {
+  _buildAllMentionTokens(mentions) {
     const result = new Set()
     if (!Array.isArray(mentions)) return []
-    for (const mention of mentions) {
-      if (!this._isRobotMention(mention)) continue
-      const key = typeof mention?.key === 'string' ? mention.key.trim() : ''
-      if (key) result.add(key.startsWith('@') ? key : `@${key}`)
-    }
-    return Array.from(result)
-  }
-
-  _buildNonRobotMentionReplacements(mentions) {
-    const result = []
-    if (!Array.isArray(mentions)) return result
     for (const mention of mentions) {
       if (!mention || typeof mention !== 'object') continue
-      if (this._isRobotMention(mention)) continue
       const key = typeof mention?.key === 'string' ? mention.key.trim() : ''
       const name = typeof mention?.name === 'string' ? mention.name.trim() : ''
-      if (!key || !name || !key.startsWith('@_user_')) continue
-      result.push({
-        key,
-        display: name.startsWith('@') ? name : `@${name}`
-      })
-    }
-    return result
-  }
-
-  _stripRobotMentionArtifactsForCommandText(text, mentions) {
-    if (typeof text !== 'string') return ''
-    let normalized = text
-    const robotMentionNames = this._buildRobotMentionNames(mentions)
-    for (const token of robotMentionNames) {
-      if (!token) continue
-      normalized = normalized.replace(new RegExp(`\\s*${this._escapeRegex(token)}\\s*`, 'g'), ' ')
-    }
-    return normalized.replace(/\s+/g, ' ').trim()
-  }
-
-  _buildRobotMentionNames(mentions) {
-    const result = new Set()
-    if (!Array.isArray(mentions)) return []
-    for (const mention of mentions) {
-      if (!this._isRobotMention(mention)) continue
-      const key = typeof mention?.key === 'string' ? mention.key.trim() : ''
-      const name = typeof mention?.name === 'string' ? mention.name.trim() : ''
-      if (key && !key.startsWith('@_user_')) {
-        result.add(key.startsWith('@') ? key : `@${key}`)
-      }
-      if (name) {
-        result.add(name.startsWith('@') ? name : `@${name}`)
-      }
+      if (key) result.add(key.startsWith('@') ? key : `@${key}`)
+      if (name) result.add(name.startsWith('@') ? name : `@${name}`)
     }
     return Array.from(result)
   }
-
-  _escapeRegex(value) {
-    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  }
-
-  _isRobotMention(mention) {
-    if (!mention || typeof mention !== 'object') return false
-    const ids = this._extractMentionIds(mention)
-    const id = ids[0] || ''
-    const idType = typeof mention.idType === 'string' ? mention.idType.trim().toLowerCase() : ''
-    const name = typeof mention.name === 'string' ? mention.name.trim() : ''
-    if (idType === 'app_id') return true
-    if (!!this.config?.appId && id === this.config.appId) return true
-    if (ids.some(candidate => this._knownRobotMentionIds.has(candidate))) return true
-    if (!/hydro\s*desktop/i.test(name)) return false
-    for (const candidate of ids) {
-      this._knownRobotMentionIds.add(candidate)
-    }
-    return true
-  }
-
-  _extractMentionIds(mention) {
-    if (!mention || typeof mention !== 'object') return []
-    const candidates = []
-    const directId = typeof mention.id === 'string' ? mention.id.trim() : ''
-    if (directId) candidates.push(directId)
-    if (mention.id && typeof mention.id === 'object') {
-      for (const value of [mention.id.open_id, mention.id.user_id, mention.id.union_id]) {
-        const normalized = typeof value === 'string' ? value.trim() : ''
-        if (normalized) candidates.push(normalized)
-      }
-    }
-    return Array.from(new Set(candidates))
-  }
-
-  // ─── 会话管理 ───
 
   async _ensureSession(identity, message, senderId, chatId, chatType) {
     this._syncSessionDatabase()

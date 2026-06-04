@@ -1553,7 +1553,7 @@ describe('FeishuBridge', () => {
     )).toBe(true)
   })
 
-  it('strips only the robot mention.key token from group-chat text', async () => {
+  it('strips all @mention tokens from group-chat text', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -1576,7 +1576,7 @@ describe('FeishuBridge', () => {
     expect(session).toBeTruthy()
     expect(enqueueMessage).toHaveBeenCalledWith(
       session.id,
-      { text: '你好 @张三', images: undefined },
+      { text: '你好', images: undefined },
       'ou_group',
       'oc_group',
       'chat'
@@ -1584,11 +1584,11 @@ describe('FeishuBridge', () => {
     expect(sent.some(item =>
       item.channel === 'feishu:messageReceived' &&
       item.data.sessionId === session.id &&
-      item.data.text === '你好 @张三'
+      item.data.text === '你好'
     )).toBe(true)
   })
 
-  it('replaces non-robot placeholder mentions with display names in group-chat text', async () => {
+  it('strips all @mention tokens including non-robot ones from group-chat text', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -1611,7 +1611,7 @@ describe('FeishuBridge', () => {
     expect(session).toBeTruthy()
     expect(enqueueMessage).toHaveBeenCalledWith(
       session.id,
-      { text: '@张越胜 你好', images: undefined },
+      { text: '你好', images: undefined },
       'ou_group',
       'oc_group',
       'chat'
@@ -1619,7 +1619,7 @@ describe('FeishuBridge', () => {
     expect(sent.some(item =>
       item.channel === 'feishu:messageReceived' &&
       item.data.sessionId === session.id &&
-      item.data.text === '@张越胜 你好'
+      item.data.text === '你好'
     )).toBe(true)
   })
 
@@ -1661,32 +1661,7 @@ describe('FeishuBridge', () => {
     )).toBe(true)
   })
 
-  it('learns robot mention ids after a name-based fallback match and reuses the stable id later', async () => {
-    const { configManager, manager, mainWindow } = createManager()
-    const bridge = new FeishuBridge(configManager, manager, mainWindow)
-    manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
-
-    expect(bridge._isRobotMention({
-      key: '@_user_1',
-      name: 'Hydro Desktop',
-      id: { open_id: 'ou_robot_open', union_id: 'on_robot_union', user_id: null },
-      idType: null
-    })).toBe(true)
-
-    expect(bridge._isRobotMention({
-      key: '@_user_1',
-      name: '别名变化了',
-      id: { open_id: 'ou_robot_open', union_id: 'on_robot_union', user_id: null },
-      idType: null
-    })).toBe(true)
-
-    expect(bridge._isRobotMention({
-      key: '@_user_9',
-      name: '张三',
-      id: { open_id: 'ou_user_9', union_id: 'on_user_9', user_id: null },
-      idType: null
-    })).toBe(false)
-  })
+  // _isRobotMention removed — all @mentions are stripped uniformly now
 
   it('hydrates missing group-chat mention metadata from message detail before forwarding text', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
@@ -1731,7 +1706,7 @@ describe('FeishuBridge', () => {
     )).toBe(true)
   })
 
-  it('does not strip non-robot mentions from group-chat text', async () => {
+  it('strips all @mentions including non-robot ones from group-chat text', async () => {
     const { configManager, manager, mainWindow, sent } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([])
@@ -1751,7 +1726,7 @@ describe('FeishuBridge', () => {
     expect(session).toBeTruthy()
     expect(enqueueMessage).toHaveBeenCalledWith(
       session.id,
-      { text: '@张三 请继续分析', images: undefined },
+      { text: '请继续分析', images: undefined },
       'ou_group',
       'oc_group',
       'chat'
@@ -1759,7 +1734,7 @@ describe('FeishuBridge', () => {
     expect(sent.some(item =>
       item.channel === 'feishu:messageReceived' &&
       item.data.sessionId === session.id &&
-      item.data.text === '@张三 请继续分析'
+      item.data.text === '请继续分析'
     )).toBe(true)
   })
 
@@ -3667,7 +3642,7 @@ describe('FeishuBridge', () => {
     expect(bridge._normalizeCommandText('/help @机器人', chatContext, { mentions: robotMentions })).toBe('/help')
     expect(bridge._normalizeCommandText('/rename 群聊测试@张三', chatContext, {
       mentions: [{ key: '@张三', name: '张三', id: 'ou_user', idType: 'open_id' }]
-    })).toBe('/rename 群聊测试@张三')
+    })).toBe('/rename 群聊测试')
   })
 })
 
