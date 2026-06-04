@@ -84,7 +84,8 @@ describe('FeishuBridge', () => {
       actionType: 'button',
       actionValue: { intent: 'resume', index: 2 },
       userId: 'ou_xxx',
-      chatId: 'oc_xxx'
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
     })
 
     expect(commandSpy).toHaveBeenCalledWith('/resume 2', expect.objectContaining({
@@ -794,7 +795,8 @@ describe('FeishuBridge', () => {
       actionType: 'button',
       actionValue: { command: 'status' },
       userId: 'ou_xxx',
-      chatId: 'oc_xxx'
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
     })
 
     expect(commandSpy).toHaveBeenCalledWith('/status', expect.any(Object), {
@@ -853,7 +855,8 @@ describe('FeishuBridge', () => {
       actionType: 'button',
       actionValue: { intent: 'resume', index: 1, source: 'history-choice' },
       userId: 'ou_xxx',
-      chatId: 'oc_xxx'
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
     })
 
     expect(commandSpy).toHaveBeenCalledWith(
@@ -877,7 +880,8 @@ describe('FeishuBridge', () => {
       actionType: 'button',
       actionValue: { command: 'resume' },
       userId: 'ou_xxx',
-      chatId: 'oc_xxx'
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
     })
 
     expect(commandSpy).toHaveBeenCalledWith('/resume', expect.any(Object), {
@@ -3681,10 +3685,11 @@ describe('ImSessionMapper', () => {
 
     const result = await mapper._queryHistorySessions({
       userId: 'ou_xxx',
-      chatId: 'oc_xxx'
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
     })
 
-    expect(getImSessionsByType).toHaveBeenCalledWith('feishu', 'ou_xxx', 'oc_xxx', 7)
+    expect(getImSessionsByType).toHaveBeenCalledWith('feishu', 'ou_xxx', '', 7)
     expect(result).toEqual([{ session_id: 'f-1', type: 'feishu' }])
   })
 
@@ -3728,7 +3733,8 @@ describe('ImSessionMapper', () => {
 
     const result = await mapper._queryHistorySessions({
       userId: 'ou_xxx',
-      chatId: 'oc_xxx'
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
     })
 
     expect(listAllAgentConversations).not.toHaveBeenCalled()

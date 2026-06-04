@@ -122,10 +122,9 @@ class ImSessionMapper {
   async _queryHistorySessions(identity) {
     if (this._sessionDatabase?.getImSessionsByType) {
       try {
-        const staffId = identity.staffId || identity.userId
-        // p2p/single 场景 im_chat_id 无独立语义，传空让 DB 不做 im_chat_id 过滤
-        // 群聊场景传真实 chatId 以区分同一用户在不同群的会话
         const isDirectChat = identity.chatType === 'p2p' || identity.chatType === 'single'
+        // p2p/single: 按 im_user_id 过滤；群聊: im_user_id 固定为空串，仅按 im_chat_id 过滤
+        const staffId = isDirectChat ? (identity.staffId || identity.userId || '') : ''
         const conversationId = isDirectChat
           ? ''
           : (identity.conversationId || identity.chatId || '')
@@ -192,12 +191,12 @@ class ImSessionMapper {
         },
       })
       if (session?.id && this._sessionDatabase?.updateImIdentity) {
-        // 复用钉钉的 staff_id/conversation_id 列存储 IM 身份
-        // userId → staff_id, chatId → conversation_id
         const staffId = identity.staffId || identity.userId || ''
         const conversationId = identity.conversationId || identity.chatId || ''
+        // 群聊 im_user_id 固定为空，仅靠 im_chat_id 标识
+        const isGroup = !!conversationId
         try {
-          this._sessionDatabase.updateImIdentity(session.id, { userId: staffId, chatId: conversationId, chatType: conversationId ? 'group' : 'p2p' })
+          this._sessionDatabase.updateImIdentity(session.id, { userId: isGroup ? '' : staffId, chatId: conversationId, chatType: isGroup ? 'group' : 'p2p' })
         } catch (e) {
           console.warn(`[ImSessionMapper] Failed to save IM identity metadata:`, e.message)
         }
