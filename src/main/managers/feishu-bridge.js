@@ -317,6 +317,25 @@ class FeishuBridge {
     if (pendingChoice) {
       const activeSessionId = await resolveStrictCurrentSessionId(this._sessionMapper, mapKey)
       if (activeSessionId) {
+        // 数字输入 → 处理为选择回复（恢复/切换历史会话）
+        if (typeof normalizedText === 'string' && /^\d+$/.test(normalizedText.trim())) {
+          await this._handleChoiceReply(
+            mapKey,
+            normalizedText,
+            {
+              userId: senderId,
+              chatId,
+              chatType,
+              nickname: resolvedNames.senderName || senderId,
+              chatName: resolvedNames.chatName || chatId,
+            },
+            senderId,
+            chatId,
+            chatType
+          )
+          return
+        }
+        // 非数字输入或纯图片 → 清空待选，让消息正常流转
         this._sessionMapper.clearPendingChoice(mapKey)
         this._pendingMessages.delete(mapKey)
         this._proactiveRebindSuppressedKeys.delete(mapKey)
