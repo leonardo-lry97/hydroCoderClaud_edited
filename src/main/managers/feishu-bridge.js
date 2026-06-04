@@ -1400,10 +1400,26 @@ class FeishuBridge {
     const target = this._sessionTargets.get(sessionId) || null
     if (!target) {
       const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
+      if (row?.im_channel !== 'feishu') return null
       const openId = typeof row?.im_user_id === 'string' ? row.im_user_id.trim() : ''
-      if (!openId || row?.im_channel !== 'feishu') return null
+      const chatId = typeof row?.im_chat_id === 'string' ? row.im_chat_id.trim() : ''
+      const isGroupChat = row?.im_chat_type === 'group' || row?.im_chat_type === 'chat'
+      // 群聊用 im_chat_id 作为 targetId
+      const targetId = isGroupChat && chatId ? chatId : openId
+      if (!targetId) return null
+      if (isGroupChat) {
+        const identity = this._sessionIdentities.get(sessionId)
+        // 优先从 _sessionIdentities 恢复
+        if (identity) {
+          this._sessionTargets.set(sessionId, { openId: targetId, displayName: identity.chatName || identity.senderName || targetId })
+        }
+        return {
+          targetId,
+          displayName: this._sessionTargets.get(sessionId)?.displayName || targetId,
+        }
+      }
       const restoredTarget = this._restoreP2PTargetBinding(sessionId, openId, {
-        chatId: typeof row?.im_chat_id === 'string' ? row.im_chat_id.trim() : ''
+        chatId,
       })
       return {
         targetId: restoredTarget.openId,
