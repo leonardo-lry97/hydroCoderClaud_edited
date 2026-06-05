@@ -135,7 +135,6 @@ class FeishuBridge {
     this._bindEventClientEvents()
     this._startMsgIdCleanupTimer()
     this._migrateGroupImUserId()
-    this._migrateMessageSource()
     try {
       await this._eventClient.connect(cfg.appId, cfg.appSecret)
       return true
@@ -1663,25 +1662,6 @@ class FeishuBridge {
 
   _formatRelativeTime(timestamp) {
     return formatRelativeTime(timestamp)
-  }
-
-  _migrateMessageSource() {
-    this._syncSessionDatabase()
-    const db = this._sessionDatabase
-    if (!db?.db) return
-    try {
-      // 旧消息持久化时 source 写成了 'im-inbound'，前端 isExternalImType 不识别 → IM 来源标签丢失
-      const info = db.db.prepare(`
-        UPDATE agent_messages
-        SET content = REPLACE(content, '"source":"im-inbound"', '"source":"feishu"')
-        WHERE content LIKE '%"source":"im-inbound"%'
-      `).run()
-      if (info.changes > 0) {
-        console.log(`[FeishuBridge] Migrated ${info.changes} messages from im-inbound to feishu source`)
-      }
-    } catch (err) {
-      console.warn('[FeishuBridge] Failed to migrate message source:', err.message)
-    }
   }
 
   _migrateGroupImUserId() {

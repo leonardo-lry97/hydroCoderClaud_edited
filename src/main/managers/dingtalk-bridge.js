@@ -186,7 +186,6 @@ class DingTalkBridge {
       await this._connect(appKey, appSecret)
       this._loadKnownChats()
       this._migrateGroupImUserId()
-      this._migrateMessageSource()
       return true
     } catch (err) {
       const shouldKeepReconnecting = preserveRuntimeState || (!this._stopped && !!this.client)
@@ -771,23 +770,6 @@ class DingTalkBridge {
     })
 
     return sessionId
-  }
-
-  _migrateMessageSource() {
-    const db = this.agentSessionManager.sessionDatabase
-    if (!db?.db) return
-    try {
-      const info = db.db.prepare(`
-        UPDATE agent_messages
-        SET content = REPLACE(content, '"source":"im-inbound"', '"source":"dingtalk"')
-        WHERE content LIKE '%"source":"im-inbound"%'
-      `).run()
-      if (info.changes > 0) {
-        console.log(`[DingTalk] Migrated ${info.changes} messages from im-inbound to dingtalk source`)
-      }
-    } catch (err) {
-      console.warn('[DingTalk] Failed to migrate message source:', err.message)
-    }
   }
 
   _migrateGroupImUserId() {
