@@ -253,7 +253,9 @@ function withAgentOperations(BaseClass) {
     clearImIdentity(sessionId) {
       this.db.prepare(`
         UPDATE agent_conversations
-        SET im_user_id = NULL, im_chat_id = NULL, im_chat_type = NULL, updated_at = ?
+        SET im_user_id = NULL, im_chat_id = NULL, im_chat_type = NULL,
+            staff_id = NULL, conversation_id = NULL,
+            updated_at = ?
         WHERE session_id = ?
       `).run(Date.now(), sessionId)
     }
