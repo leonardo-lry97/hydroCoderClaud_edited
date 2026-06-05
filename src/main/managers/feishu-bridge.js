@@ -1736,11 +1736,25 @@ class FeishuBridge {
           UPDATE agent_conversations
           SET im_channel = 'feishu'
           WHERE (im_channel IS NULL OR im_channel = '')
-            AND (im_chat_type IN ('p2p', 'chat') OR im_chat_type IS NULL)
-            AND (im_user_id LIKE 'ou\_%' ESCAPE '\\' OR im_user_id = '' OR im_user_id IS NULL)
+            AND (
+              (im_chat_type = 'p2p' AND im_user_id LIKE 'ou\_%' ESCAPE '\\')
+              OR (im_chat_type = 'chat' AND im_user_id = '')
+            )
         `).run()
         if (info.changes > 0) {
           console.log(`[FeishuBridge] Fixed im_channel for ${info.changes} sessions in DB`)
+        }
+        // 修复旧版迁移误伤：没有飞书身份特征的会话不应标记为 feishu
+        const reverted = db.db.prepare(`
+          UPDATE agent_conversations
+          SET im_channel = NULL
+          WHERE im_channel = 'feishu'
+            AND im_chat_type IS NULL
+            AND (im_user_id IS NULL OR im_user_id = '')
+            AND im_chat_id IS NULL
+        `).run()
+        if (reverted.changes > 0) {
+          console.log(`[FeishuBridge] Reverted ${reverted.changes} incorrectly tagged sessions`)
         }
       } catch (err) {
         console.warn('[FeishuBridge] Failed to fix im_channel in DB:', err.message)
