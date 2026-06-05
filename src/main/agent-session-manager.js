@@ -2625,15 +2625,6 @@ class AgentSessionManager extends EventEmitter {
           return message
         })
 
-        // 去重：按 role+content 指纹，解决旧数据双写残留（如 enterprise-weixin 曾同时调 sendMessage + appendExternalUserMessage）
-        const seen = new Set()
-        messages = messages.filter(m => {
-          const fp = `${m.role}|${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`
-          if (seen.has(fp)) return false
-          seen.add(fp)
-          return true
-        })
-
         // 如果 session 在内存，把 DB 消息回填到内存（后续新消息会追加）
         if (session) {
           session.messages = messages
