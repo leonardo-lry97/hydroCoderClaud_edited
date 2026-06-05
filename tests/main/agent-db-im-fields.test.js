@@ -51,4 +51,17 @@ describe('Agent DB IM field queries', () => {
     expect(calls[0].sql).toContain('im_chat_id = ?')
     expect(calls[0].params).toEqual(['staff-1', 'conv-1', null, expect.any(Number), 'session-1'])
   })
+
+  it('allows listing all conversations without a SQL LIMIT when limit is null', () => {
+    const { harness, calls } = createDbHarness()
+
+    harness.listAllAgentConversations({ limit: null })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].kind).toBe('all')
+    expect(calls[0].sql).toContain('SELECT * FROM agent_conversations')
+    expect(calls[0].sql).toContain('ORDER BY updated_at DESC')
+    expect(calls[0].sql).not.toContain('LIMIT ?')
+    expect(calls[0].params).toEqual([])
+  })
 })

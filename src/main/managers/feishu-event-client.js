@@ -2,7 +2,7 @@
  * 飞书 WebSocket 事件订阅客户端
  *
  * 封装 @larksuiteoapi/node-sdk 的 WSClient 和 EventDispatcher，
- * 通过飞书"事件订阅长连接模式"接收用户消息和卡片交互事件。
+ * 通过飞书"事件订阅长连接模式"接收用户消息事件。
  *
  * SDK WSClient 负责：连接、心跳、重连、protobuf 二进制协议解码
  * 本类负责：EventEmitter 事件转发、消息结构化

@@ -214,10 +214,9 @@ class FeishuBridge {
   _bindAgentEvents() {
     const mgr = this._agentSessionManager
     this._agentListeners = {
-      userMessage: ({ sessionId, imChannel, content, images, source }) => {
+      userMessage: ({ sessionId, imChannel, content, images, origin }) => {
         const hasBinding = this._sessionTargets.has(sessionId)
-        // 兼容 'im-inbound'（旧值）和 'feishu'（新值），桌面端来源才是 IM 来源，不再重复路由
-        if (source !== 'im-inbound' && source !== 'feishu' && (imChannel === 'feishu' || hasBinding)) {
+        if (origin !== 'im-inbound' && (imChannel === 'feishu' || hasBinding)) {
           this._onDesktopIntervention(sessionId, content, images)
         }
       },
@@ -646,7 +645,7 @@ class FeishuBridge {
     }
   }
 
-  async _handleCommand(text, context, cardMeta = {}) {
+  async _handleCommand(text, context, normalizeOptions = {}) {
     this._syncSessionDatabase()
     const needsResolvedSenderName = !context?.senderName && !!context?.senderId
     const needsResolvedChatName = !context?.chatName && !!context?.chatId
@@ -661,7 +660,7 @@ class FeishuBridge {
       senderName: context.senderName || resolvedNames.senderName,
       chatName: context.chatName || resolvedNames.chatName,
     }
-    const normalizedText = this._normalizeCommandText(text, context, cardMeta || {})
+    const normalizedText = this._normalizeCommandText(text, context, normalizeOptions || {})
 
     const mapKey = this._sessionMapper.buildKey({ userId: context.senderId, chatId: context.chatId, chatType: context.chatType })
 
@@ -932,8 +931,8 @@ class FeishuBridge {
       type: 'chat',
       source: 'im-inbound',
       im_channel: 'feishu',
-      staff_id: dbRow?.im_user_id || context.senderId || '',
-      conversation_id: dbRow?.im_chat_id || context.chatId || '',
+      im_user_id: dbRow?.im_user_id || context.senderId || '',
+      im_chat_id: dbRow?.im_chat_id || context.chatId || '',
       status: dbRow?.status || liveSession?.status || 'idle',
     }
 
@@ -1088,10 +1087,8 @@ class FeishuBridge {
     this._activeSendChunks.set(sessionId, sendChunk)
 
     try {
-      // source='feishu'（非 'im-inbound'）：前端 MessageBubble 通过 isExternalImType(source) 判定是否渲染 IM 来源标签，
-      // DB 持久化后的历史消息加载也依赖此字段识别渠道，必须与 external-im-meta 中注册的渠道名一致
       await this._agentSessionManager.sendMessage(sessionId, message, {
-        meta: { source: 'feishu', senderNick: identity.senderName || senderId, feishuChatId: chatId },
+        meta: { origin: 'im-inbound', imChannel: 'feishu', senderNick: identity.senderName || senderId, feishuChatId: chatId },
       })
       await donePromise
     } catch (err) {

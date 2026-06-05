@@ -90,6 +90,7 @@ import HooksTab from '@/pages/main/components/RightPanel/tabs/HooksTab.vue'
 import PluginsTab from '@/pages/main/components/RightPanel/tabs/PluginsTab.vue'
 import SettingsTab from '@/pages/main/components/RightPanel/tabs/SettingsTab.vue'
 import ScheduledTasksWorkbenchTab from './ScheduledTasksWorkbenchTab.vue'
+import { getSessionImChannel } from '@shared/external-im-meta'
 
 const { cssVars } = useTheme()
 const { t, initLocale } = useLocale()
@@ -189,7 +190,7 @@ const loadContextSources = async () => {
   const notebookList = Array.isArray(notebooksRaw) ? notebooksRaw : []
 
   const cwdCandidates = sessionList
-    .filter(session => session?.cwd && session?.type !== 'dingtalk')
+    .filter(session => session?.cwd && getSessionImChannel(session) !== 'dingtalk')
     .map(session => normalizePath(session.cwd))
 
   const notebookCandidates = notebookList

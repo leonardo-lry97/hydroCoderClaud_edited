@@ -821,7 +821,7 @@ describe('ScheduledTaskService', () => {
       expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
         'chat-session-2',
         '基于当前上下文继续',
-        { meta: { source: 'scheduled' } }
+        { meta: { origin: 'scheduled' } }
       )
     } finally {
       vi.useRealTimers()
@@ -918,7 +918,7 @@ describe('ScheduledTaskService', () => {
       expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
         'embedded-session-77',
         '基于当前工作台上下文继续巡检',
-        { meta: { source: 'scheduled' } }
+        { meta: { origin: 'scheduled' } }
       )
     } finally {
       vi.useRealTimers()
@@ -985,7 +985,7 @@ describe('ScheduledTaskService', () => {
       expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
         'recreated-session-1',
         '继续执行',
-        { meta: { source: 'scheduled' } }
+        { meta: { origin: 'scheduled' } }
       )
     } finally {
       vi.useRealTimers()
@@ -1092,7 +1092,7 @@ describe('ScheduledTaskService', () => {
       expect(agentSessionManager.sendMessage).toHaveBeenCalledWith(
         'embedded-session-current',
         '继续当前工作台任务',
-        { meta: { source: 'scheduled' } }
+        { meta: { origin: 'scheduled' } }
       )
     } finally {
       vi.useRealTimers()

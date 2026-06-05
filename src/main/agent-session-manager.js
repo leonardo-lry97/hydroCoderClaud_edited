@@ -66,6 +66,24 @@ function isExternalImChannel(channel) {
   return typeof channel === 'string' && EXTERNAL_IM_CHANNEL_SET.has(channel)
 }
 
+function normalizeSessionType(type) {
+  return type === AgentType.NOTEBOOK ? AgentType.NOTEBOOK : AgentType.CHAT
+}
+
+function normalizeSessionSource(source, imChannel) {
+  if (source === 'scheduled') return 'scheduled'
+  if (source === 'im-inbound') return 'im-inbound'
+  if (isExternalImChannel(source) || isExternalImChannel(imChannel)) return 'im-inbound'
+  return 'manual'
+}
+
+function normalizeSessionImChannel(imChannel, type, source) {
+  if (isExternalImChannel(imChannel)) return imChannel
+  if (isExternalImChannel(type)) return type
+  if (isExternalImChannel(source)) return source
+  return null
+}
+
 function normalizeModelValue(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -732,17 +750,24 @@ class AgentSessionManager extends EventEmitter {
       profile = this.configManager.getDefaultProfile()
     }
 
+    const normalizedImChannel = normalizeSessionImChannel(
+      options.imChannel || null,
+      options.type,
+      options.source
+    )
+    const normalizedType = normalizeSessionType(options.type)
+    const normalizedSource = normalizeSessionSource(options.source, normalizedImChannel)
     const initialModelId = normalizeModelIdOrNull(options.modelId || profile?.selectedModelId)
     const initialTitle = resolveInitialSessionTitle(this.configManager, options.title)
     const session = new AgentSession({
-      type: options.type,
+      type: normalizedType,
       title: initialTitle,
       cwd: options.cwd,
       apiProfileId: profile?.id || null,
       apiBaseUrl: profile?.baseUrl || null,
       modelId: initialModelId,
-      source: options.source || 'manual',
-      imChannel: options.imChannel || null,
+      source: normalizedSource,
+      imChannel: normalizedImChannel,
       imChatType: options.imChatType || null,
       taskId: options.taskId || null,
       meta: options.meta || {},
@@ -1203,11 +1228,13 @@ class AgentSessionManager extends EventEmitter {
         userMsgToStore.images = imageData
       }
 
-      // 附加元数据（如钉钉来源信息）
+      // 附加消息元数据（消息来源、IM 渠道、发送者昵称）
       if (meta) {
-        if (meta.source) userMsgToStore.source = meta.source
+        if (meta.origin) userMsgToStore.origin = meta.origin
+        if (meta.imChannel) userMsgToStore.imChannel = meta.imChannel
         if (meta.senderNick) userMsgToStore.senderNick = meta.senderNick
       }
+      if (!userMsgToStore.origin) userMsgToStore.origin = 'desktop'
 
       this._storeMessage(session, userMsgToStore)
 
@@ -1218,7 +1245,7 @@ class AgentSessionManager extends EventEmitter {
         imChannel: session.imChannel,
         content: displayContent,
         images: imageData || null,
-        source: meta?.source || null
+        origin: meta?.origin || 'desktop'
       })
     }
 
@@ -1674,6 +1701,9 @@ class AgentSessionManager extends EventEmitter {
    * 存储消息到会话历史（内存 + DB）
    */
   _storeMessage(session, msg) {
+    if (!msg.sessionId) {
+      msg.sessionId = session.id
+    }
     session.messages.push(msg)
 
     // 写入数据库
@@ -1681,13 +1711,14 @@ class AgentSessionManager extends EventEmitter {
       try {
         let contentToSave = msg.content
 
-        // 如果消息包含图片或元数据（钉钉来源），将 content 合并为对象保存
-        const hasMeta = msg.source || msg.senderNick
+        // 如果消息包含图片或元数据（来源、渠道、发送者），将 content 合并为对象保存
+        const hasMeta = msg.origin || msg.imChannel || msg.senderNick
         if ((msg.images && msg.images.length > 0) || hasMeta) {
           contentToSave = {
             text: msg.content || '',
             ...(msg.images?.length > 0 && { images: msg.images }),
-            ...(msg.source && { source: msg.source }),
+            ...(msg.origin && { origin: msg.origin }),
+            ...(msg.imChannel && { imChannel: msg.imChannel }),
             ...(msg.senderNick && { senderNick: msg.senderNick })
           }
         }
@@ -2481,7 +2512,7 @@ class AgentSessionManager extends EventEmitter {
     // 2. 从 DB 加载历史会话（排除 notebook 类型）
     if (this.sessionDatabase) {
       try {
-        const dbConversations = this.sessionDatabase.listAllAgentConversations({ limit: 100 })
+        const dbConversations = this.sessionDatabase.listAllAgentConversations({ limit: null })
         for (const row of dbConversations) {
           if (row.type === 'notebook') continue  // 排除 notebook 类型
           if (activeIds.has(row.session_id)) continue  // 去重
@@ -2580,7 +2611,8 @@ class AgentSessionManager extends EventEmitter {
           // 反序列化 content（如果是 JSON 字符串，解析为对象/数组）
           let content = row.content || undefined
           let images = undefined
-          let source = undefined
+          let origin = undefined
+          let imChannel = undefined
           let senderNick = undefined
 
           if (content && typeof content === 'string') {
@@ -2589,11 +2621,17 @@ class AgentSessionManager extends EventEmitter {
             if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
               try {
                 const parsed = JSON.parse(content)
-                // 如果是扩展消息格式 { text, images?, source?, senderNick? }
-                if (parsed && typeof parsed === 'object' && ('images' in parsed || 'source' in parsed)) {
-                  content = parsed.text || ''
+                // 如果是扩展消息格式 { text, images?, origin?, imChannel?, senderNick? }
+                if (
+                  parsed &&
+                  typeof parsed === 'object' &&
+                  !Array.isArray(parsed) &&
+                  ('text' in parsed || 'images' in parsed || 'origin' in parsed || 'imChannel' in parsed || 'senderNick' in parsed)
+                ) {
+                  content = typeof parsed.text === 'string' ? parsed.text : ''
                   images = parsed.images
-                  source = parsed.source
+                  origin = parsed.origin
+                  imChannel = parsed.imChannel
                   senderNick = parsed.senderNick
                 } else {
                   content = parsed
@@ -2606,6 +2644,7 @@ class AgentSessionManager extends EventEmitter {
 
           const message = {
             id: row.msg_id,
+            sessionId,
             role: row.role,
             content,
             toolName: row.tool_name || undefined,
@@ -2618,8 +2657,8 @@ class AgentSessionManager extends EventEmitter {
           if (images && images.length > 0) {
             message.images = images
           }
-          // 恢复钉钉来源元数据
-          if (source) message.source = source
+          if (origin) message.origin = origin
+          if (imChannel) message.imChannel = imChannel
           if (senderNick) message.senderNick = senderNick
 
           return message

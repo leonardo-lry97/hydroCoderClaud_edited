@@ -214,6 +214,80 @@ class SessionDatabaseBase {
       }
     }
 
+    const agentConversationLegacyColumns = ['staff_id', 'conversation_id']
+    const needsAgentConversationRebuild = agentConversationLegacyColumns.some(col => agentConvColumns.includes(col))
+
+    if (needsAgentConversationRebuild) {
+      console.log('[SessionDB] Migrating: rebuilding agent_conversations table (remove legacy IM identity columns)')
+      this.db.pragma('foreign_keys = OFF')
+      this.db.exec('BEGIN TRANSACTION')
+      try {
+        this.db.exec(`
+          CREATE TABLE agent_conversations_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT UNIQUE NOT NULL,
+            type TEXT NOT NULL DEFAULT 'chat',
+            status TEXT NOT NULL DEFAULT 'idle',
+            sdk_session_id TEXT,
+            title TEXT DEFAULT '',
+            cwd TEXT,
+            cwd_auto INTEGER DEFAULT 1,
+            message_count INTEGER DEFAULT 0,
+            total_cost_usd REAL DEFAULT 0,
+            api_profile_id TEXT,
+            api_base_url TEXT,
+            model_id TEXT,
+            last_bootstrapped_runtime TEXT,
+            pending_runtime_change TEXT DEFAULT 'unknown',
+            queued_messages TEXT DEFAULT '[]',
+            im_user_id TEXT,
+            im_chat_id TEXT,
+            im_channel TEXT,
+            im_chat_type TEXT,
+            source TEXT DEFAULT 'manual',
+            task_id INTEGER,
+            owner_client_id TEXT DEFAULT 'host-ui',
+            client_type TEXT DEFAULT 'host',
+            client_meta TEXT,
+            created_at INTEGER,
+            updated_at INTEGER
+          )
+        `)
+
+        this.db.exec(`
+          INSERT INTO agent_conversations_new (
+            id, session_id, type, status, sdk_session_id, title, cwd, cwd_auto, message_count, total_cost_usd,
+            api_profile_id, api_base_url, model_id, last_bootstrapped_runtime, pending_runtime_change, queued_messages,
+            im_user_id, im_chat_id, im_channel, im_chat_type, source, task_id, owner_client_id, client_type, client_meta,
+            created_at, updated_at
+          )
+          SELECT
+            id, session_id, type, status, sdk_session_id, title, cwd, cwd_auto, message_count, total_cost_usd,
+            api_profile_id, api_base_url, model_id, last_bootstrapped_runtime, pending_runtime_change, queued_messages,
+            im_user_id, im_chat_id, im_channel, im_chat_type, source, task_id, owner_client_id, client_type, client_meta,
+            created_at, updated_at
+          FROM agent_conversations
+        `)
+
+        this.db.exec('DROP TABLE agent_conversations')
+        this.db.exec('ALTER TABLE agent_conversations_new RENAME TO agent_conversations')
+        this.db.exec('COMMIT')
+        console.log('[SessionDB] Migration completed: agent_conversations table rebuilt')
+      } catch (err) {
+        this.db.exec('ROLLBACK')
+        console.error('[SessionDB] Migration failed: agent_conversations rebuild failed', err)
+      } finally {
+        this.db.pragma('foreign_keys = ON')
+      }
+    }
+
+    // 统一修正旧语义：IM 渠道不再通过 type 表达，旧值一律归一为 chat。
+    this.db.exec(`
+      UPDATE agent_conversations
+      SET type = 'chat'
+      WHERE type IN ('dingtalk', 'weixin', 'feishu', 'enterprise-weixin')
+    `)
+
     const scheduledTaskInfo = this.db.prepare("PRAGMA table_info(scheduled_tasks)").all()
     const scheduledTaskColumns = scheduledTaskInfo.map(col => col.name)
 

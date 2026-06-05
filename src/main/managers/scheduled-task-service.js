@@ -570,7 +570,7 @@ class ScheduledTaskService {
       await this.agentSessionManager.sendMessage(
         sessionId,
         this._buildTaskPrompt(task, triggerReason, startedAt, { bootstrap: isBootstrapRun }),
-        { meta: { source: 'scheduled' } }
+        { meta: { origin: 'scheduled' } }
       )
 
       this.sessionDatabase.updateScheduledTaskState(task.id, {

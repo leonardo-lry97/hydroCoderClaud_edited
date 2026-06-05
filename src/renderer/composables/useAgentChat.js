@@ -367,6 +367,7 @@ export function useAgentChat(sessionId, options = {}) {
   const addUserMessage = (text, images = null) => {
     const message = {
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sessionId,
       role: MessageRole.USER,
       content: text,
       timestamp: Date.now()
@@ -386,6 +387,7 @@ export function useAgentChat(sessionId, options = {}) {
   const addAssistantMessage = (content, metadata = {}) => {
     messages.value.push({
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sessionId,
       role: MessageRole.ASSISTANT,
       content,
       timestamp: Date.now(),
@@ -400,6 +402,7 @@ export function useAgentChat(sessionId, options = {}) {
 
     messages.value.push({
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sessionId,
       role: MessageRole.SYSTEM,
       content: normalizedContent,
       timestamp: Date.now(),
@@ -428,6 +431,7 @@ export function useAgentChat(sessionId, options = {}) {
 
     messages.value.push({
       id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sessionId,
       role: MessageRole.TOOL,
       toolName,
       input,
@@ -469,6 +473,7 @@ export function useAgentChat(sessionId, options = {}) {
 
     messages.value.push({
       id: interaction.messageId || `tool-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sessionId,
       role: MessageRole.TOOL,
       toolName: 'AskUserQuestion',
       input: interaction,

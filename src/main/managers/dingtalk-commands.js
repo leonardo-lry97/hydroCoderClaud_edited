@@ -80,8 +80,6 @@ function getCurrentBoundHistoryRow(bridge, db, staffId) {
     im_channel: 'dingtalk',
     im_user_id: staffId,
     im_chat_id: '',
-    staff_id: staffId,
-    conversation_id: '',
     status: liveSession.status || 'idle'
   }
 }
@@ -154,9 +152,7 @@ module.exports = {
     const limit = this.configManager.getConfig()?.dingtalk?.maxHistorySessions || 5
     const isGroupChat = String(conversationType) === '2'
     const queryUserId = isGroupChat ? '' : senderStaffId
-    const exactSessions = db.getImSessionsByType
-      ? db.getImSessionsByType('dingtalk', queryUserId, conversationId, limit)
-      : db.getDingTalkSessions(queryUserId, conversationId, limit)
+    const exactSessions = db.getImSessionsByType('dingtalk', queryUserId, conversationId, limit)
     const boundHistoryRow = isGroupChat ? null : getCurrentBoundHistoryRow(this, db, senderStaffId)
     let sessions = mergeDingTalkHistoryRows(exactSessions, boundHistoryRow ? [boundHistoryRow] : []).slice(0, limit)
 
@@ -175,8 +171,6 @@ module.exports = {
             im_channel: 'dingtalk',
             im_user_id: senderStaffId,
             im_chat_id: conversationId,
-            staff_id: senderStaffId,
-            conversation_id: conversationId,
             status: liveCurrent.status || 'idle'
           }
         : null)
@@ -266,7 +260,7 @@ module.exports = {
   },
 
   _cmdStatus(context) {
-    const { mapKey, senderStaffId, conversationId } = context || {}
+    const { mapKey, senderStaffId, conversationId, conversationType } = context || {}
     const currentSessionId = mapKey ? this._resolveActiveSessionId(mapKey) : null
     const currentSession = currentSessionId ? this.agentSessionManager.sessions.get(currentSessionId) : null
     const db = this.agentSessionManager.sessionDatabase
@@ -274,9 +268,7 @@ module.exports = {
     const limit = this.configManager.getConfig()?.dingtalk?.maxHistorySessions || 5
     const isGroupChat = String(conversationType) === '2'
     const queryUserId = isGroupChat ? '' : senderStaffId
-    const exactSessions = db.getImSessionsByType
-      ? db.getImSessionsByType('dingtalk', queryUserId, conversationId, limit)
-      : db.getDingTalkSessions(queryUserId, conversationId, limit)
+    const exactSessions = db.getImSessionsByType('dingtalk', queryUserId, conversationId, limit)
     const boundHistoryRow = isGroupChat ? null : getCurrentBoundHistoryRow(this, db, senderStaffId)
     let sessions = mergeDingTalkHistoryRows(exactSessions, boundHistoryRow ? [boundHistoryRow] : []).slice(0, limit)
     if (currentSessionId) {
@@ -294,8 +286,6 @@ module.exports = {
             im_channel: 'dingtalk',
             im_user_id: senderStaffId,
             im_chat_id: conversationId,
-            staff_id: senderStaffId,
-            conversation_id: conversationId,
             status: liveCurrent.status || 'idle'
           }
         : null)

@@ -120,47 +120,26 @@ class ImSessionMapper {
 
   /** @private */
   async _queryHistorySessions(identity) {
-    if (this._sessionDatabase?.getImSessionsByType) {
-      try {
-        const isDirectChat = identity.chatType === 'p2p' || identity.chatType === 'single'
-        // p2p/single: 按 im_user_id 过滤；群聊: im_user_id 固定为空串，仅按 im_chat_id 过滤
-        const staffId = isDirectChat ? (identity.staffId || identity.userId || '') : ''
-        const conversationId = isDirectChat
-          ? ''
-          : (identity.conversationId || identity.chatId || '')
-        const exact = await this._sessionDatabase.getImSessionsByType(
-          this._imType,
-          staffId,
-          conversationId,
-          this._maxHistorySessions
-        )
-        if (Array.isArray(exact) && exact.length > 0) {
-          return exact
-        }
-        return []
-      } catch {
-        return []
-      }
+    if (!this._sessionDatabase?.getImSessionsByType) {
+      return []
     }
-    if (!this._sessionDatabase?.getDingTalkSessions) {
-      // 不同 IM 类型有不同的 DB 查询方法
-      // 尝试通用查询方式：按 type 和 identity 字段查
-      try {
-        const key = this.buildKey(identity)
-        return await this._sessionDatabase.getSessionsByImIdentity?.(
-          this._imType, key, this._maxHistorySessions
-        )
-      } catch {
-        return []
-      }
-    }
-    // 兼容钉钉的现有 DB 查询方法
     try {
-      const staffId = identity.staffId || identity.userId
-      const conversationId = identity.conversationId || identity.chatId
-      return await this._sessionDatabase.getDingTalkSessions?.(
-        staffId, conversationId, this._maxHistorySessions
+      const isDirectChat = identity.chatType === 'p2p' || identity.chatType === 'single'
+      // p2p/single: 按 im_user_id 过滤；群聊: im_user_id 固定为空串，仅按 im_chat_id 过滤
+      const userId = isDirectChat ? (identity.staffId || identity.userId || '') : ''
+      const chatId = isDirectChat
+        ? ''
+        : (identity.conversationId || identity.chatId || '')
+      const exact = await this._sessionDatabase.getImSessionsByType(
+        this._imType,
+        userId,
+        chatId,
+        this._maxHistorySessions
       )
+      if (Array.isArray(exact) && exact.length > 0) {
+        return exact
+      }
+      return []
     } catch {
       return []
     }

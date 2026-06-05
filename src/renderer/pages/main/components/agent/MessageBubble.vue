@@ -125,8 +125,8 @@ const avatarIconName = computed(() => {
 })
 const externalSenderLabel = computed(() => {
   if (!props.message.senderNick) return ''
-  if (isExternalImType(props.message.source)) {
-    const suffixKey = getSuffixKey(props.message.source)
+  if (isExternalImType(props.message.imChannel)) {
+    const suffixKey = getSuffixKey(props.message.imChannel)
     return suffixKey ? `${props.message.senderNick}${t(suffixKey)}` : ''
   }
   return ''
@@ -141,7 +141,7 @@ const normalizePathForAction = async (rawPath) => {
     normalizedPath = await window.electronAPI.resolvePath(props.sessionCwd, normalizedPath)
   }
 
-  const sessionId = props.message?.sessionId || props.message?.conversationId || props.message?.conversation_id
+  const sessionId = props.message?.sessionId || null
   try {
     const fileData = await window.electronAPI.readAbsolutePath({
       filePath: normalizedPath,
@@ -331,7 +331,7 @@ const handleContextMenu = async (event) => {
 
   if (isNotebookMode.value && linkType === 'path' && linkHref) {
     const resolvedPath = await normalizePathForAction(linkHref)
-    const sessionId = props.message?.sessionId || props.message?.conversationId || props.message?.conversation_id
+    const sessionId = props.message?.sessionId || null
     try {
       const fileData = await window.electronAPI.readAbsolutePath({
         filePath: resolvedPath,

@@ -108,7 +108,7 @@ describe('AgentSessionManager interactions', () => {
     expect(manager.sessionDatabase.updateAgentMessageToolOutput).toHaveBeenCalledOnce()
   })
 
-  it('treats dingtalk sessions as dingtalk source by default', () => {
+  it('preserves imChannel for dingtalk chat sessions by default', () => {
     const { manager } = createManager()
     manager.sessionDatabase = {
       createAgentConversation: vi.fn(() => ({ id: 1 })),
@@ -152,6 +152,24 @@ describe('AgentSessionManager interactions', () => {
     )
   })
 
+  it('normalizes legacy IM session inputs when creating a session', () => {
+    const { manager } = createManager()
+    const created = manager.create({ type: 'feishu', source: 'feishu', title: '旧飞书会话' })
+
+    expect(created).toEqual(expect.objectContaining({
+      type: 'chat',
+      source: 'im-inbound',
+      imChannel: 'feishu'
+    }))
+    expect(manager.sessionDatabase.createAgentConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'chat',
+        source: 'im-inbound',
+        imChannel: 'feishu'
+      })
+    )
+  })
+
   it('matches IM history rows by imChannel even when type remains chat', () => {
     const rows = [
       {
@@ -159,8 +177,8 @@ describe('AgentSessionManager interactions', () => {
         type: 'chat',
         source: 'im-inbound',
         im_channel: 'feishu',
-        staff_id: 'ou_xxx',
-        conversation_id: 'oc_xxx',
+        im_user_id: 'ou_xxx',
+        im_chat_id: 'oc_xxx',
         updated_at: 100
       },
       {
@@ -168,16 +186,16 @@ describe('AgentSessionManager interactions', () => {
         type: 'chat',
         source: 'im-inbound',
         im_channel: 'weixin',
-        staff_id: 'ou_xxx',
-        conversation_id: 'oc_xxx',
+        im_user_id: 'ou_xxx',
+        im_chat_id: 'oc_xxx',
         updated_at: 200
       }
     ]
 
     const filtered = rows.filter(row =>
       row.im_channel === 'feishu' &&
-      row.staff_id === 'ou_xxx' &&
-      row.conversation_id === 'oc_xxx'
+      row.im_user_id === 'ou_xxx' &&
+      row.im_chat_id === 'oc_xxx'
     )
 
     expect(filtered).toEqual([
@@ -1682,7 +1700,10 @@ describe('AgentSessionManager interactions', () => {
     expect(manager.sessionDatabase.insertAgentMessage).toHaveBeenCalledTimes(2)
     expect(manager.sessionDatabase.insertAgentMessage).toHaveBeenNthCalledWith(1, 1, expect.objectContaining({
       role: 'user',
-      content: 'hello after stale resume'
+      content: JSON.stringify({
+        text: 'hello after stale resume',
+        origin: 'desktop'
+      })
     }))
     expect(manager.sessionDatabase.insertAgentMessage).toHaveBeenNthCalledWith(2, 1, expect.objectContaining({
       role: 'assistant',
@@ -1720,6 +1741,55 @@ describe('AgentSessionManager interactions', () => {
 
     expect(sessions).toHaveLength(1)
     expect(sessions[0].modelId).toBe('glm-4.5')
+  })
+
+  it('loads the full persisted history for the agent left panel instead of truncating to 100 rows', () => {
+    const { manager } = createManager()
+    manager.sessionDatabase = {
+      listAllAgentConversations: vi.fn(() => ([
+        {
+          session_id: 'db-row-101',
+          type: 'chat',
+          status: 'closed',
+          sdk_session_id: null,
+          title: '历史会话 101',
+          cwd: '/tmp',
+          cwd_auto: 0,
+          message_count: 0,
+          total_cost_usd: 0,
+          api_profile_id: null,
+          api_base_url: null,
+          model_id: null,
+          source: 'manual',
+          task_id: null,
+          created_at: 101,
+          updated_at: 101
+        },
+        {
+          session_id: 'db-row-1',
+          type: 'chat',
+          status: 'closed',
+          sdk_session_id: null,
+          title: '历史会话 1',
+          cwd: '/tmp',
+          cwd_auto: 0,
+          message_count: 0,
+          total_cost_usd: 0,
+          api_profile_id: null,
+          api_base_url: null,
+          model_id: null,
+          source: 'manual',
+          task_id: null,
+          created_at: 1,
+          updated_at: 1
+        }
+      ]))
+    }
+
+    const sessions = manager.list()
+
+    expect(manager.sessionDatabase.listAllAgentConversations).toHaveBeenCalledWith({ limit: null })
+    expect(sessions.map(session => session.id)).toEqual(['db-row-101', 'db-row-1'])
   })
 
   it('probeConnection labels API refusal clearly', async () => {

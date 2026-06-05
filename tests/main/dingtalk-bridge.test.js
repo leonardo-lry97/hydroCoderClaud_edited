@@ -42,7 +42,6 @@ describe('DingTalkBridge', () => {
       updateImIdentity: vi.fn(),
       closeAgentConversation: vi.fn(),
       getAgentConversation: vi.fn(() => null),
-      getDingTalkSessions: vi.fn(() => []),
       getImSessionsByType: vi.fn(() => [])
     }
     const bridge = new DingTalkBridge(configManager, manager, mainWindow)
@@ -156,7 +155,7 @@ describe('DingTalkBridge', () => {
     expect(session.source).toBe('manual')
     expect(bridge.getBinding(session.id)).toBe(null)
     expect(manager.sessionDatabase.updateAgentConversation).not.toHaveBeenCalledWith(session.id, {
-      source: 'dingtalk'
+      imChannel: 'dingtalk'
     })
   })
 
@@ -189,7 +188,7 @@ describe('DingTalkBridge', () => {
 
   it('rejects rebinding a persisted DingTalk target after in-memory binding is lost', () => {
     const { bridge, manager } = createHarness()
-    const created = manager.create({ type: 'chat', source: 'dingtalk', title: '桌面会话' })
+    const created = manager.create({ type: 'chat', source: 'im-inbound', imChannel: 'dingtalk', title: '桌面会话' })
     const session = manager.sessions.get(created.id)
 
     bridge._sessionTargets.clear()
@@ -204,8 +203,6 @@ describe('DingTalkBridge', () => {
             title: '桌面会话',
             im_user_id: 'staff-1',
             im_chat_id: '',
-            staff_id: 'staff-1',
-            conversation_id: '',
             status: 'idle'
           }
         : null
@@ -219,7 +216,7 @@ describe('DingTalkBridge', () => {
 
   it('restores persisted DingTalk target binding after in-memory binding is lost', () => {
     const { bridge, manager } = createHarness()
-    const created = manager.create({ type: 'chat', source: 'dingtalk', title: '桌面会话' })
+    const created = manager.create({ type: 'chat', source: 'im-inbound', imChannel: 'dingtalk', title: '桌面会话' })
     const session = manager.sessions.get(created.id)
 
     bridge._sessionTargets.clear()
@@ -234,8 +231,6 @@ describe('DingTalkBridge', () => {
             title: '桌面会话',
             im_user_id: 'staff-1',
             im_chat_id: '',
-            staff_id: 'staff-1',
-            conversation_id: '',
             status: 'idle'
           }
         : null
@@ -284,8 +279,6 @@ describe('DingTalkBridge', () => {
       status: 'idle',
       im_user_id: 'staff-1',
       im_chat_id: '',
-      staff_id: 'staff-1',
-      conversation_id: '',
       cwd_auto: 0,
       message_count: 0,
       total_cost_usd: 0,
@@ -302,8 +295,6 @@ describe('DingTalkBridge', () => {
         title: '桌面会话',
         im_user_id: 'staff-1',
         im_chat_id: '',
-        staff_id: 'staff-1',
-        conversation_id: '',
         status: 'idle',
         updated_at: Date.now()
       }
@@ -313,7 +304,7 @@ describe('DingTalkBridge', () => {
         id: sessionId,
         type: 'chat',
         title: '桌面会话',
-        source: 'dingtalk',
+        imChannel: 'dingtalk',
         meta: {}
       })
       return manager.sessions.get(sessionId)
@@ -399,8 +390,8 @@ describe('DingTalkBridge', () => {
     const handlePendingChoice = vi.spyOn(bridge, '_handlePendingChoice').mockResolvedValue()
     const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
 
-    const active = manager.create({ type: 'chat', source: 'dingtalk', title: '当前会话' })
-    const history = manager.create({ type: 'chat', source: 'dingtalk', title: '历史会话' })
+    const active = manager.create({ type: 'chat', source: 'im-inbound', imChannel: 'dingtalk', title: '当前会话' })
+    const history = manager.create({ type: 'chat', source: 'im-inbound', imChannel: 'dingtalk', title: '历史会话' })
     bridge.sessionMap.set('staff-1:conv-1', active.id)
 
     manager.sessionDatabase.getImSessionsByType.mockReturnValue([
@@ -532,8 +523,6 @@ describe('DingTalkBridge', () => {
         title: '桌面会话',
         im_user_id: 'staff-1',
         im_chat_id: 'conv-1',
-        staff_id: 'staff-1',
-        conversation_id: 'conv-1',
         status: 'idle',
         updated_at: Date.now()
       }
@@ -585,8 +574,6 @@ describe('DingTalkBridge', () => {
             title: 'Notebook 会话',
             im_user_id: 'staff-1',
             im_chat_id: '',
-            staff_id: 'staff-1',
-            conversation_id: '',
             status: 'idle',
             updated_at: Date.now()
           }
@@ -715,8 +702,6 @@ describe('DingTalkBridge', () => {
         title: '桌面会话',
         im_user_id: 'staff-1',
         im_chat_id: 'conv-1',
-        staff_id: 'staff-1',
-        conversation_id: 'conv-1',
         type: 'chat',
         source: 'im-inbound',
         im_channel: 'dingtalk',
@@ -835,8 +820,6 @@ describe('DingTalkBridge', () => {
             title: 'Notebook 会话',
             im_user_id: 'staff-1',
             im_chat_id: '',
-            staff_id: 'staff-1',
-            conversation_id: '',
             status: 'idle',
             updated_at: Date.now()
           }

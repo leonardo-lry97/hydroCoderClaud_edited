@@ -123,6 +123,13 @@ function withAgentOperations(BaseClass) {
      * 列出所有对话（包括 closed，用于历史恢复）
      */
     listAllAgentConversations({ limit = 100 } = {}) {
+      if (limit == null) {
+        return this.db.prepare(`
+          SELECT * FROM agent_conversations
+          ORDER BY updated_at DESC
+        `).all()
+      }
+
       return this.db.prepare(`
         SELECT * FROM agent_conversations
         ORDER BY updated_at DESC
@@ -254,7 +261,6 @@ function withAgentOperations(BaseClass) {
       this.db.prepare(`
         UPDATE agent_conversations
         SET im_user_id = NULL, im_chat_id = NULL, im_chat_type = NULL,
-            staff_id = NULL, conversation_id = NULL,
             updated_at = ?
         WHERE session_id = ?
       `).run(Date.now(), sessionId)
@@ -279,20 +285,8 @@ function withAgentOperations(BaseClass) {
     }
 
     /**
-     * 查询钉钉特定用户+会话的历史对话列表（供用户选择继续哪个会话）
-     * @deprecated 请使用 getImSessionsByIdentity
-     */
-    getDingTalkSessions(userId, chatId, limit = 5) {
-      return this.db.prepare(`
-        SELECT * FROM agent_conversations
-        WHERE im_user_id = ? AND im_chat_id = ?
-        ORDER BY updated_at DESC LIMIT ?
-      `).all(userId, chatId, limit)
-    }
-
-    /**
      * 查询指定 IM 渠道特定用户+会话的历史对话列表
-     * 仅按 im_channel / im_user_id / im_chat_id 匹配；旧字段迁移另行处理。
+     * 仅按 im_channel / im_user_id / im_chat_id 匹配。
      */
     getImSessionsByType(type, userId, conversationId, limit = 5) {
       // p2p 场景 im_chat_id 无独立语义，不参与过滤；

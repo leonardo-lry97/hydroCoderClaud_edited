@@ -123,8 +123,8 @@ class WeixinBridge {
     const userMessage = images.length > 0 ? { text, images } : text
     await this.agentSessionManager.sendMessage(session.id, userMessage, {
       meta: {
-        // source='weixin'（非 'im-inbound'）：前端 MessageBubble 通过 isExternalImType 判定 IM 来源标签
-        source: 'weixin',
+        origin: 'im-inbound',
+        imChannel: 'weixin',
         senderNick,
         accountId: message.accountId,
         targetId: message.targetId,
@@ -136,8 +136,7 @@ class WeixinBridge {
 
     const storedMessage = [...(this.agentSessionManager.sessions.get(session.id)?.messages || [])]
       .reverse()
-      // 兼容 'im-inbound'（旧值）和 'weixin'（新值）——历史消息持久化 source 已改为渠道名
-      .find(item => item.role === 'user' && (item.source === 'im-inbound' || item.source === 'weixin') && item.content === (text || '[图片]'))
+      .find(item => item.role === 'user' && item.origin === 'im-inbound' && item.imChannel === 'weixin' && item.content === (text || '[图片]'))
 
     this._notifyFrontend('weixin:messageReceived', {
       sessionId: session.id,
@@ -158,10 +157,9 @@ class WeixinBridge {
     if (this._agentListeners || !this.agentSessionManager?.on) return
 
     this._agentListeners = {
-      userMessage: ({ sessionId, imChannel, content, images, source }) => {
+      userMessage: ({ sessionId, imChannel, content, images, origin }) => {
         const hasBinding = this.sessionTargets.has(sessionId)
-        // 兼容 'im-inbound'（旧值）和 'weixin'（新值），桌面端来源才是 IM 来源，不再重复路由
-        if (source !== 'im-inbound' && source !== 'weixin' && (imChannel === 'weixin' || hasBinding)) {
+        if (origin !== 'im-inbound' && (imChannel === 'weixin' || hasBinding)) {
           try { this._recordDesktopIntervention(sessionId, content, images) } catch (err) {
             console.error('[WeixinBridge] Record desktop intervention failed:', err)
           }

@@ -156,6 +156,24 @@ class FakeDatabase {
       return this
     }
 
+    const normalizeLegacyImTypesMatch = statement.match(
+      /^UPDATE\s+agent_conversations\s+SET\s+type\s*=\s*'chat'\s+WHERE\s+type\s+IN\s*\(([\s\S]+)\)$/i
+    )
+    if (normalizeLegacyImTypesMatch) {
+      const table = this.tables.get('agent_conversations')
+      if (!table) return this
+
+      const legacyTypes = splitSqlList(normalizeLegacyImTypesMatch[1])
+        .map(value => value.trim().replace(/^'/, '').replace(/'$/, ''))
+
+      table.rows = table.rows.map((row) => (
+        legacyTypes.includes(row.type)
+          ? { ...row, type: 'chat' }
+          : row
+      ))
+      return this
+    }
+
     return this
   }
 
@@ -331,5 +349,189 @@ describe('SessionDatabase scheduled task migration', () => {
     expect(capturedSql).not.toContain('first_run_mode')
     expect(db.ensureScheduledTaskState).toHaveBeenCalledWith(7)
     expect(result).toEqual({ id: 7 })
+  })
+
+  it('rebuilds agent conversations and removes old IM identity columns', () => {
+    const db = new SessionDatabase({
+      userDataPath: 'C:/tmp/cc-desktop-test',
+      Database: FakeDatabase
+    })
+    db.db = new FakeDatabase()
+
+    db.db.exec(`
+      CREATE TABLE agent_conversations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT UNIQUE NOT NULL,
+        type TEXT NOT NULL DEFAULT 'chat',
+        status TEXT NOT NULL DEFAULT 'idle',
+        sdk_session_id TEXT,
+        title TEXT NOT NULL DEFAULT '',
+        cwd TEXT,
+        cwd_auto INTEGER DEFAULT 0,
+        message_count INTEGER DEFAULT 0,
+        total_cost_usd REAL DEFAULT 0,
+        api_profile_id TEXT,
+        api_base_url TEXT,
+        model_id TEXT,
+        last_bootstrapped_runtime TEXT,
+        pending_runtime_change INTEGER DEFAULT 0,
+        queued_messages TEXT DEFAULT '[]',
+        staff_id TEXT,
+        conversation_id TEXT,
+        im_user_id TEXT,
+        im_chat_id TEXT,
+        im_channel TEXT,
+        im_chat_type TEXT,
+        source TEXT DEFAULT 'manual',
+        task_id INTEGER,
+        owner_client_id TEXT,
+        client_type TEXT,
+        client_meta TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `)
+
+    db.db.tables.get('agent_conversations').rows.push({
+      id: 9,
+      session_id: 'conv-9',
+      type: 'chat',
+      status: 'idle',
+      sdk_session_id: 'sdk-9',
+      title: '旧会话',
+      cwd: 'C:/workspace',
+      cwd_auto: 0,
+      message_count: 2,
+      total_cost_usd: 1.5,
+      api_profile_id: 'profile-1',
+      api_base_url: 'https://example.com',
+      model_id: 'gpt-test',
+      last_bootstrapped_runtime: 'desktop',
+      pending_runtime_change: 0,
+      queued_messages: '[]',
+      staff_id: 'legacy-user',
+      conversation_id: 'legacy-chat',
+      im_user_id: 'user-a',
+      im_chat_id: 'chat-a',
+      im_channel: 'feishu',
+      im_chat_type: 'p2p',
+      source: 'im-inbound',
+      task_id: null,
+      owner_client_id: 'desktop-1',
+      client_type: 'desktop',
+      client_meta: '{}',
+      created_at: 100,
+      updated_at: 200
+    })
+
+    db.createTables()
+    db.runMigrations()
+
+    const table = db.db.tables.get('agent_conversations')
+    const columnNames = table.columns.map(column => column.name)
+
+    expect(columnNames).not.toContain('staff_id')
+    expect(columnNames).not.toContain('conversation_id')
+    expect(columnNames).toContain('im_user_id')
+    expect(columnNames).toContain('im_chat_id')
+    expect(columnNames).toContain('im_channel')
+    expect(columnNames).toContain('im_chat_type')
+
+    expect(table.rows).toHaveLength(1)
+    expect(table.rows[0]).toMatchObject({
+      id: 9,
+      session_id: 'conv-9',
+      title: '旧会话',
+      im_user_id: 'user-a',
+      im_chat_id: 'chat-a',
+      im_channel: 'feishu',
+      im_chat_type: 'p2p',
+      source: 'im-inbound',
+      created_at: 100,
+      updated_at: 200
+    })
+    expect(table.rows[0]).not.toHaveProperty('staff_id')
+    expect(table.rows[0]).not.toHaveProperty('conversation_id')
+  })
+
+  it('normalizes legacy IM channel types into chat', () => {
+    const db = new SessionDatabase({
+      userDataPath: 'C:/tmp/cc-desktop-test',
+      Database: FakeDatabase
+    })
+    db.db = new FakeDatabase()
+
+    db.db.exec(`
+      CREATE TABLE agent_conversations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT UNIQUE NOT NULL,
+        type TEXT NOT NULL DEFAULT 'chat',
+        status TEXT NOT NULL DEFAULT 'idle',
+        sdk_session_id TEXT,
+        title TEXT NOT NULL DEFAULT '',
+        cwd TEXT,
+        cwd_auto INTEGER DEFAULT 0,
+        message_count INTEGER DEFAULT 0,
+        total_cost_usd REAL DEFAULT 0,
+        api_profile_id TEXT,
+        api_base_url TEXT,
+        model_id TEXT,
+        last_bootstrapped_runtime TEXT,
+        pending_runtime_change TEXT DEFAULT 'unknown',
+        queued_messages TEXT DEFAULT '[]',
+        im_user_id TEXT,
+        im_chat_id TEXT,
+        im_channel TEXT,
+        im_chat_type TEXT,
+        source TEXT DEFAULT 'manual',
+        task_id INTEGER,
+        owner_client_id TEXT,
+        client_type TEXT,
+        client_meta TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `)
+
+    db.db.tables.get('agent_conversations').rows.push(
+      {
+        id: 1,
+        session_id: 'conv-dt',
+        type: 'dingtalk',
+        status: 'closed',
+        title: '钉钉旧会话',
+        source: 'im-inbound',
+        created_at: 100,
+        updated_at: 200
+      },
+      {
+        id: 2,
+        session_id: 'conv-fs',
+        type: 'feishu',
+        status: 'closed',
+        title: '飞书旧会话',
+        source: 'im-inbound',
+        created_at: 110,
+        updated_at: 210
+      },
+      {
+        id: 3,
+        session_id: 'conv-chat',
+        type: 'chat',
+        status: 'closed',
+        title: '普通会话',
+        source: 'manual',
+        created_at: 120,
+        updated_at: 220
+      }
+    )
+
+    db.createTables()
+    db.runMigrations()
+
+    const table = db.db.tables.get('agent_conversations')
+
+    expect(table.rows).toHaveLength(3)
+    expect(table.rows.map(row => row.type)).toEqual(['chat', 'chat', 'chat'])
   })
 })

@@ -122,11 +122,10 @@ class DingTalkBridge {
 
     // 保存 listener 引用，destroy 时精确移除
     this._listeners = {
-      userMessage: ({ sessionId, imChannel, content, images, source }) => {
+      userMessage: ({ sessionId, imChannel, content, images, origin }) => {
         // 非 IM 来源 + 钉钉会话 → CC 桌面介入，同步给钉钉
         const hasBinding = this._sessionTargets.has(sessionId)
-        // 兼容 'im-inbound'（旧值）和 'dingtalk'（新值），桌面端来源才是 IM 来源，不再重复路由
-        if (source !== 'im-inbound' && source !== 'dingtalk' && (imChannel === 'dingtalk' || hasBinding)) {
+        if (origin !== 'im-inbound' && (imChannel === 'dingtalk' || hasBinding)) {
           try { this.onUserMessage(sessionId, content, images) } catch (e) {
             console.error('[DingTalk] onUserMessage threw:', e)
           }
@@ -607,9 +606,7 @@ class DingTalkBridge {
     const donePromise = this._setupResponseHandler(sessionId, sessionWebhook, { robotCode, senderStaffId, conversationId, conversationType })
 
     // 发送到 Agent（userMessage 可以是 string 或 { text, images }）
-    // 附带钉钉元数据，用于持久化来源信息
-    // source='dingtalk'（非 'im-inbound'）：前端 MessageBubble 通过 isExternalImType(source) 判定是否渲染 IM 来源标签
-    const meta = { source: 'dingtalk', senderNick, conversationId }
+    const meta = { origin: 'im-inbound', imChannel: 'dingtalk', senderNick, conversationId }
     try {
       await this.agentSessionManager.sendMessage(sessionId, userMessage, { meta })
     } catch (err) {
@@ -722,9 +719,7 @@ class DingTalkBridge {
     const db = this.agentSessionManager.sessionDatabase
     if (db && conversationId) {
       const limit = this.configManager.getConfig()?.dingtalk?.maxHistorySessions || 5
-      const sessions = db.getImSessionsByType
-        ? db.getImSessionsByType('dingtalk', staffId, conversationId, limit)
-        : db.getDingTalkSessions(staffId, conversationId, limit)
+      const sessions = db.getImSessionsByType('dingtalk', staffId, conversationId, limit)
       if (sessions.length > 0) {
         // 有历史会话，交由用户选择（而非自动恢复）
         return { needsChoice: true, sessions }

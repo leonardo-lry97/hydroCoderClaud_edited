@@ -100,11 +100,6 @@ export function getConversationIcon(conv) {
   return 'chat'
 }
 
-/** @deprecated 用 getSessionImChannel 替代 */
-export function getConversationSource(conv) {
-  return getSessionImChannel(conv) || conv?.source || 'manual'
-}
-
 /** 获取观察模式提示 i18n key */
 export function getObserveKey(channel) {
   const meta = EXTERNAL_IM_CHANNELS[channel]

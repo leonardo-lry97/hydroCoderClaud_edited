@@ -20,10 +20,12 @@ const IM_MESSAGE_LISTENER_CONFIG = {
     channelName: 'onDingTalkMessageReceived',
     normalize: (data) => ({
       id: `msg-dt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sessionId: data.sessionId || null,
       role: MessageRole.USER,
       content: data.text,
       timestamp: Date.now(),
-      source: 'dingtalk',
+      origin: 'im-inbound',
+      imChannel: 'dingtalk',
       senderNick: data.senderNick,
       ...(data.images && data.images.length > 0 ? { images: data.images } : {}),
     }),
@@ -32,10 +34,12 @@ const IM_MESSAGE_LISTENER_CONFIG = {
     channelName: 'onWeixinMessageReceived',
     normalize: (data) => ({
       id: data.messageId || `msg-wx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sessionId: data.sessionId || null,
       role: MessageRole.USER,
       content: data.text,
       timestamp: data.timestamp || Date.now(),
-      source: 'weixin',
+      origin: 'im-inbound',
+      imChannel: 'weixin',
       senderNick: data.senderNick,
       ...(data.images && data.images.length > 0 ? { images: data.images } : {}),
     }),
@@ -44,10 +48,12 @@ const IM_MESSAGE_LISTENER_CONFIG = {
     channelName: 'onFeishuMessageReceived',
     normalize: (data) => ({
       id: `msg-fs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sessionId: data.sessionId || null,
       role: MessageRole.USER,
       content: data.text,
       timestamp: Date.now(),
-      source: 'feishu',
+      origin: 'im-inbound',
+      imChannel: 'feishu',
       senderNick: data.senderNick,
       ...(data.images && data.images.length > 0 ? { images: data.images } : {}),
     }),
@@ -56,10 +62,12 @@ const IM_MESSAGE_LISTENER_CONFIG = {
     channelName: 'onEnterpriseWeixinMessageReceived',
     normalize: (data) => ({
       id: `msg-ewx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sessionId: data.sessionId || null,
       role: MessageRole.USER,
       content: data.text,
       timestamp: Date.now(),
-      source: 'enterprise-weixin',
+      origin: 'im-inbound',
+      imChannel: 'enterprise-weixin',
       senderNick: data.senderNick,
       ...(data.images && data.images.length > 0 ? { images: data.images } : {}),
     }),
@@ -83,7 +91,7 @@ function registerImListener(imType, sessionId, messagesRef, cleanupFns) {
 
   const cleanup = api[config.channelName]((data) => {
     if (data.sessionId !== sessionId) return
-    const msg = config.normalize(data)
+    const msg = config.normalize({ ...data, sessionId })
     messagesRef.value.push(msg)
   })
 
@@ -112,7 +120,7 @@ export function setupExternalImListeners(sessionId, messagesRef, cleanupFns, ena
  * 构建外部 IM 消息 bubble（供外部手动推送使用）
  * @param {string} imType - IM type id
  * @param {{ text: string, senderNick?: string, images?: Array }} data
- * @returns {{ id: string, role: string, content: string, timestamp: number, source: string, senderNick?: string, images?: Array }|null}
+ * @returns {{ id: string, role: string, content: string, timestamp: number, origin: string, imChannel: string, senderNick?: string, images?: Array }|null}
  */
 export function buildExternalImMessage(imType, data) {
   const config = IM_MESSAGE_LISTENER_CONFIG[imType]

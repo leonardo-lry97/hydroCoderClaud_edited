@@ -311,7 +311,7 @@ export function useTabManagement() {
       id: tabId,
       sessionId: agentSession.id,
       type: 'agent-chat',
-      sessionType: agentSession.type || 'chat',  // 'chat' | 'dingtalk'
+      sessionType: agentSession.type || 'chat',  // 'chat' | 'notebook'
       sessionSource: agentSession.source || 'manual',
       title: agentSession.title || t('agent.chat'),
       status: agentSession.status || 'idle',

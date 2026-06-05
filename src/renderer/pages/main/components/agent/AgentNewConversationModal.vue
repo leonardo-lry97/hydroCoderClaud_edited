@@ -72,6 +72,7 @@ import { ref, computed, watch } from 'vue'
 import { NModal, NInput, NButton, NSelect } from 'naive-ui'
 import { useLocale } from '@composables/useLocale'
 import Icon from '@components/icons/Icon.vue'
+import { getSessionImChannel } from '@shared/external-im-meta'
 
 const { t } = useLocale()
 
@@ -137,7 +138,7 @@ const loadRecentDirectories = async () => {
 
     for (const session of Array.isArray(sessions) ? sessions : []) {
       const cwd = session?.cwd
-      if (!cwd || seen.has(cwd) || session?.type === 'dingtalk') continue
+      if (!cwd || seen.has(cwd) || getSessionImChannel(session) === 'dingtalk') continue
 
       if (window.electronAPI?.checkPath) {
         try {

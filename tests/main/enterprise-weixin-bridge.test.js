@@ -95,8 +95,6 @@ describe('EnterpriseWeixinBridge', () => {
         const current = conversationRows.get(sessionId) || { session_id: sessionId }
         conversationRows.set(sessionId, {
           ...current,
-          staff_id: null,
-          conversation_id: null,
           im_user_id: null,
           im_chat_id: null,
         })
@@ -105,8 +103,6 @@ describe('EnterpriseWeixinBridge', () => {
         const current = conversationRows.get(sessionId) || { session_id: sessionId }
         conversationRows.set(sessionId, {
           ...current,
-          staff_id: userId,
-          conversation_id: chatId,
           im_user_id: userId,
           im_chat_id: chatId,
         })
@@ -182,7 +178,8 @@ describe('EnterpriseWeixinBridge', () => {
         role: 'user',
         content: text,
         timestamp: Date.now(),
-        source: meta.source,
+        origin: meta.origin || 'desktop',
+        imChannel: meta.imChannel || null,
         senderNick: meta.senderNick,
         meta,
       }
@@ -194,7 +191,7 @@ describe('EnterpriseWeixinBridge', () => {
         imChannel: session.imChannel,
         content: text,
         images: userMessage?.images || null,
-        source: meta.source || null,
+        origin: meta.origin || 'desktop',
       })
       manager.emit('agentResult', sessionId)
     })
@@ -211,7 +208,8 @@ describe('EnterpriseWeixinBridge', () => {
       '收到请回复',
       {
         meta: expect.objectContaining({
-          source: 'enterprise-weixin',
+          origin: 'im-inbound',
+          imChannel: 'enterprise-weixin',
           senderNick: '雷斯林',
           enterpriseWeixinChatId: 'user-a',
         }),
@@ -710,7 +708,8 @@ describe('EnterpriseWeixinBridge', () => {
       '企业微信回复',
       expect.objectContaining({
         meta: expect.objectContaining({
-          source: 'enterprise-weixin',
+          origin: 'im-inbound',
+          imChannel: 'enterprise-weixin',
           enterpriseWeixinChatId: 'user-a',
         }),
       })
@@ -754,7 +753,8 @@ describe('EnterpriseWeixinBridge', () => {
       '这条应该进当前绑定会话，而不是被当作编号',
       expect.objectContaining({
         meta: expect.objectContaining({
-          source: 'enterprise-weixin',
+          origin: 'im-inbound',
+          imChannel: 'enterprise-weixin',
           enterpriseWeixinChatId: 'user-a',
         }),
       })
@@ -774,7 +774,7 @@ describe('EnterpriseWeixinBridge', () => {
       return { sessionId: null }
     })
 
-    const current = manager.create({ type: 'chat', source: 'enterprise-weixin', imChannel: 'enterprise-weixin', title: '当前会话' })
+    const current = manager.create({ type: 'chat', source: 'im-inbound', imChannel: 'enterprise-weixin', title: '当前会话' })
     const oldBound = manager.create({ type: 'chat', source: 'manual', imChannel: 'enterprise-weixin', title: '旧主动绑定会话' })
     manager.sessions.get(current.id).queryGenerator = {}
     manager.sessions.get(oldBound.id).queryGenerator = {}
@@ -822,7 +822,7 @@ describe('EnterpriseWeixinBridge', () => {
       return { sessionId: null }
     })
 
-    const current = manager.create({ type: 'chat', source: 'enterprise-weixin', imChannel: 'enterprise-weixin', title: '当前会话' })
+    const current = manager.create({ type: 'chat', source: 'im-inbound', imChannel: 'enterprise-weixin', title: '当前会话' })
     const oldBound = manager.create({ type: 'chat', source: 'manual', imChannel: 'enterprise-weixin', title: '旧主动绑定会话' })
     manager.sessions.get(current.id).queryGenerator = {}
     manager.sessions.get(oldBound.id).queryGenerator = {}
@@ -999,8 +999,8 @@ describe('EnterpriseWeixinBridge', () => {
         source: 'manual',
         im_channel: null,
         title: '旧会话',
-        staff_id: null,
-        conversation_id: null,
+        im_user_id: null,
+        im_chat_id: null,
         status: 'idle',
         updated_at: Date.now(),
       }
@@ -1019,8 +1019,6 @@ describe('EnterpriseWeixinBridge', () => {
       type: 'chat',
       source: 'manual',
       im_channel: 'enterprise-weixin',
-      staff_id: 'user-a',
-      conversation_id: 'user-a',
       im_user_id: null,
       im_chat_id: null,
       status: 'idle',
@@ -1038,8 +1036,6 @@ describe('EnterpriseWeixinBridge', () => {
       type: 'chat',
       source: 'manual',
       im_channel: 'enterprise-weixin',
-      staff_id: 'user-a',
-      conversation_id: '',
       im_user_id: 'user-a',
       im_chat_id: '',
       status: 'idle',
@@ -1217,15 +1213,18 @@ describe('EnterpriseWeixinBridge', () => {
       }),
       expect.objectContaining({
         meta: expect.objectContaining({
-          source: 'enterprise-weixin',
+          origin: 'im-inbound',
+          imChannel: 'enterprise-weixin',
         }),
       })
     )
 
     const session = Array.from(manager.sessions.values())[0]
-    expect(session.messages.find(msg => msg.role === 'user' && msg.source === 'enterprise-weixin')).toEqual(
+    expect(session.messages.find(msg => msg.role === 'user' && msg.origin === 'im-inbound' && msg.imChannel === 'enterprise-weixin')).toEqual(
       expect.objectContaining({
         content: '[图片]',
+        origin: 'im-inbound',
+        imChannel: 'enterprise-weixin',
         images: [
           expect.objectContaining({
             base64: Buffer.from('image-bytes').toString('base64'),

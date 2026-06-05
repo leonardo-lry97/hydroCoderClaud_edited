@@ -342,7 +342,7 @@ class EnterpriseWeixinBridge {
   _bindAgentEvents() {
     const mgr = this._agentSessionManager
     this._agentListeners = {
-      userMessage: ({ sessionId, imChannel, content, images, source }) => {
+      userMessage: ({ sessionId, imChannel, content, images, origin }) => {
         if (!this._isLiveSession(sessionId)) {
           if (this._replyCollector.hasCollector(sessionId)) {
             return
@@ -351,7 +351,7 @@ class EnterpriseWeixinBridge {
           return
         }
         const hasBinding = this._sessionTargets.has(sessionId)
-        if (source !== 'im-inbound' && (imChannel === this._imType || hasBinding)) {
+        if (origin !== 'im-inbound' && (imChannel === this._imType || hasBinding)) {
           this._onDesktopIntervention(sessionId, content, images)
         }
       },
@@ -1093,8 +1093,8 @@ class EnterpriseWeixinBridge {
       type: 'chat',
       source: 'im-inbound',
       im_channel: this._imType,
-      staff_id: dbRow?.im_user_id || identity.userId || '',
-      conversation_id: dbRow?.im_chat_id || identity.chatId || '',
+      im_user_id: dbRow?.im_user_id || identity.userId || '',
+      im_chat_id: dbRow?.im_chat_id || identity.chatId || '',
       status: dbRow?.status || liveSession?.status || 'idle',
     }
 
@@ -1292,10 +1292,10 @@ class EnterpriseWeixinBridge {
     }
 
     try {
-      // source='enterprise-weixin'（非 'im-inbound'）：前端 MessageBubble 通过 isExternalImType 判定 IM 来源标签
       await this._agentSessionManager.sendMessage(sessionId, userMessage, {
         meta: {
-          source: 'enterprise-weixin',
+          origin: 'im-inbound',
+          imChannel: 'enterprise-weixin',
           senderNick,
           enterpriseWeixinChatId: message.chatId,
         },
