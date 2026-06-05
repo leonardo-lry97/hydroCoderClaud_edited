@@ -1281,18 +1281,7 @@ class EnterpriseWeixinBridge {
       },
     })
 
-    await this._agentSessionManager.appendExternalUserMessage(sessionId, {
-      content: text || '[图片]',
-      source: this._imType,
-      senderNick,
-      images,
-      meta: {
-        msgId: message.msgId,
-        identity,
-        enterpriseWeixinChatId: message.chatId,
-      },
-    })
-
+    // sendMessage 内部已调用 _storeMessage 持久化，不额外 appendExternalUserMessage 避免 DB 双写
     const session = this._agentSessionManager.sessions.get(sessionId)
     if (session) {
       this._notifier.notifySessionCreated({
