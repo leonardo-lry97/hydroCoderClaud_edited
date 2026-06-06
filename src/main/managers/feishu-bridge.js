@@ -52,6 +52,10 @@ const FEISHU_MSG_ID_TTL = 10 * 60 * 1000
 const FEISHU_MSG_ID_CLEANUP_INTERVAL = 60 * 1000
 const FEISHU_UNSUPPORTED_MESSAGE_TEXT = '暂不支持该类型的飞书消息，请发送文本、图片或图文消息'
 
+function buildSessionReplyingText(title) {
+  return `✅ 已切换到会话：${title || '当前会话'}\n\n当前正在回复，请等待完成`
+}
+
 class FeishuBridge {
   constructor(configManager, agentSessionManager, mainWindow) {
     this._config = configManager
@@ -602,8 +606,10 @@ class FeishuBridge {
       })
       this._notifier.notifySessionCreated({ sessionId: result.sessionId, nickname: displayName })
       const pending = this._pendingMessages.get(mapKey)
+      const resumedSession = this._agentSessionManager.sessions.get(result.sessionId) || null
+      const shouldWaitForReply = Boolean(pending) || resumedSession?.status === 'streaming'
       if (result.action === 'resume') {
-        if (currentSessionId && currentSessionId === result.sessionId && result.wasActivated && !pending) {
+        if (currentSessionId && currentSessionId === result.sessionId && result.wasActivated && !shouldWaitForReply) {
           await this._api.sendTextMessage(
             receiveIdType,
             receiveId,
@@ -613,7 +619,9 @@ class FeishuBridge {
           await this._api.sendTextMessage(
             receiveIdType,
             receiveId,
-            buildSessionSwitchedText(result.selectedSession?.title || result.sessionId)
+            shouldWaitForReply
+              ? buildSessionReplyingText(result.selectedSession?.title || result.sessionId)
+              : buildSessionSwitchedText(result.selectedSession?.title || result.sessionId)
           )
         } else {
           await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionActivatingText())
@@ -841,6 +849,8 @@ class FeishuBridge {
             if (resolvedSessionId) {
               this._proactiveRebindSuppressedKeys.delete(mapKey)
               this._sessionMapper.clearPendingChoice(mapKey)
+              const resumedSession = this._agentSessionManager.sessions.get(resolvedSessionId) || null
+              const shouldWaitForReply = resumedSession?.status === 'streaming'
               this._sessionIdentities.set(resolvedSessionId, {
                 senderId: context.senderId,
                 senderName: context.senderName || context.senderId,
@@ -850,7 +860,13 @@ class FeishuBridge {
               })
               this._notifier.notifySessionCreated({ sessionId: resolvedSessionId, nickname: context.senderName || context.senderId })
               if (isActivated) {
-                await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionSwitchedText(selection.selected?.title || resolvedSessionId))
+                await this._api.sendTextMessage(
+                  receiveIdType,
+                  receiveId,
+                  shouldWaitForReply
+                    ? buildSessionReplyingText(selection.selected?.title || resolvedSessionId)
+                    : buildSessionSwitchedText(selection.selected?.title || resolvedSessionId)
+                )
               } else {
                 await this._api.sendTextMessage(receiveIdType, receiveId, buildSessionActivatingText())
               }
@@ -1573,10 +1589,14 @@ class FeishuBridge {
   }
 
   async _sendStatusMenu(receiveIdType, receiveId, { mapKey, chatId, context = null }) {
-    let currentSessionId = mapKey ? this._sessionMapper.sessionMap.get(mapKey) : null
-    if (!currentSessionId && context?.chatType === 'p2p' && context?.senderId) {
-      currentSessionId = await this._findBoundSessionIdBySenderId(context.senderId)
-    }
+    const currentSessionId = mapKey
+      ? await resolveStrictCurrentSessionId(this._sessionMapper, mapKey)
+      : null
+    const historySessionId = currentSessionId || (
+      context?.chatType === 'p2p' && context?.senderId
+        ? await this._findBoundSessionIdBySenderId(context.senderId)
+        : null
+    )
     const history = context?.senderId && chatId
       ? this._mergeCurrentSessionIntoHistory(
           await this._sessionMapper._queryHistorySessions({
@@ -1584,7 +1604,7 @@ class FeishuBridge {
             chatId,
             chatType: context.chatType || 'p2p',
           }),
-          currentSessionId,
+          historySessionId,
           {
             senderId: context.senderId,
             senderName: context.senderName || null,

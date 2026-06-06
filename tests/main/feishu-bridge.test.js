@@ -2030,6 +2030,41 @@ describe('FeishuBridge', () => {
     expect(enqueueMessage).not.toHaveBeenCalled()
   })
 
+  it('shows waiting text when /resume switches to an already-activated streaming Feishu session', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
+    const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
+    vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([
+      { session_id: 'hist-1', title: '历史会话 1' }
+    ])
+
+    manager.sessions.set('hist-1', {
+      id: 'hist-1',
+      type: 'chat',
+      title: '历史会话 1',
+      cwd: tempDir,
+      source: 'im-inbound',
+      imChannel: 'feishu',
+      status: 'streaming',
+      queryGenerator: {}
+    })
+    vi.spyOn(manager, 'reopen').mockReturnValue({ id: 'hist-1' })
+
+    await bridge._handleCommand('/resume 1', {
+      senderId: 'ou_xxx',
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
+    })
+
+    expect(sendTextMessage).toHaveBeenCalledWith(
+      'open_id',
+      'ou_xxx',
+      '✅ 已切换到会话：历史会话 1\n\n当前正在回复，请等待完成'
+    )
+    expect(enqueueMessage).not.toHaveBeenCalled()
+  })
+
   it('reports current Feishu historical session state with /status', async () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
@@ -2090,6 +2125,91 @@ describe('FeishuBridge', () => {
       'ou_target',
       expect.stringContaining('当前会话状态：')
     )
+  })
+
+  it('shows a proactively bound Feishu session as activated instead of current in /status after /close', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    bridge._eventClient._connected = true
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
+    vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([])
+
+    const current = manager.create({ type: 'chat', source: 'im-inbound', imChannel: 'feishu', title: '当前会话', cwd: tempDir })
+    const oldBound = manager.create({ type: 'chat', source: 'manual', imChannel: 'feishu', title: '旧主动绑定会话', cwd: tempDir })
+    manager.sessions.get(current.id).queryGenerator = {}
+    manager.sessions.get(oldBound.id).queryGenerator = {}
+    vi.spyOn(manager, 'close').mockImplementation(async (sessionId) => {
+      manager.sessions.delete(sessionId)
+    })
+
+    bridge._sessionMapper.sessionMap.set('ou_target:oc_reply', current.id)
+    bridge._sessionIdentities.set(current.id, {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+    bridge._targetSessionMap.set('ou_target', oldBound.id)
+    bridge._sessionTargets.set(oldBound.id, {
+      targetId: 'ou_target',
+      displayName: '张三'
+    })
+    manager.sessionDatabase.getAgentConversation.mockImplementation((sessionId) => {
+      if (sessionId === oldBound.id) {
+        return {
+          session_id: oldBound.id,
+          type: 'chat',
+          source: 'manual',
+          title: '旧主动绑定会话',
+          cwd: tempDir,
+          im_channel: 'feishu',
+          im_user_id: 'ou_target',
+          im_chat_id: '',
+          status: 'idle',
+          updated_at: Date.now() - 60 * 1000,
+          api_profile_id: null
+        }
+      }
+      if (sessionId === current.id) {
+        return {
+          session_id: current.id,
+          type: 'chat',
+          source: 'im-inbound',
+          title: '当前会话',
+          cwd: tempDir,
+          im_channel: 'feishu',
+          im_user_id: 'ou_target',
+          im_chat_id: 'oc_reply',
+          status: 'closed',
+          updated_at: Date.now(),
+          api_profile_id: null
+        }
+      }
+      return null
+    })
+
+    await bridge._handleCommand('/close', {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+
+    sendTextMessage.mockClear()
+
+    await bridge._handleCommand('/status', {
+      senderId: 'ou_target',
+      senderName: '张三',
+      chatId: 'oc_reply',
+      chatType: 'p2p',
+      chatName: '张三'
+    })
+
+    const statusText = sendTextMessage.mock.calls.at(-1)?.[2] || ''
+    expect(statusText).toContain('1. 🔵 ')
+    expect(statusText).not.toContain('1. ✅ ')
   })
 
   it('strips trailing mention suffixes from /status in group chats', async () => {
@@ -2772,6 +2892,64 @@ describe('FeishuBridge', () => {
       item.data.text === '继续分析这张图' &&
       Array.isArray(item.data.images) &&
       item.data.images.length === 1
+    )).toBe(true)
+  })
+
+  it('shows waiting text when a pending Feishu message is replayed into an already-activated historical session', async () => {
+    const { configManager, manager, mainWindow, sent } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const sendTextMessage = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_text')
+    const enqueueMessage = vi.spyOn(bridge, '_enqueueMessage').mockImplementation(() => {})
+    vi.spyOn(bridge._sessionMapper, 'resolveActiveSessionId').mockResolvedValue(null)
+    vi.spyOn(bridge._sessionMapper, 'handleChoice').mockResolvedValue({
+      sessionId: 'hist-1',
+      action: 'resume',
+      selectedSession: { session_id: 'hist-1', title: '历史会话 1' },
+      wasActivated: true
+    })
+
+    manager.sessions.set('hist-1', {
+      id: 'hist-1',
+      type: 'chat',
+      title: '历史会话 1',
+      cwd: tempDir,
+      source: 'im-inbound',
+      imChannel: 'feishu',
+      queryGenerator: {}
+    })
+
+    bridge._pendingMessages.set('ou_xxx:oc_xxx', {
+      message: { text: '你是谁', images: undefined },
+      senderId: 'ou_xxx',
+      chatId: 'oc_xxx',
+      chatType: 'p2p'
+    })
+
+    await bridge._handleChoiceReply(
+      'ou_xxx:oc_xxx',
+      '1',
+      { userId: 'ou_xxx', chatId: 'oc_xxx', chatType: 'p2p' },
+      'ou_xxx',
+      'oc_xxx',
+      'p2p'
+    )
+
+    expect(sendTextMessage).toHaveBeenCalledWith(
+      'open_id',
+      'ou_xxx',
+      '✅ 已切换到会话：历史会话 1\n\n当前正在回复，请等待完成'
+    )
+    expect(enqueueMessage).toHaveBeenCalledWith(
+      'hist-1',
+      { text: '你是谁', images: undefined },
+      'ou_xxx',
+      'oc_xxx',
+      'p2p'
+    )
+    expect(sent.some(item =>
+      item.channel === 'feishu:messageReceived' &&
+      item.data.sessionId === 'hist-1' &&
+      item.data.text === '你是谁'
     )).toBe(true)
   })
 
