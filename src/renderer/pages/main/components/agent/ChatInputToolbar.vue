@@ -301,7 +301,51 @@
                 :class="{ active: selectedDingTalkTargetId === target.id }"
                 @click="selectedDingTalkTargetId = target.id"
               >
-                <span class="dingtalk-target-name">{{ target.displayName || target.name || target.userId || target.id }}</span>
+                <div class="dingtalk-target-body">
+                  <div class="dingtalk-target-head">
+                    <span class="dingtalk-target-name">{{ resolveDingTalkTargetDisplayName(target) || '未命名' }}</span>
+                    <button
+                      v-if="isDingTalkChatTarget(target) && dingtalkEditingTargetId !== target.id"
+                      class="dingtalk-target-edit-trigger"
+                      type="button"
+                      @click.stop="startDingTalkAliasEdit(target)"
+                    >
+                      {{ t('agent.imQuickAliasEdit') }}
+                    </button>
+                  </div>
+                  <div v-if="isDingTalkChatTarget(target)" class="dingtalk-target-id">{{ target.id }}</div>
+                  <div
+                    v-if="dingtalkEditingTargetId === target.id"
+                    class="dingtalk-target-alias-editor"
+                    @click.stop
+                  >
+                    <input
+                      v-model="dingtalkAliasDraft"
+                      class="dingtalk-target-alias-input"
+                      :placeholder="t('agent.imQuickAliasPlaceholder')"
+                      @keyup.enter.stop="saveDingTalkAlias(target)"
+                      @keyup.esc.stop="cancelDingTalkAliasEdit"
+                    />
+                    <div class="dingtalk-target-alias-actions">
+                      <button
+                        class="dingtalk-target-edit-action primary"
+                        type="button"
+                        :disabled="dingtalkAliasSavingTargetId === target.id || !hasDingTalkAliasChanges(target)"
+                        @click.stop="saveDingTalkAlias(target)"
+                      >
+                        {{ t('common.save') }}
+                      </button>
+                      <button
+                        class="dingtalk-target-edit-action"
+                        type="button"
+                        :disabled="dingtalkAliasSavingTargetId === target.id"
+                        @click.stop="cancelDingTalkAliasEdit"
+                      >
+                        {{ t('common.cancel') }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <div v-if="dingtalkError" class="dingtalk-error">{{ dingtalkError }}</div>
@@ -480,6 +524,9 @@ const dingtalkText = ref('')
 const dingtalkError = ref('')
 const dingtalkLoading = ref(false)
 const dingtalkSending = ref(false)
+const dingtalkEditingTargetId = ref(null)
+const dingtalkAliasDraft = ref('')
+const dingtalkAliasSavingTargetId = ref(null)
 const showWeixinDropdown = ref(false)
 const weixinTargets = ref([])
 const selectedWeixinTargetId = ref(null)
@@ -554,6 +601,17 @@ const canSendEnterpriseWeixin = computed(() => Boolean(selectedEnterpriseWeixinT
 const hasBoundEnterpriseWeixinTarget = computed(() => Boolean(props.sessionImChannel === 'enterprise-weixin' && selectedEnterpriseWeixinTarget.value))
 const resolvedEnterpriseWeixinNotifyApi = computed(() => props.enterpriseWeixinNotifyApi || window.electronAPI || null)
 
+const isDingTalkChatTarget = (target) => target?.targetType === 'chat'
+
+const resolveDingTalkTargetDisplayName = (target) => {
+  if (!target) return ''
+  return target.displayName || target.name || target.userId || target.id || ''
+}
+
+const hasDingTalkAliasChanges = (target) => {
+  return dingtalkAliasDraft.value.trim() !== resolveDingTalkTargetDisplayName(target).trim()
+}
+
 const isEnterpriseWeixinChatTarget = (target) => target?.targetType === 'chat'
 
 const resolveEnterpriseWeixinTargetDisplayName = (target) => {
@@ -568,6 +626,9 @@ const hasEnterpriseWeixinAliasChanges = (target) => {
 const closeDingTalkBridgeUi = () => {
   showDingTalkDropdown.value = false
   dingtalkError.value = ''
+  dingtalkEditingTargetId.value = null
+  dingtalkAliasDraft.value = ''
+  dingtalkAliasSavingTargetId.value = null
 }
 
 const closeFeishuBridgeUi = () => {
@@ -678,6 +739,7 @@ const loadDingTalkTargets = async () => {
           id: bindingTargetId,
           staffId: binding?.staffId || bindingTargetId,
           userId: binding?.staffId || bindingTargetId,
+          targetType: binding?.targetType || 'user',
           displayName: binding?.displayName || bindingTargetId,
           name: binding?.displayName || bindingTargetId
         }
@@ -697,6 +759,64 @@ const loadDingTalkTargets = async () => {
     dingtalkError.value = err?.message || t('agent.dingtalkQuickSendFailed')
   } finally {
     dingtalkLoading.value = false
+  }
+}
+
+const startDingTalkAliasEdit = (target) => {
+  if (!isDingTalkChatTarget(target)) return
+  dingtalkEditingTargetId.value = target.id
+  dingtalkAliasDraft.value = resolveDingTalkTargetDisplayName(target)
+  dingtalkError.value = ''
+}
+
+const cancelDingTalkAliasEdit = () => {
+  dingtalkEditingTargetId.value = null
+  dingtalkAliasDraft.value = ''
+  dingtalkAliasSavingTargetId.value = null
+}
+
+const patchDingTalkTargetAlias = (chatId, displayName) => {
+  const nextDisplayName = displayName || chatId
+  dingtalkTargets.value = dingtalkTargets.value.map(target => {
+    if (target?.id !== chatId) return target
+    return {
+      ...target,
+      displayName: nextDisplayName,
+      name: nextDisplayName,
+    }
+  })
+}
+
+const saveDingTalkAlias = async (target) => {
+  const dingtalkApi = resolvedDingTalkNotifyApi.value
+  if (!isDingTalkChatTarget(target) || !dingtalkApi?.renameDingTalkKnownChat) return
+  const nextDisplayName = dingtalkAliasDraft.value.trim()
+  if (!nextDisplayName) {
+    dingtalkError.value = t('agent.imQuickAliasRequired')
+    return
+  }
+  if (!hasDingTalkAliasChanges(target)) {
+    cancelDingTalkAliasEdit()
+    return
+  }
+
+  dingtalkAliasSavingTargetId.value = target.id
+  dingtalkError.value = ''
+  try {
+    const result = await dingtalkApi.renameDingTalkKnownChat({
+      chatId: target.id,
+      displayName: nextDisplayName,
+    })
+    if (result?.error || result?.success === false) {
+      throw new Error(result?.error || t('agent.imQuickAliasSaveFailed'))
+    }
+    patchDingTalkTargetAlias(target.id, result?.displayName || nextDisplayName)
+    cancelDingTalkAliasEdit()
+  } catch (err) {
+    console.error('[ChatInputToolbar] save dingtalk alias error:', err)
+    dingtalkError.value = err?.message || t('agent.imQuickAliasSaveFailed')
+  } finally {
+    dingtalkAliasSavingTargetId.value = null
   }
 }
 
@@ -1802,7 +1922,22 @@ onUnmounted(() => {
   gap: 4px;
 }
 
+.dingtalk-target-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .enterprise-weixin-target-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dingtalk-target-head {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1819,13 +1954,36 @@ onUnmounted(() => {
   padding: 0;
 }
 
+.dingtalk-target-edit-trigger {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--primary-color);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
 .enterprise-weixin-target-id {
   font-size: 11px;
   color: var(--text-color-3);
   word-break: break-all;
 }
 
+.dingtalk-target-id {
+  font-size: 11px;
+  color: var(--text-color-3);
+  word-break: break-all;
+}
+
 .enterprise-weixin-target-alias-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.dingtalk-target-alias-editor {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1845,11 +2003,33 @@ onUnmounted(() => {
   outline: none;
 }
 
+.dingtalk-target-alias-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text-color);
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 8px;
+  outline: none;
+}
+
 .enterprise-weixin-target-alias-input:focus {
   border-color: var(--primary-color);
 }
 
+.dingtalk-target-alias-input:focus {
+  border-color: var(--primary-color);
+}
+
 .enterprise-weixin-target-alias-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.dingtalk-target-alias-actions {
   display: flex;
   gap: 6px;
 }
@@ -1865,12 +2045,33 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+.dingtalk-target-edit-action {
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  color: var(--text-color);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
 .enterprise-weixin-target-edit-action.primary {
   border-color: var(--primary-color);
   color: var(--primary-color);
 }
 
+.dingtalk-target-edit-action.primary {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
 .enterprise-weixin-target-edit-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dingtalk-target-edit-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

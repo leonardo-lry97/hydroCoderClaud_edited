@@ -25,7 +25,13 @@ const {
   buildRenameSuccessText,
   buildUnknownCommandText,
   resolveCommandCwd,
+  mergeCurrentSessionIntoHistory,
 } = require('./im-command-policy')
+const { runResumePostAction } = require('./im-resume-post-action')
+
+function buildSessionReplyingText(title) {
+  return `✅ 已切换到会话：${title || '当前会话'}\n\n当前正在回复，请等待完成`
+}
 
 function buildDingTalkCommandContext(context = {}, webhook = null) {
   return {
@@ -84,6 +90,61 @@ function getCurrentBoundHistoryRow(bridge, db, staffId) {
   }
 }
 
+function buildCurrentHistoryRow(bridge, db, currentSessionId, { senderStaffId, conversationId, conversationType }) {
+  if (!currentSessionId) return null
+
+  const liveCurrent = bridge?.agentSessionManager?.sessions?.get(currentSessionId) || null
+  const dbRow = db?.getAgentConversation?.(currentSessionId) || null
+  if (!liveCurrent && (!dbRow || dbRow.status === 'closed')) return null
+  const isGroupChat = String(conversationType || '').trim() === '2'
+
+  return {
+    ...(dbRow || {}),
+    session_id: dbRow?.session_id || liveCurrent?.id || currentSessionId,
+    title: dbRow?.title || liveCurrent?.title || currentSessionId,
+    cwd: dbRow?.cwd || liveCurrent?.cwd || null,
+    api_profile_id: dbRow?.api_profile_id || liveCurrent?.apiProfileId || null,
+    updated_at: dbRow?.updated_at || (liveCurrent?.updatedAt ? new Date(liveCurrent.updatedAt).getTime() : Date.now()),
+    type: dbRow?.type || liveCurrent?.type || 'chat',
+    source: dbRow?.source || liveCurrent?.source || 'im-inbound',
+    im_channel: 'dingtalk',
+    im_user_id: dbRow?.im_user_id || (isGroupChat ? '' : (senderStaffId || '')),
+    im_chat_id: dbRow?.im_chat_id || conversationId || '',
+    status: dbRow?.status || liveCurrent?.status || 'idle'
+  }
+}
+
+function loadDingTalkHistorySessions(bridge, {
+  currentSessionId,
+  senderStaffId,
+  conversationId,
+  conversationType,
+}) {
+  const db = bridge?.agentSessionManager?.sessionDatabase
+  const limit = bridge?.configManager?.getConfig?.()?.dingtalk?.maxHistorySessions || 5
+  if (!db || !conversationId) {
+    return { db, limit, sessions: [] }
+  }
+
+  const isGroupChat = String(conversationType) === '2'
+  const queryUserId = isGroupChat ? '' : senderStaffId
+  const exactSessions = db.getImSessionsByType('dingtalk', queryUserId, conversationId, limit)
+  const boundHistoryRow = isGroupChat ? null : getCurrentBoundHistoryRow(bridge, db, senderStaffId)
+  const mergedHistory = mergeDingTalkHistoryRows(exactSessions, boundHistoryRow ? [boundHistoryRow] : [])
+  const currentRow = buildCurrentHistoryRow(bridge, db, currentSessionId, {
+    senderStaffId,
+    conversationId,
+    conversationType,
+  })
+  const sessions = mergeCurrentSessionIntoHistory({
+    history: mergedHistory,
+    currentSessionId,
+    currentRow,
+  }).slice(0, limit)
+
+  return { db, limit, sessions }
+}
+
 module.exports = {
   // ============================================================
   // P0 命令层
@@ -140,6 +201,13 @@ module.exports = {
     // 获取当前活跃会话（如果有）
     const currentSessionId = this._resolveActiveSessionId(mapKey)
     const currentSession = currentSessionId ? this.agentSessionManager.sessions.get(currentSessionId) : null
+    const identity = this._buildSessionIdentity(
+      senderStaffId,
+      senderNick,
+      conversationId,
+      conversationTitle,
+      conversationType
+    )
 
     // 如果正在 streaming，不允许操作
     if (currentSession?.status === 'streaming') {
@@ -147,41 +215,13 @@ module.exports = {
     }
 
     // 查询历史会话
-    const db = this.agentSessionManager.sessionDatabase
+    const { db, limit, sessions } = loadDingTalkHistorySessions(this, {
+      currentSessionId,
+      senderStaffId,
+      conversationId,
+      conversationType,
+    })
     if (!db || !conversationId) return '📭 没有历史会话记录'
-    const limit = this.configManager.getConfig()?.dingtalk?.maxHistorySessions || 5
-    const isGroupChat = String(conversationType) === '2'
-    const queryUserId = isGroupChat ? '' : senderStaffId
-    const exactSessions = db.getImSessionsByType('dingtalk', queryUserId, conversationId, limit)
-    const boundHistoryRow = isGroupChat ? null : getCurrentBoundHistoryRow(this, db, senderStaffId)
-    let sessions = mergeDingTalkHistoryRows(exactSessions, boundHistoryRow ? [boundHistoryRow] : []).slice(0, limit)
-
-    if (currentSessionId) {
-      const liveCurrent = this.agentSessionManager.sessions.get(currentSessionId)
-      const currentRow = db.getAgentConversation?.(currentSessionId)
-      const currentHistoryRow = currentRow || (liveCurrent
-        ? {
-            session_id: currentSessionId,
-            title: liveCurrent.title || currentSessionId,
-            cwd: liveCurrent.cwd || null,
-            api_profile_id: liveCurrent.apiProfileId || null,
-            updated_at: liveCurrent.updatedAt ? new Date(liveCurrent.updatedAt).getTime() : Date.now(),
-            type: liveCurrent.type,
-            source: liveCurrent.source,
-            im_channel: 'dingtalk',
-            im_user_id: senderStaffId,
-            im_chat_id: conversationId,
-            status: liveCurrent.status || 'idle'
-          }
-        : null)
-
-      if (currentHistoryRow) {
-        const deduped = Array.isArray(sessions)
-          ? sessions.filter(row => (row?.session_id || row?.sessionId || row?.id) !== currentSessionId)
-          : []
-        sessions = [currentHistoryRow, ...deduped]
-      }
-    }
 
     if (!sessions || sessions.length === 0) return `📭 ${buildNoHistoryText()}`
 
@@ -204,41 +244,58 @@ module.exports = {
         return buildAlreadyConnectedText(selectedRow.title)
       }
 
-      // 切换到目标会话（不关闭当前会话）
-      // 原则：只更新连接映射，不关闭其他会话，避免误关闭桌面端激活的会话
-      // 先检查目标会话是否已在内存中激活
-      const existingSession = this.agentSessionManager.sessions.get(selectedRow.session_id)
-      const isActivated = existingSession && existingSession.queryGenerator != null
-
-      const session = this.agentSessionManager.reopen(selectedRow.session_id)
-      if (session) {
-        // 更新会话的 conversationId（确保会话属于当前钉钉对话）
-        if (!session.meta) session.meta = {}
-        session.meta.conversationId = conversationId
-
-        this.sessionMap.set(mapKey, selectedRow.session_id)
-        this._notifyFrontend('dingtalk:sessionCreated', {
-          sessionId: selectedRow.session_id, staffId: senderStaffId, nickname: senderNick,
-          conversationId, conversationTitle, title: selectedRow.title
-        })
-
-        if (isActivated) {
-          // 已激活 → 直接可用
-          return buildSessionSwitchedText(selectedRow.title)
-        }
-
-        // 未激活 → 自动发 hello 激活
-        await this._replyToDingTalk(webhook, buildSessionActivatingText())
-        this._notifyFrontend('dingtalk:messageReceived', {
-          sessionId: selectedRow.session_id, senderNick, text: 'hello'
-        })
-        this._enqueueMessage(selectedRow.session_id, 'hello', webhook, senderNick, {
-          robotCode, senderStaffId, conversationId, conversationType
-        })
-        return null  // 已由 _replyToDingTalk 回复
-      } else {
+      const result = await this._sessionMapper.handleDirectChoice(
+        mapKey,
+        sessions,
+        String(selection.index),
+        identity
+      )
+      const resumedSessionId = result?.sessionId || null
+      if (!resumedSessionId) {
         return `❌ 无法恢复该会话，可能已被删除\n\n发送任意消息可开始新会话`
       }
+
+      const session = this.agentSessionManager.sessions.get(resumedSessionId) || this.agentSessionManager.reopen(resumedSessionId)
+      if (session) {
+        if (!session.meta) session.meta = {}
+        session.meta.conversationId = conversationId
+      }
+
+      this._restoreSessionAfterExplicitChoice(mapKey, senderStaffId)
+      this._notifyFrontend('dingtalk:sessionCreated', {
+        sessionId: resumedSessionId,
+        staffId: senderStaffId,
+        nickname: senderNick,
+        conversationId,
+        conversationTitle,
+        title: result?.selectedSession?.title || session?.title || resumedSessionId
+      })
+
+      const resumedSession = this.agentSessionManager.sessions.get(resumedSessionId) || null
+      const shouldWaitForReply = resumedSession?.status === 'streaming'
+      if (result.wasActivated) {
+        return shouldWaitForReply
+          ? buildSessionReplyingText(result?.selectedSession?.title || resumedSessionId)
+          : buildSessionSwitchedText(result?.selectedSession?.title || resumedSessionId)
+      }
+
+      await this._replyToDingTalk(webhook, buildSessionActivatingText())
+      await runResumePostAction({
+        pendingMessage: null,
+        clearPendingMessage: () => {},
+        wasActivated: result.wasActivated,
+        notifyMessageReceived: () => {
+          this._notifyFrontend('dingtalk:messageReceived', {
+            sessionId: resumedSessionId, senderNick, text: 'hello'
+          })
+        },
+        enqueueHello: async () => {
+          this._enqueueMessage(resumedSessionId, 'hello', webhook, senderNick, {
+            robotCode, senderStaffId, conversationId, conversationType
+          })
+        },
+      })
+      return null  // 已由 _replyToDingTalk 回复
     }
 
     // 无参数 → 显示选择菜单（传入当前会话 ID 用于标记）
@@ -262,40 +319,13 @@ module.exports = {
   _cmdStatus(context) {
     const { mapKey, senderStaffId, conversationId, conversationType } = context || {}
     const currentSessionId = mapKey ? this._resolveActiveSessionId(mapKey) : null
-    const currentSession = currentSessionId ? this.agentSessionManager.sessions.get(currentSessionId) : null
-    const db = this.agentSessionManager.sessionDatabase
+    const { db, limit, sessions } = loadDingTalkHistorySessions(this, {
+      currentSessionId,
+      senderStaffId,
+      conversationId,
+      conversationType,
+    })
     if (!db || !conversationId) return '📭 没有历史会话记录'
-    const limit = this.configManager.getConfig()?.dingtalk?.maxHistorySessions || 5
-    const isGroupChat = String(conversationType) === '2'
-    const queryUserId = isGroupChat ? '' : senderStaffId
-    const exactSessions = db.getImSessionsByType('dingtalk', queryUserId, conversationId, limit)
-    const boundHistoryRow = isGroupChat ? null : getCurrentBoundHistoryRow(this, db, senderStaffId)
-    let sessions = mergeDingTalkHistoryRows(exactSessions, boundHistoryRow ? [boundHistoryRow] : []).slice(0, limit)
-    if (currentSessionId) {
-      const liveCurrent = this.agentSessionManager.sessions.get(currentSessionId)
-      const currentRow = db.getAgentConversation?.(currentSessionId)
-      const currentHistoryRow = currentRow || (liveCurrent
-        ? {
-            session_id: currentSessionId,
-            title: liveCurrent.title || currentSessionId,
-            cwd: liveCurrent.cwd || null,
-            api_profile_id: liveCurrent.apiProfileId || null,
-            updated_at: liveCurrent.updatedAt ? new Date(liveCurrent.updatedAt).getTime() : Date.now(),
-            type: liveCurrent.type,
-            source: liveCurrent.source,
-            im_channel: 'dingtalk',
-            im_user_id: senderStaffId,
-            im_chat_id: conversationId,
-            status: liveCurrent.status || 'idle'
-          }
-        : null)
-      if (currentHistoryRow) {
-        const deduped = Array.isArray(sessions)
-          ? sessions.filter(row => (row?.session_id || row?.sessionId || row?.id) !== currentSessionId)
-          : []
-        sessions = [currentHistoryRow, ...deduped]
-      }
-    }
     if (!sessions || sessions.length === 0) return `📭 ${buildNoHistoryText()}`
     return buildHistoryChoiceMenuText({
       sessions,
@@ -328,6 +358,7 @@ module.exports = {
       return '⏳ AI 正在响应中，请等待完成后再关闭'
     }
 
+    this._suppressProactiveRebind(currentSessionId)
     await this.agentSessionManager.close(currentSessionId)
 
     for (const [key, sid] of this.sessionMap.entries()) {
@@ -362,7 +393,11 @@ module.exports = {
       return `❌ ${err.message}`
     }
 
-    const sessionId = await this._createNewSession(senderStaffId, senderNick, conversationId, conversationTitle, mapKey, { cwd })
+    const sessionId = await this._createNewSession(senderStaffId, senderNick, conversationId, conversationTitle, mapKey, {
+      cwd,
+      conversationType,
+    })
+    this._restoreSessionAfterExplicitChoice(mapKey, senderStaffId)
 
     // 发送"会话创建中"提示
     await this._replyToDingTalk(webhook, buildSessionCreatingText())

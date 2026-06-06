@@ -233,6 +233,7 @@ const dingtalkNotifyApi = computed(() => {
     getSessionDingTalkBinding: api.getSessionDingTalkBinding?.bind(api),
     bindSessionToDingTalkTarget: api.bindSessionToDingTalkTarget?.bind(api),
     unbindSessionDingTalkTarget: api.unbindSessionDingTalkTarget?.bind(api),
+    renameDingTalkKnownChat: api.renameDingTalkKnownChat?.bind(api),
     sendDingTalkText: api.sendDingTalkText?.bind(api)
   }
 })

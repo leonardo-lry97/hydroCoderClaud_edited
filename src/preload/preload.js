@@ -1074,6 +1074,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   bindSessionToDingTalkTarget: (payload) => ipcRenderer.invoke('dingtalk:bindTarget', payload),
   unbindSessionDingTalkTarget: (payload) => ipcRenderer.invoke('dingtalk:unbindTarget', payload),
   getSessionDingTalkBinding: (sessionId) => ipcRenderer.invoke('dingtalk:getBinding', sessionId),
+  renameDingTalkKnownChat: (payload) => ipcRenderer.invoke('dingtalk:renameKnownChat', payload),
   sendDingTalkText: (payload) => ipcRenderer.invoke('dingtalk:sendText', payload),
 
   // 飞书桥接

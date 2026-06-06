@@ -36,6 +36,9 @@ class ImSessionMapper {
     this._buildSessionTitle = opts.buildSessionTitle
     this._defaultCwd = opts.defaultCwd || null
     this._sendReplyFn = opts.sendReplyFn || null
+    this._queryHistorySessionsOverride = typeof opts.queryHistorySessions === 'function'
+      ? opts.queryHistorySessions
+      : null
 
     /** @type {Map<string, string>} IM 身份 key → sessionId */
     this.sessionMap = new Map()
@@ -120,6 +123,14 @@ class ImSessionMapper {
 
   /** @private */
   async _queryHistorySessions(identity) {
+    if (this._queryHistorySessionsOverride) {
+      try {
+        const result = await this._queryHistorySessionsOverride(identity)
+        return Array.isArray(result) ? result : []
+      } catch {
+        return []
+      }
+    }
     if (!this._sessionDatabase?.getImSessionsByType) {
       return []
     }
@@ -307,6 +318,7 @@ class ImSessionMapper {
     if (!pending) return { sessionId: null }
 
     const { sessions, resolve, timer, options } = pending
+    const safeResolve = typeof resolve === 'function' ? resolve : () => {}
     const choice = parseInt(inputText, 10)
 
     if (isNaN(choice) || choice < 0 || choice > sessions.length) {
@@ -327,7 +339,7 @@ class ImSessionMapper {
         this.sessionMap.set(mapKey, sessionId)
       }
       const result = { sessionId, action: 'new', wasActivated: false }
-      resolve(result)
+      safeResolve(result)
       return result
     }
 
@@ -339,13 +351,17 @@ class ImSessionMapper {
       const wasActivated = !!existingSession?.queryGenerator
       if (sessionId) {
         try {
-          await this._agentSessionManager.reopen(sessionId)
-          this.sessionMap.set(mapKey, sessionId)
-          if (this._sessionDatabase?.updateImIdentity) {
-            const staffId = identity.staffId || identity.userId || ''
-            const conversationId = identity.conversationId || identity.chatId || ''
-            const isGroupChat = identity.chatType === 'group' || identity.chatType === 'chat'
-            this._sessionDatabase.updateImIdentity(sessionId, { userId: isGroupChat ? '' : staffId, chatId: conversationId, chatType: isGroupChat ? 'group' : 'p2p' })
+          const reopened = await this._agentSessionManager.reopen(sessionId)
+          if (!reopened) {
+            sessionId = null
+          } else {
+            this.sessionMap.set(mapKey, sessionId)
+            if (this._sessionDatabase?.updateImIdentity) {
+              const staffId = identity.staffId || identity.userId || ''
+              const conversationId = identity.conversationId || identity.chatId || ''
+              const isGroupChat = identity.chatType === 'group' || identity.chatType === 'chat'
+              this._sessionDatabase.updateImIdentity(sessionId, { userId: isGroupChat ? '' : staffId, chatId: conversationId, chatType: isGroupChat ? 'group' : 'p2p' })
+            }
           }
         } catch (err) {
           console.error(`[ImSessionMapper] reopen failed:`, err)
@@ -353,12 +369,12 @@ class ImSessionMapper {
         }
       }
       const result = { sessionId, action: 'resume', selectedSession: selected, wasActivated }
-      resolve(result)
+      safeResolve(result)
       return result
     }
 
     // 无效选择
-    resolve({ sessionId: null })
+    safeResolve({ sessionId: null })
     return { sessionId: null }
   }
 

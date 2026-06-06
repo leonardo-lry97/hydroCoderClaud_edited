@@ -33,6 +33,10 @@ function setupDingTalkHandlers(ipcMain, dingtalkBridge, configManager) {
     return dingtalkBridge.getBinding(sessionId)
   })
 
+  ipcMain.handle('dingtalk:renameKnownChat', async (_event, payload = {}) => {
+    return dingtalkBridge.renameKnownChat(payload.chatId, payload.displayName)
+  })
+
 }
 
 module.exports = { setupDingTalkHandlers }

@@ -114,6 +114,19 @@ describe('chat input IM binding props', () => {
     expect(embeddedPanelSource).toContain("renameEnterpriseWeixinKnownChat: api.renameEnterpriseWeixinKnownChat?.bind(api)")
   })
 
+  it('supports editing dingtalk group local aliases inside the quick-send dropdown', () => {
+    const toolbarSource = fs.readFileSync(chatInputToolbarPath, 'utf-8')
+    const preloadSource = fs.readFileSync(path.resolve(__dirname, '../../src/preload/preload.js'), 'utf-8')
+    const embeddedPanelSource = fs.readFileSync(path.resolve(__dirname, '../../src/renderer/components/embedded-agent/EmbeddedAgentPanel.vue'), 'utf-8')
+
+    expect(toolbarSource).toContain("const isDingTalkChatTarget = (target) => target?.targetType === 'chat'")
+    expect(toolbarSource).toContain("dingtalkApi?.renameDingTalkKnownChat")
+    expect(toolbarSource).toContain("const saveDingTalkAlias = async (target) => {")
+    expect(toolbarSource).toContain("{{ t('agent.imQuickAliasEdit') }}")
+    expect(preloadSource).toContain("renameDingTalkKnownChat: (payload) => ipcRenderer.invoke('dingtalk:renameKnownChat', payload)")
+    expect(embeddedPanelSource).toContain("renameDingTalkKnownChat: api.renameDingTalkKnownChat?.bind(api)")
+  })
+
   it('dispatches an IM binding refresh event after quick-send binding changes', () => {
     const toolbarSource = fs.readFileSync(chatInputToolbarPath, 'utf-8')
 
