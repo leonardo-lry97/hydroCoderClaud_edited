@@ -61,7 +61,36 @@ const DEFAULT_HISTORY_LIMIT = 5
 const HISTORY_CHOICE_TIMEOUT = 10 * 60 * 1000
 const ENTERPRISE_WEIXIN_UNSUPPORTED_MESSAGE_TEXT = '暂不支持该类型的企业微信消息，请发送文本或图片消息'
 const ENTERPRISE_WEIXIN_IMAGE_DIR = 'enterprise-weixin'
-const ENTERPRISE_WEIXIN_GROUP_MENTION_PATTERN = /(^|\s)@[^\s@]+/g
+const ENTERPRISE_WEIXIN_GROUP_MENTION_PATTERN = /@[^\s@/]+/g
+const ENTERPRISE_WEIXIN_GROUP_LEADING_MENTION_PATTERN = /^@[^\s@/]+/
+const ENTERPRISE_WEIXIN_EMAIL_LOCAL_PART_CHAR_PATTERN = /[A-Za-z0-9._%+-]/
+const ENTERPRISE_WEIXIN_EMAIL_DOMAIN_PATTERN = /^@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+
+function stripEnterpriseWeixinGroupMentions(text) {
+  return text.replace(ENTERPRISE_WEIXIN_GROUP_MENTION_PATTERN, (match, offset, source) => {
+    const previousChar = offset > 0 ? source[offset - 1] : ''
+
+    // Preserve common email-like strings such as foo@bar.com in group chats.
+    if (
+      ENTERPRISE_WEIXIN_EMAIL_LOCAL_PART_CHAR_PATTERN.test(previousChar)
+      && ENTERPRISE_WEIXIN_EMAIL_DOMAIN_PATTERN.test(match)
+    ) {
+      return match
+    }
+
+    return ''
+  })
+}
+
+function stripLeadingEnterpriseWeixinGroupMentions(text) {
+  let normalized = String(text || '').trim()
+  while (normalized.startsWith('@')) {
+    const match = normalized.match(ENTERPRISE_WEIXIN_GROUP_LEADING_MENTION_PATTERN)
+    if (!match) break
+    normalized = normalized.slice(match[0].length).replace(/^\s+/, '')
+  }
+  return normalized
+}
 
 function buildSessionReplyingText(title) {
   return `✅ 已切换到会话：${title || '当前会话'}\n\n当前正在回复，请等待完成`
@@ -395,7 +424,9 @@ class EnterpriseWeixinBridge {
     this._syncSessionDatabase()
     const inboundMessage = await this._normalizeInboundMessage(frame)
     const hydratedMessage = await this._hydrateInboundImages(inboundMessage)
-    const normalizedText = this._normalizeInboundText(hydratedMessage?.text || '', { chatType: hydratedMessage?.chatType })
+    const rawText = hydratedMessage?.text || ''
+    const normalizedText = this._normalizeInboundText(rawText, { chatType: hydratedMessage?.chatType })
+    const commandText = this._normalizeCommandText(rawText, { chatType: hydratedMessage?.chatType })
     const message = normalizedText === (hydratedMessage?.text || '')
       ? hydratedMessage
       : { ...hydratedMessage, text: normalizedText }
@@ -436,8 +467,8 @@ class EnterpriseWeixinBridge {
       }
     }
 
-    if (normalizedText.startsWith('/')) {
-      await this._handleCommand(normalizedText, {
+    if (commandText.startsWith('/')) {
+      await this._handleCommand(commandText, {
         frame,
         identity,
         chatId: message.chatId,
@@ -686,12 +717,22 @@ class EnterpriseWeixinBridge {
     console.info('[EnterpriseWeixin] Group inbound payload:', JSON.stringify(payloadSummary))
   }
 
+  _normalizeCommandText(text, { chatType } = {}) {
+    if (typeof text !== 'string') return ''
+    let normalized = text.trim()
+    if (!normalized) return normalized
+    if (String(chatType || '').toLowerCase() !== 'group') return normalized
+    normalized = stripLeadingEnterpriseWeixinGroupMentions(normalized)
+    normalized = stripEnterpriseWeixinGroupMentions(normalized)
+    return normalized.replace(/\s+/g, ' ').trim()
+  }
+
   _normalizeInboundText(text, { chatType } = {}) {
     if (typeof text !== 'string') return ''
     let normalized = text.trim()
     if (!normalized) return normalized
     if (String(chatType || '').toLowerCase() !== 'group') return normalized
-    normalized = normalized.replace(ENTERPRISE_WEIXIN_GROUP_MENTION_PATTERN, '$1')
+    normalized = stripEnterpriseWeixinGroupMentions(normalized)
     return normalized.replace(/\s+/g, ' ').trim()
   }
 

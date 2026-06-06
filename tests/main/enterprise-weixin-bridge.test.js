@@ -1473,6 +1473,59 @@ describe('EnterpriseWeixinBridge', () => {
     )
   })
 
+  it('strips enterprise weixin group mentions even when they are adjacent to text', async () => {
+    const { bridge, manager, sent } = createHarness()
+    const sendMessage = stubSendMessage(manager)
+
+    await bridge._handleMessage(inboundFrame({
+      chattype: 'group',
+      chatid: 'group-1',
+      from: { userid: 'user-a', name: '雷斯林' },
+      text: { content: '你好@HydroDesktop @张三 大家好' },
+      chat_name: '研发群',
+    }))
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.any(String),
+      '你好 大家好',
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          origin: 'im-inbound',
+          imChannel: 'enterprise-weixin',
+          enterpriseWeixinChatId: 'group-1',
+        }),
+      })
+    )
+    expect(sent).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          channel: 'enterprise-weixin:messageReceived',
+          data: expect.objectContaining({
+            text: '你好 大家好',
+          }),
+        }),
+      ])
+    )
+  })
+
+  it('treats enterprise weixin group commands with adjacent mentions as commands', async () => {
+    const { bridge, sent } = createHarness()
+    const queryHistorySpy = vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([
+      { session_id: 'hist-1', title: '群会话', updated_at: Date.now() - 1000 },
+    ])
+
+    await bridge._handleMessage(inboundFrame({
+      chattype: 'group',
+      chatid: 'group-1',
+      from: { userid: 'user-a', name: '雷斯林' },
+      text: { content: '@HydroDesktop/status  ' },
+      chat_name: '研发群',
+    }))
+
+    expect(queryHistorySpy).toHaveBeenCalled()
+    expect(sent.find(item => item?.markdown?.content?.includes('当前会话状态：'))).toBeTruthy()
+  })
+
   it('keeps enterprise weixin group binding display name from inbound chat name', async () => {
     const { bridge, manager } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '群会话' })
