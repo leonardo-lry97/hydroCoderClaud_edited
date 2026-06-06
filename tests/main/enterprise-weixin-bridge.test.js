@@ -84,6 +84,7 @@ describe('EnterpriseWeixinBridge', () => {
       }),
       updateAgentConversationTitle: vi.fn(),
       updateAgentMessageToolOutput: vi.fn(),
+      upsertKnownChat: vi.fn(),
       setImChannel: vi.fn((sessionId, imChannel) => {
         const current = conversationRows.get(sessionId) || { session_id: sessionId }
         conversationRows.set(sessionId, {
@@ -435,6 +436,34 @@ describe('EnterpriseWeixinBridge', () => {
     expect(bridge._sessionMapper.sessionMap.get('user-a:user-a')).toBe(reopened.id)
   })
 
+  it('shows waiting text when a pending enterprise weixin message is replayed into an already-activated historical session', async () => {
+    const { bridge, manager, replies } = createHarness()
+    const reopened = manager.create({ type: 'chat', source: 'manual', title: '企业2' })
+    const reopenedSession = manager.sessions.get(reopened.id)
+    reopenedSession.imChannel = 'enterprise-weixin'
+    reopenedSession.queryGenerator = {}
+    const enqueueSpy = vi.spyOn(bridge, '_enqueueInboundMessage').mockResolvedValue()
+    manager.sessionDatabase.getImSessionsByType.mockReturnValue([
+      { session_id: reopened.id, title: '企业2', updated_at: Date.now() - 1000 },
+    ])
+
+    await bridge._handleMessage(inboundFrame({ text: { content: '哈哈' } }))
+    await bridge._handleMessage(inboundFrame({ text: { content: '1' } }))
+
+    expect(replies.at(-1).markdown.content).toContain('✅ 已切换到会话：企业2')
+    expect(replies.at(-1).markdown.content).toContain('当前正在回复，请等待完成')
+    expect(enqueueSpy).toHaveBeenCalledWith(
+      reopened.id,
+      expect.any(Object),
+      expect.objectContaining({
+        text: '哈哈',
+      }),
+      expect.objectContaining({
+        userId: 'user-a',
+      })
+    )
+  })
+
   it('notifies frontend to open the resumed session after numeric history choice', async () => {
     const { bridge, manager, sent } = createHarness()
     const reopened = manager.create({ type: 'chat', source: 'manual', title: '历史会话 1' })
@@ -476,6 +505,27 @@ describe('EnterpriseWeixinBridge', () => {
     expect(bridge._sessionMapper.sessionMap.get('user-a:user-a')).toBe(reopened.id)
     expect(sent.map(item => item.channel)).toContain('enterprise-weixin:sessionCreated')
     expect(enqueueSpy).toHaveBeenCalled()
+  })
+
+  it('shows waiting text when /resume switches to an already-activated streaming enterprise weixin session', async () => {
+    const { bridge, manager, replies } = createHarness()
+    const reopened = manager.create({ type: 'chat', source: 'manual', title: '历史会话 1' })
+    const reopenedSession = manager.sessions.get(reopened.id)
+    reopenedSession.imChannel = 'enterprise-weixin'
+    reopenedSession.status = 'streaming'
+    reopenedSession.queryGenerator = {}
+    const enqueueSpy = vi.spyOn(bridge, '_enqueueInboundMessage').mockResolvedValue()
+    manager.sessionDatabase.getImSessionsByType.mockReturnValue([
+      { session_id: reopened.id, title: '历史会话 1', updated_at: Date.now() - 1000 },
+    ])
+
+    await bridge._handleMessage(inboundFrame({
+      text: { content: '/resume 1' },
+    }))
+
+    expect(replies.at(-1).markdown.content).toContain('✅ 已切换到会话：历史会话 1')
+    expect(replies.at(-1).markdown.content).toContain('当前正在回复，请等待完成')
+    expect(enqueueSpy).not.toHaveBeenCalled()
   })
 
   it('persists enterprise weixin chat context after resuming a history session', async () => {
@@ -1293,6 +1343,194 @@ describe('EnterpriseWeixinBridge', () => {
       '第一段第二段',
       true
     )
+  })
+
+  it('treats @HydroDesktop /status in enterprise weixin group chat as a command', async () => {
+    const { bridge, sent } = createHarness()
+    const queryHistorySpy = vi.spyOn(bridge._sessionMapper, '_queryHistorySessions').mockResolvedValue([
+      { session_id: 'hist-1', title: '群会话', updated_at: Date.now() - 1000 },
+    ])
+
+    await bridge._handleMessage(inboundFrame({
+      chattype: 'group',
+      chatid: 'group-1',
+      from: { userid: 'user-a', name: '雷斯林' },
+      text: { content: '@HydroDesktop /status' },
+    }))
+
+    expect(queryHistorySpy).toHaveBeenCalled()
+    expect(sent.find(item => item?.markdown?.content?.includes('当前会话状态：'))).toBeTruthy()
+  })
+
+  it('strips enterprise weixin group mentions from bubble text and forwarded user text', async () => {
+    const { bridge, manager, sent } = createHarness()
+    const sendMessage = stubSendMessage(manager)
+
+    await bridge._handleMessage(inboundFrame({
+      chattype: 'group',
+      chatid: 'group-1',
+      from: { userid: 'user-a', name: '雷斯林' },
+      text: { content: '@HydroDesktop hi' },
+      chat_name: '研发群',
+    }))
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.any(String),
+      'hi',
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          origin: 'im-inbound',
+          imChannel: 'enterprise-weixin',
+          enterpriseWeixinChatId: 'group-1',
+        }),
+      })
+    )
+    expect(sent).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          channel: 'enterprise-weixin:messageReceived',
+          data: expect.objectContaining({
+            text: 'hi',
+          }),
+        }),
+      ])
+    )
+  })
+
+  it('strips other enterprise weixin group mentions before forwarding text to llm', async () => {
+    const { bridge, manager, sent } = createHarness()
+    const sendMessage = stubSendMessage(manager)
+
+    await bridge._handleMessage(inboundFrame({
+      chattype: 'group',
+      chatid: 'group-1',
+      from: { userid: 'user-a', name: '雷斯林' },
+      text: { content: '@张三 @HydroDesktop hi @李四' },
+      chat_name: '研发群',
+    }))
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.any(String),
+      'hi',
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          origin: 'im-inbound',
+          imChannel: 'enterprise-weixin',
+          enterpriseWeixinChatId: 'group-1',
+        }),
+      })
+    )
+    expect(sent).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          channel: 'enterprise-weixin:messageReceived',
+          data: expect.objectContaining({
+            text: 'hi',
+          }),
+        }),
+      ])
+    )
+  })
+
+  it('keeps enterprise weixin group binding display name from inbound chat name', async () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '群会话' })
+    vi.spyOn(bridge, '_enqueueInboundMessage').mockResolvedValue()
+
+    await bridge._handleMessage(inboundFrame({
+      chattype: 'group',
+      chatid: 'group-encoded-1',
+      from: { userid: 'user-a', name: '雷斯林' },
+      text: { content: '群里来一条' },
+      chat_name: '研发群',
+    }))
+
+    const sessionId = Array.from(manager.sessions.keys())[0]
+    expect(bridge._knownChats.get('group-encoded-1')).toEqual(
+      expect.objectContaining({
+        chatId: 'group-encoded-1',
+        name: '研发群',
+      })
+    )
+
+    bridge.bindTarget(created.id, {
+      targetId: 'group-encoded-1',
+      targetType: 'chat',
+    })
+
+    expect(bridge.getBinding(created.id)).toEqual({
+      targetId: 'group-encoded-1',
+      displayName: '研发群',
+    })
+    expect(sessionId).toBeTruthy()
+  })
+
+  it('persists a bound enterprise weixin group so it can be listed again after unbind', () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '群会话' })
+    const updateKnownChatSpy = manager.sessionDatabase.upsertKnownChat
+
+    bridge.bindTarget(created.id, {
+      targetId: 'group-bound-1',
+      targetType: 'chat',
+      displayName: '项目群A',
+    })
+
+    expect(updateKnownChatSpy).toHaveBeenCalledWith('enterprise-weixin', 'group-bound-1', '项目群A')
+    expect(bridge._knownChats.get('group-bound-1')).toEqual(
+      expect.objectContaining({
+        chatId: 'group-bound-1',
+        name: '项目群A',
+      })
+    )
+
+    bridge.unbindTarget(created.id)
+
+    expect(bridge.getBinding(created.id)).toBe(null)
+    expect(bridge._knownChats.get('group-bound-1')).toEqual(
+      expect.objectContaining({
+        chatId: 'group-bound-1',
+        name: '项目群A',
+      })
+    )
+  })
+
+  it('uses active send for enterprise weixin group stream replies instead of replyStream', async () => {
+    const { bridge, wsClient } = createHarness()
+    const frame = inboundFrame({
+      chattype: 'group',
+      chatid: 'group-1',
+      chat_name: '研发群',
+    })
+    bridge._replyCollector.startCollect('session-group-stream', {
+      webhook: frame,
+      sendFn: async () => {},
+    })
+    bridge._sessionIdentities.set('session-group-stream', {
+      userId: 'user-a',
+      senderId: 'user-a',
+      senderName: '雷斯林',
+      chatId: 'group-1',
+      chatType: 'group',
+      chatName: '研发群',
+    })
+
+    bridge._onAgentMessage('session-group-stream', {
+      type: 'assistant',
+      content: [
+        { type: 'text', text: '第一段' },
+        { type: 'text', text: '第二段' },
+      ],
+    })
+
+    await bridge._onAgentResult('session-group-stream')
+
+    expect(wsClient.replyStreamNonBlocking).not.toHaveBeenCalled()
+    expect(wsClient.sendMessage).toHaveBeenCalledTimes(1)
+    expect(wsClient.sendMessage).toHaveBeenCalledWith('group-1', {
+      msgtype: 'markdown',
+      markdown: { content: '第一段第二段' },
+    })
   })
 
   it('sends remaining text on final stream finish when collector has unsent tail', async () => {

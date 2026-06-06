@@ -93,6 +93,14 @@ describe('chat input IM binding props', () => {
     expect(toolbarSource).toContain('void loadEnterpriseWeixinTargets()')
   })
 
+  it('loads enterprise weixin quick-send targets from the merged target list before falling back to contacts', () => {
+    const toolbarSource = fs.readFileSync(chatInputToolbarPath, 'utf-8')
+
+    expect(toolbarSource).toContain('enterpriseWeixinApi?.listEnterpriseWeixinTargets')
+    expect(toolbarSource).toContain('? enterpriseWeixinApi.listEnterpriseWeixinTargets()')
+    expect(toolbarSource).toContain(': enterpriseWeixinApi?.listEnterpriseWeixinContacts')
+  })
+
   it('dispatches an IM binding refresh event after quick-send binding changes', () => {
     const toolbarSource = fs.readFileSync(chatInputToolbarPath, 'utf-8')
 

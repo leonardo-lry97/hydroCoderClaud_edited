@@ -61,6 +61,11 @@ const DEFAULT_HISTORY_LIMIT = 5
 const HISTORY_CHOICE_TIMEOUT = 10 * 60 * 1000
 const ENTERPRISE_WEIXIN_UNSUPPORTED_MESSAGE_TEXT = '暂不支持该类型的企业微信消息，请发送文本或图片消息'
 const ENTERPRISE_WEIXIN_IMAGE_DIR = 'enterprise-weixin'
+const ENTERPRISE_WEIXIN_GROUP_MENTION_PATTERN = /(^|\s)@[^\s@]+/g
+
+function buildSessionReplyingText(title) {
+  return `✅ 已切换到会话：${title || '当前会话'}\n\n当前正在回复，请等待完成`
+}
 
 class EnterpriseWeixinBridge {
   constructor(configManager, agentSessionManager, mainWindow) {
@@ -388,8 +393,12 @@ class EnterpriseWeixinBridge {
 
   async _handleMessage(frame) {
     this._syncSessionDatabase()
-    const normalizedMessage = await this._normalizeInboundMessage(frame)
-    const message = await this._hydrateInboundImages(normalizedMessage)
+    const inboundMessage = await this._normalizeInboundMessage(frame)
+    const hydratedMessage = await this._hydrateInboundImages(inboundMessage)
+    const normalizedText = this._normalizeInboundText(hydratedMessage?.text || '', { chatType: hydratedMessage?.chatType })
+    const message = normalizedText === (hydratedMessage?.text || '')
+      ? hydratedMessage
+      : { ...hydratedMessage, text: normalizedText }
     if (!message?.msgId) return
 
     if (this._processedMsgIds.has(message.msgId)) return
@@ -397,15 +406,18 @@ class EnterpriseWeixinBridge {
 
     // 被动收集群聊：群消息入站时记录 chatId
     if (message.chatType === 'group' && message.chatId) {
+      const chatDisplayName = message.chatName || message.chatId || ''
       this._knownChats.set(message.chatId, {
         chatId: message.chatId,
-        name: message.chatId || '',
+        name: chatDisplayName,
       })
       // 持久化到 DB，桥重启后可恢复
       try {
-        this._sessionDatabase?.upsertKnownChat?.(this._imType, message.chatId, '')
+        this._sessionDatabase?.upsertKnownChat?.(this._imType, message.chatId, chatDisplayName)
       } catch {}
     }
+
+    this._logGroupInboundPayload(frame, message)
 
     const identity = this._buildIdentity(message)
     const mapKey = this._sessionMapper.buildKey(identity)
@@ -424,7 +436,6 @@ class EnterpriseWeixinBridge {
       }
     }
 
-    const normalizedText = (message.text || '').trim()
     if (normalizedText.startsWith('/')) {
       await this._handleCommand(normalizedText, {
         frame,
@@ -543,6 +554,7 @@ class EnterpriseWeixinBridge {
     const body = frame?.body || {}
     const msgType = body?.msgtype || 'text'
     const senderName = await this._resolveInboundSenderName(body)
+    const chatName = await this._resolveInboundChatName(body)
     const base = {
       frame,
       raw: body,
@@ -550,6 +562,7 @@ class EnterpriseWeixinBridge {
       msgType,
       chatId: body?.chatid || body?.from?.userid || '',
       chatType: body?.chattype || 'single',
+      chatName,
       userId: body?.from?.userid || '',
       senderName,
       text: '',
@@ -599,7 +612,7 @@ class EnterpriseWeixinBridge {
       chatId: message.chatId,
       chatType: message.chatType,
       nickname: message.senderName || message.userId,
-      channelName: isGroup ? (message.chatId || '') : '',
+      channelName: isGroup ? (message.chatName || message.chatId || '') : '',
     }
   }
 
@@ -616,6 +629,70 @@ class EnterpriseWeixinBridge {
 
     const userId = typeof body?.from?.userid === 'string' ? body.from.userid.trim() : ''
     return userId
+  }
+
+  async _resolveInboundChatName(body) {
+    const directName = [
+      body?.chat_name,
+      body?.chatName,
+      body?.conversationName,
+      body?.roomName,
+      body?.groupName,
+      body?.quote?.chat_name,
+      body?.quote?.chatName,
+    ]
+      .find(value => typeof value === 'string' && value.trim())
+    if (directName) return directName.trim()
+
+    const chatId = typeof body?.chatid === 'string' ? body.chatid.trim() : ''
+    const known = chatId ? this._knownChats.get(chatId) : null
+    if (known?.name) return known.name
+    return chatId
+  }
+
+  _logGroupInboundPayload(frame, message) {
+    if (String(message?.chatType || '').toLowerCase() !== 'group') return
+    const body = frame?.body || {}
+    const rawText = typeof body?.text?.content === 'string'
+      ? body.text.content
+      : (Array.isArray(body?.mixed?.msg_item)
+          ? body.mixed.msg_item
+            .filter(item => item?.msgtype === 'text')
+            .map(item => item?.text?.content || '')
+            .join('')
+          : '')
+    const normalizedText = typeof message?.text === 'string'
+      ? message.text
+      : this._normalizeInboundText(rawText, { chatType: message?.chatType })
+    const payloadSummary = {
+      msgId: message?.msgId || '',
+      msgType: body?.msgtype || '',
+      chatId: message?.chatId || '',
+      chatType: message?.chatType || '',
+      senderUserId: message?.userId || '',
+      senderName: message?.senderName || '',
+      chatNameCandidates: {
+        chat_name: body?.chat_name || '',
+        chatName: body?.chatName || '',
+        conversationName: body?.conversationName || '',
+        roomName: body?.roomName || '',
+        groupName: body?.groupName || '',
+        quoteChatName: body?.quote?.chat_name || body?.quote?.chatName || '',
+      },
+      bodyKeys: Object.keys(body),
+      rawText,
+      normalizedText,
+    }
+    console.info('[EnterpriseWeixin] Group inbound payload:', JSON.stringify(payloadSummary))
+  }
+
+  _normalizeInboundText(text, { chatType } = {}) {
+    if (typeof text !== 'string') return ''
+    let normalized = text.trim()
+    if (!normalized) return normalized
+    if (String(chatType || '').toLowerCase() !== 'group') return normalized
+    normalized = normalized.replace(ENTERPRISE_WEIXIN_GROUP_MENTION_PATTERN, '$1')
+    return normalized.replace(/\s+/g, ' ').trim()
   }
 
   async _handlePendingChoice(frame, message, identity, mapKey) {
@@ -656,7 +733,17 @@ class EnterpriseWeixinBridge {
 
     if (result.action === 'resume') {
       this._proactiveRebindSuppressedKeys.delete(mapKey)
-      await this._sendTextReply(frame, result.wasActivated ? buildAlreadyConnectedText(result.selectedSession?.title || result.sessionId) : buildSessionActivatingText())
+      const pending = this._pendingInboundMessages.get(mapKey)
+      const resumedSession = this._agentSessionManager.sessions.get(sessionId) || null
+      const shouldWaitForReply = Boolean(pending) || resumedSession?.status === 'streaming'
+      await this._sendTextReply(
+        frame,
+        result.wasActivated
+          ? (shouldWaitForReply
+            ? buildSessionReplyingText(result.selectedSession?.title || result.sessionId)
+            : buildSessionSwitchedText(result.selectedSession?.title || result.sessionId))
+          : buildSessionActivatingText()
+      )
     } else if (result.action === 'new') {
       this._proactiveRebindSuppressedKeys.delete(mapKey)
       await this._sendTextReply(frame, buildSessionCreatingText())
@@ -872,10 +959,14 @@ class EnterpriseWeixinBridge {
             })
             this._proactiveRebindSuppressedKeys.delete(mapKey)
             this._notifier.notifySessionCreated({ sessionId: result.sessionId, nickname: identity.nickname || identity.userId })
+            const resumedSession = this._agentSessionManager.sessions.get(result.sessionId) || null
+            const shouldWaitForReply = resumedSession?.status === 'streaming'
             await this._sendTextReply(
               context.frame,
               result.wasActivated
-                ? buildSessionSwitchedText(result.selectedSession?.title || result.sessionId)
+                ? (shouldWaitForReply
+                  ? buildSessionReplyingText(result.selectedSession?.title || result.sessionId)
+                  : buildSessionSwitchedText(result.selectedSession?.title || result.sessionId))
                 : buildSessionActivatingText()
             )
             await activateNewSession({
@@ -1014,21 +1105,22 @@ class EnterpriseWeixinBridge {
     if (!sessionId || this._sessionIdentities.has(sessionId)) return this._sessionIdentities.get(sessionId) || null
 
     const row = this._sessionDatabase?.getAgentConversation?.(sessionId)
-    const userId = row?.im_channel === this._imType && typeof row?.im_user_id === 'string'
-      ? row.im_user_id.trim()
-      : ''
-    if (!userId || row?.im_channel !== this._imType) return null
-
+    if (row?.im_channel !== this._imType) return null
+    const userId = typeof row?.im_user_id === 'string' ? row.im_user_id.trim() : ''
     const chatId = typeof row?.im_chat_id === 'string' && row.im_chat_id.trim()
       ? row.im_chat_id.trim()
       : ''
-    const displayName = this._sessionTargets.get(sessionId)?.displayName || userId
+    const isGroupChat = row?.im_chat_type === 'group' || row?.im_chat_type === 'chat'
+    const targetId = isGroupChat ? chatId : userId
+    if (!targetId) return null
+    const knownChatName = isGroupChat ? (this._knownChats.get(targetId)?.name || '') : ''
+    const displayName = this._sessionTargets.get(sessionId)?.displayName || knownChatName || targetId
     const identity = {
-      userId,
-      senderId: userId,
+      userId: isGroupChat ? '' : userId,
+      senderId: isGroupChat ? '' : userId,
       senderName: displayName,
       chatId,
-      chatType: chatId ? 'group' : 'single',
+      chatType: isGroupChat ? 'group' : 'single',
       chatName: displayName,
     }
     this._sessionIdentities.set(sessionId, identity)
@@ -1106,11 +1198,19 @@ class EnterpriseWeixinBridge {
   }
 
   async _sendTextReply(frame, content) {
-    if (!this._wsClient || !frame?.headers?.req_id) return
-    await this._wsClient.reply(frame, {
+    if (!this._wsClient) return
+    const chatType = String(frame?.body?.chattype || '').toLowerCase()
+    const chatId = typeof frame?.body?.chatid === 'string' ? frame.body.chatid.trim() : ''
+    const body = {
       msgtype: 'markdown',
       markdown: { content: String(content || '') },
-    })
+    }
+    if (chatType === 'group' && chatId && typeof this._wsClient.sendMessage === 'function') {
+      await this._wsClient.sendMessage(chatId, body)
+      return
+    }
+    if (!frame?.headers?.req_id) return
+    await this._wsClient.reply(frame, body)
   }
 
   async _hydrateInboundImages(message) {
@@ -1311,9 +1411,18 @@ class EnterpriseWeixinBridge {
   }
 
   async _sendStreamChunk(sessionId, frame, message) {
-    if (!this._wsClient || !frame?.headers?.req_id) return
+    if (!this._wsClient) return
     const text = this._extractTextContent(message)
     if (!text) return
+    const identity = this._sessionIdentities.get(sessionId) || null
+    if (identity?.chatType === 'group') {
+      const collector = this._replyCollector.getCollector(sessionId)
+      if (collector) {
+        collector.sentText = collector.chunks.join('')
+      }
+      return
+    }
+    if (!frame?.headers?.req_id) return
 
     let sendChunk = this._activeSendChunks.get(sessionId)
     if (!sendChunk) {
@@ -1381,6 +1490,20 @@ class EnterpriseWeixinBridge {
       this._activeSendChunks.delete(sessionId)
     }
 
+    if (identity?.chatType === 'group' && this._wsClient?.sendMessage) {
+      const fullText = Array.isArray(collector?.chunks) ? collector.chunks.join('') : ''
+      if (fullText) {
+        try {
+          await this._wsClient.sendMessage(identity.chatId, {
+            msgtype: 'markdown',
+            markdown: { content: fullText },
+          })
+        } catch (err) {
+          console.error('[EnterpriseWeixin] Group sendMessage error:', err.message)
+        }
+      }
+    }
+
     const result = await this._replyCollector.onAgentResult(sessionId, async (_sid, data) => {
       if (!identity || !this._wsClient || !this._connected) return
 
@@ -1409,7 +1532,11 @@ class EnterpriseWeixinBridge {
     if (!frame || !this._wsClient) return result
 
     if (result?.imagePaths?.length > 0) {
-      await this._replyImages(frame, result.imagePaths)
+      if (identity?.chatType === 'group' && identity.chatId) {
+        await this._sendImagesToChat(identity.chatId, result.imagePaths)
+      } else {
+        await this._replyImages(frame, result.imagePaths)
+      }
     }
 
     return result
@@ -1547,9 +1674,23 @@ class EnterpriseWeixinBridge {
       this._targetSessionMap.delete(resolvedUserId)
     }
 
+    const knownChatName = targetType === 'chat'
+      ? (this._knownChats.get(resolvedUserId)?.name || '')
+      : ''
     const target = {
       userId: resolvedUserId,
-      displayName: displayName || previousTarget?.displayName || resolvedUserId,
+      displayName: displayName || previousTarget?.displayName || knownChatName || resolvedUserId,
+    }
+    if (targetType === 'chat') {
+      this._knownChats.set(resolvedUserId, {
+        chatId: resolvedUserId,
+        name: target.displayName || resolvedUserId,
+      })
+      try {
+        this._sessionDatabase?.upsertKnownChat?.(this._imType, resolvedUserId, target.displayName || resolvedUserId)
+      } catch (err) {
+        console.warn('[EnterpriseWeixin] Failed to persist known group chat:', err.message)
+      }
     }
     const proactiveIdentity = {
       userId: resolvedUserId,
@@ -1626,9 +1767,10 @@ class EnterpriseWeixinBridge {
       const isGroupChat = row?.im_chat_type === 'group' || row?.im_chat_type === 'chat'
       const targetId = isGroupChat && chatId ? chatId : userId
       if (!targetId) return null
+      const knownChatName = isGroupChat ? (this._knownChats.get(targetId)?.name || '') : ''
       return {
         targetId,
-        displayName: targetId,
+        displayName: knownChatName || targetId,
       }
     }
     return {
@@ -1686,20 +1828,21 @@ class EnterpriseWeixinBridge {
       const isGroupChat = row?.im_chat_type === 'group' || row?.im_chat_type === 'chat'
       const targetId = isGroupChat && chatId ? chatId : userId
       if (!targetId) continue
+      const knownChatName = isGroupChat ? (this._knownChats.get(targetId)?.name || '') : ''
 
       this._sessionTargets.set(sessionId, {
         userId: targetId,
-        displayName: targetId,
+        displayName: knownChatName || targetId,
       })
       this._targetSessionMap.set(targetId, sessionId)
       if (!this._sessionIdentities.has(sessionId)) {
         this._sessionIdentities.set(sessionId, {
           userId: targetId,
-          senderId: targetId,
-          senderName: targetId,
+          senderId: isGroupChat ? '' : targetId,
+          senderName: knownChatName || targetId,
           chatId: isGroupChat ? chatId : '',
           chatType: isGroupChat ? 'group' : 'single',
-          chatName: targetId,
+          chatName: knownChatName || targetId,
         })
       }
       if (session && !session.imChannel) {

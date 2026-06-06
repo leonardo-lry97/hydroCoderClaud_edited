@@ -235,6 +235,56 @@ describe('AgentSessionManager interactions', () => {
     })
   })
 
+  it('emits session updated after unbinding an IM channel even when the session only exists in DB', () => {
+    const { manager, sent } = createManager()
+    manager.sessionDatabase.getAgentConversation = vi.fn(() => ({
+      id: 9,
+      session_id: 'db-only-im-session',
+      type: 'chat',
+      status: 'closed',
+      owner_client_id: 'host-ui',
+      client_type: 'host',
+      client_meta: null,
+      sdk_session_id: null,
+      title: 'DB 企业微信会话',
+      cwd: 'C:/tmp',
+      cwd_auto: 0,
+      created_at: Date.now() - 1000,
+      updated_at: Date.now(),
+      message_count: 3,
+      total_cost_usd: 0,
+      api_profile_id: null,
+      api_base_url: null,
+      model_id: null,
+      source: 'manual',
+      im_channel: null,
+      task_id: null
+    }))
+    manager.sessionDatabase.setImChannel = vi.fn()
+    manager.sessionDatabase.clearImIdentity = vi.fn()
+
+    const result = manager.unbindSessionExternalImSource('db-only-im-session')
+
+    expect(result).toEqual(expect.objectContaining({
+      id: 'db-only-im-session',
+      imChannel: null,
+      title: 'DB 企业微信会话'
+    }))
+    expect(manager.sessionDatabase.setImChannel).toHaveBeenCalledWith('db-only-im-session', null)
+    expect(manager.sessionDatabase.clearImIdentity).toHaveBeenCalledWith('db-only-im-session')
+    expect(sent).toContainEqual({
+      channel: 'session:updated',
+      data: {
+        sessionId: 'db-only-im-session',
+        session: expect.objectContaining({
+          id: 'db-only-im-session',
+          imChannel: null,
+          title: 'DB 企业微信会话'
+        })
+      }
+    })
+  })
+
   it('resolves permission request without mutating tool input', async () => {
     const { manager } = createManager()
     const session = new AgentSession({ id: 's3', cwd: '/tmp' })

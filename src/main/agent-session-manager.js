@@ -1804,7 +1804,7 @@ class AgentSessionManager extends EventEmitter {
   }
 
   unbindSessionExternalImSource(sessionId) {
-    const session = this.sessions.get(sessionId) || null
+    let session = this.sessions.get(sessionId) || null
     if (session) {
       session.imChannel = null
       if (session.meta && typeof session.meta === 'object') {
@@ -1828,10 +1828,44 @@ class AgentSessionManager extends EventEmitter {
       this.sessionDatabase.clearImIdentity(sessionId)
     }
 
+    if (!session && this.sessionDatabase?.getAgentConversation) {
+      try {
+        const row = this.sessionDatabase.getAgentConversation(sessionId)
+        if (row) {
+          session = {
+            id: row.session_id,
+            type: row.type,
+            status: row.status,
+            ownerClientId: row.owner_client_id || 'host-ui',
+            clientType: row.client_type || 'host',
+            clientMeta: parseClientMeta(row.client_meta),
+            sdkSessionId: row.sdk_session_id,
+            title: row.title || '',
+            cwd: row.cwd,
+            cwdAuto: !!row.cwd_auto,
+            createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+            updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
+            messageCount: row.message_count || 0,
+            totalCostUsd: row.total_cost_usd || 0,
+            apiProfileId: row.api_profile_id || null,
+            apiBaseUrl: row.api_base_url || null,
+            modelId: normalizeModelIdOrNull(row.model_id),
+            source: row.source || 'manual',
+            imChannel: row.im_channel || null,
+            taskId: row.task_id || null
+          }
+        }
+      } catch (err) {
+        console.warn('[AgentSession] Failed to load session snapshot after IM unbind:', err.message)
+      }
+    }
+
     if (session) {
-      const serializedSession = this._serializeSession(session)
+      const serializedSession = this.sessions.has(sessionId)
+        ? this._serializeSession(session)
+        : session
       this._safeSend('session:updated', {
-        sessionId: session.id,
+        sessionId,
         session: serializedSession
       })
       return serializedSession

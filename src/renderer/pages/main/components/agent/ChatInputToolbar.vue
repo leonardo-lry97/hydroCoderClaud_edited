@@ -751,10 +751,10 @@ const loadEnterpriseWeixinTargets = async () => {
   enterpriseWeixinLoading.value = true
   try {
     const [targets, binding] = await Promise.all([
-      enterpriseWeixinApi?.listEnterpriseWeixinContacts
-        ? enterpriseWeixinApi.listEnterpriseWeixinContacts()
-        : enterpriseWeixinApi?.listEnterpriseWeixinTargets
-          ? enterpriseWeixinApi.listEnterpriseWeixinTargets()
+      enterpriseWeixinApi?.listEnterpriseWeixinTargets
+        ? enterpriseWeixinApi.listEnterpriseWeixinTargets()
+        : enterpriseWeixinApi?.listEnterpriseWeixinContacts
+          ? enterpriseWeixinApi.listEnterpriseWeixinContacts()
           : [],
       enterpriseWeixinApi?.getSessionEnterpriseWeixinBinding
         ? enterpriseWeixinApi.getSessionEnterpriseWeixinBinding(props.sessionId).catch(() => null)
