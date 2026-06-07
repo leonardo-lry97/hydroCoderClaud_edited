@@ -1789,8 +1789,10 @@ describe('DingTalkBridge', () => {
       im_channel: 'dingtalk',
       im_user_id: 'staff-1',
       im_chat_id: 'conv-1',
-      im_chat_type: 'p2p'
+      im_chat_type: 'p2p',
+      title: '钉钉 · 张三'
     }))
+    expect(createdRow.title).not.toContain('钉钉 · 张三 · 张三')
 
     await manager.close(createdSessionId)
 

@@ -287,9 +287,7 @@ class DingTalkBridge {
         if (isGroupChat) {
           return `钉钉 · ${conversationTitle || identity.chatId || identity.conversationId || '未命名群聊'}`
         }
-        return conversationTitle
-          ? `钉钉 · ${conversationTitle} · ${nickname}`
-          : `钉钉 · ${nickname}`
+        return `钉钉 · ${nickname}`
       },
       queryHistorySessions: (identity = {}) => this._queryDingTalkHistorySessions(identity),
     })
