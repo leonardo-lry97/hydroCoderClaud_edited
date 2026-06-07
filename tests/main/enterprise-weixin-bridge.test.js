@@ -1560,6 +1560,22 @@ describe('EnterpriseWeixinBridge', () => {
     expect(sessionId).toBeTruthy()
   })
 
+  it('uses group display name instead of sender name for enterprise weixin group sessions', async () => {
+    const { bridge, manager } = createHarness()
+    vi.spyOn(bridge, '_enqueueInboundMessage').mockResolvedValue()
+
+    await bridge._handleMessage(inboundFrame({
+      chattype: 'group',
+      chatid: 'group-encoded-1',
+      from: { userid: 'user-a', name: '雷斯林' },
+      text: { content: '群里来一条' },
+      chat_name: '研发群',
+    }))
+
+    const session = Array.from(manager.sessions.values())[0]
+    expect(session.title).toBe('企业微信 · 研发群')
+  })
+
   it('persists a bound enterprise weixin group so it can be listed again after unbind', () => {
     const { bridge, manager } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '群会话' })

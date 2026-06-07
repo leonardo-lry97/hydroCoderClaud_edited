@@ -1894,7 +1894,8 @@ describe('DingTalkBridge', () => {
     })
 
     expect(text).toContain('当前会话状态：')
-    expect(text).toContain('钉钉 · 项目群 · 张三')
+    expect(text).toContain('钉钉 · 项目群')
+    expect(text).not.toContain('钉钉 · 项目群 · 张三')
   })
 
   it('shows a proactively bound DingTalk p2p session in /status even when the DB chat id is still empty', () => {

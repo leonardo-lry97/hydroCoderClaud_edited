@@ -157,7 +157,13 @@ class EnterpriseWeixinBridge {
         const channelId = identity.channelId || identity.chatId || identity.userId || ''
         return `${userId}:${channelId}`
       },
-      buildSessionTitle: (identity) => `企业微信 · ${identity.nickname || identity.userId || '未命名'}`,
+      buildSessionTitle: (identity = {}) => {
+        const chatType = String(identity.chatType || '').toLowerCase()
+        const displayName = chatType === 'group'
+          ? (identity.channelName || identity.chatName || identity.chatId || identity.channelId || '未命名群聊')
+          : (identity.nickname || identity.userId || '未命名')
+        return `企业微信 · ${displayName}`
+      },
     })
   }
 

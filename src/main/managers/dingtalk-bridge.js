@@ -283,6 +283,10 @@ class DingTalkBridge {
         const staffId = identity.staffId || identity.userId || ''
         const nickname = identity.nickname || staffId || '未命名'
         const conversationTitle = identity.chatName || identity.conversationTitle || ''
+        const isGroupChat = identity.chatType === 'chat' || identity.chatType === 'group'
+        if (isGroupChat) {
+          return `钉钉 · ${conversationTitle || identity.chatId || identity.conversationId || '未命名群聊'}`
+        }
         return conversationTitle
           ? `钉钉 · ${conversationTitle} · ${nickname}`
           : `钉钉 · ${nickname}`
@@ -1198,7 +1202,10 @@ class DingTalkBridge {
         rawConversationTitle
       ))
     const isGroupChat = isGroupConversationType(conversationType)
-    const conversationTitle = rawConversationTitle || (isGroupChat ? conversationId : nickname)
+    const knownChatName = isGroupChat && conversationId
+      ? (this._knownChats.get(conversationId)?.name || '')
+      : ''
+    const conversationTitle = rawConversationTitle || knownChatName || (isGroupChat ? conversationId : nickname)
 
     return {
       staffId,

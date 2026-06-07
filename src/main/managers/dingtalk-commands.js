@@ -39,6 +39,27 @@ function isDingTalkGroupIdentity(identity = {}) {
   return chatType === 'chat' || chatType === 'group' || conversationType === '2'
 }
 
+function firstDingTalkString(...values) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    const normalized = value.trim()
+    if (normalized) return normalized
+  }
+  return ''
+}
+
+function buildDingTalkCommandIdentityFields(identity = {}) {
+  const isGroupChat = isDingTalkGroupIdentity(identity)
+  const userId = firstDingTalkString(identity.userId, identity.staffId)
+  const chatId = firstDingTalkString(identity.chatId, identity.conversationId)
+  return {
+    userId,
+    chatId,
+    imChatType: isGroupChat ? 'group' : 'p2p',
+    isGroupChat,
+  }
+}
+
 function normalizeDingTalkCommandIdentity(bridge, context = {}) {
   const rawIdentity = context?.identity || {
     staffId: context?.senderStaffId || context?.staffId || context?.userId || '',
@@ -56,15 +77,12 @@ function normalizeDingTalkCommandIdentity(bridge, context = {}) {
     return bridge._normalizeDingTalkIdentity(rawIdentity)
   }
 
-  const staffId = typeof (rawIdentity.staffId || rawIdentity.userId) === 'string'
-    ? (rawIdentity.staffId || rawIdentity.userId).trim()
-    : ''
-  const conversationId = typeof (rawIdentity.conversationId || rawIdentity.chatId) === 'string'
-    ? (rawIdentity.conversationId || rawIdentity.chatId).trim()
-    : ''
+  const staffId = firstDingTalkString(rawIdentity.staffId, rawIdentity.userId)
+  const conversationId = firstDingTalkString(rawIdentity.conversationId, rawIdentity.chatId)
+  const rawChatType = String(rawIdentity.chatType || '').trim().toLowerCase()
   const conversationType = String(rawIdentity.conversationType || '').trim()
-    || (String(rawIdentity.chatType || '').trim().toLowerCase() === 'chat' ? '2' : '1')
-  const isGroupChat = conversationType === '2'
+    || (rawChatType === 'chat' || rawChatType === 'group' ? '2' : '1')
+  const isGroupChat = isDingTalkGroupIdentity({ ...rawIdentity, conversationType })
   const nickname = rawIdentity.nickname || rawIdentity.senderName || staffId || '未命名'
   const conversationTitle = rawIdentity.conversationTitle || rawIdentity.chatName || (isGroupChat ? conversationId : nickname)
   return {
@@ -82,22 +100,26 @@ function normalizeDingTalkCommandIdentity(bridge, context = {}) {
 
 function buildDingTalkCommandContext(context = {}, webhook = null, bridge = null) {
   const identity = normalizeDingTalkCommandIdentity(bridge, context)
+  const commandIdentity = buildDingTalkCommandIdentityFields(identity)
   const mapKey = context?.mapKey
     || bridge?._sessionMapper?.buildKey?.(identity)
-    || (isDingTalkGroupIdentity(identity)
-      ? identity.chatId
-      : `${identity.userId}:${identity.chatId || 'default'}`)
+    || (commandIdentity.isGroupChat
+      ? commandIdentity.chatId
+      : `${commandIdentity.userId}:${commandIdentity.chatId || 'default'}`)
 
   return {
     identity,
     mapKey,
-    senderStaffId: identity.staffId || '',
+    userId: commandIdentity.userId,
+    chatId: commandIdentity.chatId,
+    imChatType: commandIdentity.imChatType,
+    isGroupChat: commandIdentity.isGroupChat,
+    senderStaffId: identity.staffId || commandIdentity.userId || '',
     senderNick: identity.nickname || '',
-    conversationId: identity.conversationId || '',
+    conversationId: identity.conversationId || commandIdentity.chatId || '',
     conversationTitle: identity.conversationTitle || '',
     conversationType: identity.conversationType || '',
     chatType: identity.chatType || '',
-    chatId: identity.chatId || '',
     robotCode: context?.robotCode || '',
     sessionWebhook: webhook || null,
   }
@@ -117,9 +139,9 @@ function mergeDingTalkHistoryRows(...groups) {
 }
 
 function getCurrentBoundHistoryRow(bridge, db, identity, options = {}) {
-  const staffId = identity?.staffId || identity?.userId || ''
+  const { userId } = buildDingTalkCommandIdentityFields(identity)
   const boundSessionId = typeof bridge?._findBoundSessionIdByStaffId === 'function'
-    ? bridge._findBoundSessionIdByStaffId(staffId, options)
+    ? bridge._findBoundSessionIdByStaffId(userId, options)
     : null
   if (!boundSessionId) return null
   const row = db?.getAgentConversation?.(boundSessionId)
@@ -127,15 +149,13 @@ function getCurrentBoundHistoryRow(bridge, db, identity, options = {}) {
     row
     && row.status !== 'closed'
     && row.im_channel === 'dingtalk'
-    && row.im_user_id === staffId
+    && row.im_user_id === userId
   ) {
     return row
   }
   const liveSession = bridge?.agentSessionManager?.sessions?.get(boundSessionId)
   if (!liveSession) return null
-  const conversationId = typeof liveSession?.meta?.conversationId === 'string'
-    ? liveSession.meta.conversationId.trim()
-    : (identity?.conversationId || identity?.chatId || '')
+  const chatId = firstDingTalkString(liveSession?.meta?.conversationId, identity?.chatId, identity?.conversationId)
   return {
     session_id: boundSessionId,
     title: liveSession.title || boundSessionId,
@@ -145,8 +165,8 @@ function getCurrentBoundHistoryRow(bridge, db, identity, options = {}) {
     type: liveSession.type,
     source: liveSession.source,
     im_channel: 'dingtalk',
-    im_user_id: staffId,
-    im_chat_id: conversationId,
+    im_user_id: userId,
+    im_chat_id: chatId,
     im_chat_type: 'p2p',
     status: liveSession.status || 'idle'
   }
@@ -158,9 +178,7 @@ function buildCurrentHistoryRow(bridge, db, currentSessionId, identity = {}) {
   const liveCurrent = bridge?.agentSessionManager?.sessions?.get(currentSessionId) || null
   const dbRow = db?.getAgentConversation?.(currentSessionId) || null
   if (!liveCurrent && (!dbRow || dbRow.status === 'closed')) return null
-  const isGroupChat = isDingTalkGroupIdentity(identity)
-  const userId = identity.staffId || identity.userId || ''
-  const chatId = identity.conversationId || identity.chatId || ''
+  const { userId, chatId, imChatType, isGroupChat } = buildDingTalkCommandIdentityFields(identity)
 
   return {
     ...(dbRow || {}),
@@ -174,7 +192,7 @@ function buildCurrentHistoryRow(bridge, db, currentSessionId, identity = {}) {
     im_channel: 'dingtalk',
     im_user_id: dbRow?.im_user_id || (isGroupChat ? '' : userId),
     im_chat_id: chatId || dbRow?.im_chat_id || '',
-    im_chat_type: dbRow?.im_chat_type || (isGroupChat ? 'group' : 'p2p'),
+    im_chat_type: dbRow?.im_chat_type || imChatType,
     status: dbRow?.status || liveCurrent?.status || 'idle'
   }
 }
@@ -187,16 +205,17 @@ function loadDingTalkHistorySessions(bridge, {
   const db = bridge?.agentSessionManager?.sessionDatabase
   const limit = bridge?.configManager?.getConfig?.()?.dingtalk?.maxHistorySessions || 5
   const normalizedIdentity = normalizeDingTalkCommandIdentity(bridge, { identity })
-  if (!db || (!normalizedIdentity.userId && !normalizedIdentity.chatId)) {
+  const commandIdentity = buildDingTalkCommandIdentityFields(normalizedIdentity)
+  if (!db || (!commandIdentity.userId && !commandIdentity.chatId)) {
     return { db, limit, sessions: [] }
   }
 
   const lookup = typeof bridge?._resolveDingTalkHistoryLookup === 'function'
     ? bridge._resolveDingTalkHistoryLookup(normalizedIdentity)
     : {
-        isGroupChat: isDingTalkGroupIdentity(normalizedIdentity),
-        queryUserId: isDingTalkGroupIdentity(normalizedIdentity) ? '' : normalizedIdentity.userId,
-        queryChatId: isDingTalkGroupIdentity(normalizedIdentity) ? normalizedIdentity.chatId : '',
+        isGroupChat: commandIdentity.isGroupChat,
+        queryUserId: commandIdentity.isGroupChat ? '' : commandIdentity.userId,
+        queryChatId: commandIdentity.isGroupChat ? commandIdentity.chatId : '',
       }
   const exactSessions = db.getImSessionsByType('dingtalk', lookup.queryUserId, lookup.queryChatId, limit)
   const boundHistoryRow = lookup.isGroupChat
@@ -270,12 +289,23 @@ module.exports = {
 
   async _cmdResume(args, context, webhook) {
     const commandContext = buildDingTalkCommandContext(context, webhook, this)
-    const { mapKey, identity, senderStaffId, senderNick, conversationId, conversationType, robotCode } = commandContext
+    const {
+      mapKey,
+      identity,
+      userId,
+      chatId,
+      isGroupChat,
+      senderStaffId,
+      senderNick,
+      conversationId,
+      conversationType,
+      robotCode,
+    } = commandContext
     // 获取当前活跃会话（如果有）
     const currentSessionId = mapKey ? this._resolveActiveSessionId(mapKey) : null
     const resumeSessionId = currentSessionId || (
-      identity.chatType === 'p2p' && identity.userId
-        ? this._findBoundSessionIdByStaffId?.(identity.userId, {
+      !isGroupChat && userId
+        ? this._findBoundSessionIdByStaffId?.(userId, {
             mapKey,
             allowDatabaseFallback: false,
           }) || null
@@ -294,7 +324,7 @@ module.exports = {
       identity,
       mapKey,
     })
-    if (!db || (!identity.userId && !identity.chatId)) return '📭 没有历史会话记录'
+    if (!db || (!userId && !chatId)) return '📭 没有历史会话记录'
 
     if (!sessions || sessions.length === 0) return `📭 ${buildNoHistoryText()}`
 
@@ -382,11 +412,11 @@ module.exports = {
 
   _cmdStatus(context) {
     const commandContext = buildDingTalkCommandContext(context, context?.sessionWebhook || null, this)
-    const { mapKey, identity } = commandContext
+    const { mapKey, identity, userId, chatId, isGroupChat } = commandContext
     const currentSessionId = mapKey ? this._resolveActiveSessionId(mapKey) : null
     const historySessionId = currentSessionId || (
-      identity.chatType === 'p2p' && identity.userId
-        ? this._findBoundSessionIdByStaffId?.(identity.userId, {
+      !isGroupChat && userId
+        ? this._findBoundSessionIdByStaffId?.(userId, {
             mapKey,
             allowSuppressed: true,
           }) || null
@@ -397,7 +427,7 @@ module.exports = {
       identity,
       mapKey,
     })
-    if (!db || (!identity.userId && !identity.chatId)) return '📭 没有历史会话记录'
+    if (!db || (!userId && !chatId)) return '📭 没有历史会话记录'
     if (!sessions || sessions.length === 0) return `📭 ${buildNoHistoryText()}`
     return buildHistoryChoiceMenuText({
       sessions,
