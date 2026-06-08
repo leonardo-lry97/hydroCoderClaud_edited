@@ -53,6 +53,10 @@ const {
   getPersistedImTargetFromRow,
   assertSameImTarget,
 } = require('./im-binding-policy')
+const {
+  registerImRuntimeTarget,
+  clearImRuntimeSessionTarget,
+} = require('./im-binding-runtime')
 
 // 图片相关常量（与钉钉保持一致）
 const FEISHU_MSG_ID_TTL = 10 * 60 * 1000
@@ -1227,31 +1231,27 @@ class FeishuBridge {
     this._agentSessionManager.bindSessionExternalImSource(sessionId, 'feishu')
 
     const previousTarget = this._sessionTargets.get(sessionId)
-    if (previousTarget?.openId && previousTarget.openId !== resolvedOpenId) {
-      this._targetSessionMap.delete(previousTarget.openId)
-    }
 
     this._clearP2PSessionMapBindingsForSender(resolvedOpenId, sessionId)
-
-    const previousSessionId = this._targetSessionMap.get(resolvedOpenId)
-    if (previousSessionId && previousSessionId !== sessionId) {
-      this._clearP2PSessionMapBinding(previousSessionId, resolvedOpenId)
-      const previousSessionTarget = this._sessionTargets.get(previousSessionId)
-      if (previousSessionTarget?.openId) {
-        this._targetSessionMap.delete(previousSessionTarget.openId)
-      }
-      this._sessionTargets.delete(previousSessionId)
-      if (this._sessionIdentities.get(previousSessionId)?.chatType === 'p2p') {
-        this._sessionIdentities.delete(previousSessionId)
-      }
-    }
 
     const target = {
       openId: resolvedOpenId,
       displayName: displayName || previousTarget?.displayName || resolvedOpenId,
     }
-    this._sessionTargets.set(sessionId, target)
-    this._targetSessionMap.set(resolvedOpenId, sessionId)
+    registerImRuntimeTarget({
+      sessionTargets: this._sessionTargets,
+      targetSessionMap: this._targetSessionMap,
+      sessionId,
+      targetId: resolvedOpenId,
+      target,
+      getTargetId: item => item?.openId,
+      onReplaceTargetSession: ({ previousSessionId }) => {
+        this._clearP2PSessionMapBinding(previousSessionId, resolvedOpenId)
+        if (this._sessionIdentities.get(previousSessionId)?.chatType === 'p2p') {
+          this._sessionIdentities.delete(previousSessionId)
+        }
+      },
+    })
 
     // 写入 sessionMap（群聊 key=chatId，p2p key=userId）
     const isGroup = targetType === 'chat' || targetType === 'group'
@@ -1338,15 +1338,17 @@ class FeishuBridge {
     if (senderId) {
       this._proactiveRebindSuppressedKeys.add(senderId)
     }
-    if (target?.openId) {
-      this._targetSessionMap.delete(target.openId)
-    }
     clearSessionMappingsForSession({
       sessionMap: this._sessionMapper.sessionMap,
       sessionId,
       deleteEntry: (mapKey) => this._sessionMapper.clearSessionState(mapKey),
     })
-    this._sessionTargets.delete(sessionId)
+    clearImRuntimeSessionTarget({
+      sessionTargets: this._sessionTargets,
+      targetSessionMap: this._targetSessionMap,
+      sessionId,
+      getTargetId: item => item?.openId,
+    })
     this._activeSendChunks.delete(sessionId)
     this._replyCollector.clear(sessionId)
     this._sessionIdentities.delete(sessionId)
@@ -1718,11 +1720,12 @@ class FeishuBridge {
       sessionId,
       deleteEntry: (mapKey) => this._sessionMapper.clearSessionState(mapKey),
     })
-    const target = this._sessionTargets.get(sessionId)
-    if (target?.openId) {
-      this._targetSessionMap.delete(target.openId)
-    }
-    this._sessionTargets.delete(sessionId)
+    clearImRuntimeSessionTarget({
+      sessionTargets: this._sessionTargets,
+      targetSessionMap: this._targetSessionMap,
+      sessionId,
+      getTargetId: item => item?.openId,
+    })
     this._sessionIdentities.delete(sessionId)
   }
 

@@ -60,6 +60,10 @@ const {
   getPersistedImTargetFromRow,
   assertSameImTarget,
 } = require('./im-binding-policy')
+const {
+  registerImRuntimeTarget,
+  clearImRuntimeSessionTarget,
+} = require('./im-binding-runtime')
 const { extractImagePaths } = require('./im-utils')
 
 const MAX_TEXT_LENGTH = 6000
@@ -1705,17 +1709,8 @@ class EnterpriseWeixinBridge {
     this._agentSessionManager.bindSessionExternalImSource(sessionId, this._imType)
 
     const previousTarget = this._sessionTargets.get(sessionId)
-    if (previousTarget?.userId && previousTarget.userId !== resolvedUserId) {
-      this._targetSessionMap.delete(previousTarget.userId)
-    }
 
     this._clearSingleSessionMapBindingsForUser(resolvedUserId, sessionId)
-
-    const previousSessionId = this._targetSessionMap.get(resolvedUserId)
-    if (previousSessionId && previousSessionId !== sessionId) {
-      this._sessionTargets.delete(previousSessionId)
-      this._targetSessionMap.delete(resolvedUserId)
-    }
 
     const knownChatName = targetType === 'chat'
       ? (this._knownChats.get(resolvedUserId)?.name || '')
@@ -1745,8 +1740,14 @@ class EnterpriseWeixinBridge {
       channelName: isGroupChat ? (target.displayName || resolvedUserId) : '',
     }
     const proactiveMapKey = this._sessionMapper.buildKey(proactiveIdentity)
-    this._sessionTargets.set(sessionId, target)
-    this._targetSessionMap.set(resolvedUserId, sessionId)
+    registerImRuntimeTarget({
+      sessionTargets: this._sessionTargets,
+      targetSessionMap: this._targetSessionMap,
+      sessionId,
+      targetId: resolvedUserId,
+      target,
+      getTargetId: item => item?.userId,
+    })
     this._sessionMapper.clearPendingChoice(proactiveMapKey)
     this._pendingInboundMessages.delete(proactiveMapKey)
     this._sessionMapper.sessionMap.set(proactiveMapKey, sessionId)
@@ -1890,15 +1891,17 @@ class EnterpriseWeixinBridge {
     if (userId) {
       this._proactiveRebindSuppressedKeys.add(userId)
     }
-    if (target?.userId) {
-      this._targetSessionMap.delete(target.userId)
-    }
     clearSessionMappingsForSession({
       sessionMap: this._sessionMapper.sessionMap,
       sessionId,
       deleteEntry: (mapKey) => this._sessionMapper.clearSessionState(mapKey),
     })
-    this._sessionTargets.delete(sessionId)
+    clearImRuntimeSessionTarget({
+      sessionTargets: this._sessionTargets,
+      targetSessionMap: this._targetSessionMap,
+      sessionId,
+      getTargetId: item => item?.userId,
+    })
     this._activeSendChunks.delete(sessionId)
     this._desktopPendingImagePaths.delete(sessionId)
     this._replyCollector.clear(sessionId)
@@ -2004,11 +2007,12 @@ class EnterpriseWeixinBridge {
       sessionId,
       deleteEntry: (mapKey) => this._sessionMapper.clearSessionState(mapKey),
     })
-    const target = this._sessionTargets.get(sessionId)
-    if (target?.userId) {
-      this._targetSessionMap.delete(target.userId)
-    }
-    this._sessionTargets.delete(sessionId)
+    clearImRuntimeSessionTarget({
+      sessionTargets: this._sessionTargets,
+      targetSessionMap: this._targetSessionMap,
+      sessionId,
+      getTargetId: item => item?.userId,
+    })
     this._sessionIdentities.delete(sessionId)
   }
 

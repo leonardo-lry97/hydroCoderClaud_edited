@@ -31,6 +31,10 @@ const {
   getPersistedImTargetFromRow,
   assertSameImTarget,
 } = require('./im-binding-policy')
+const {
+  registerImRuntimeTarget,
+  clearImRuntimeSessionTarget,
+} = require('./im-binding-runtime')
 
 const imageMixin = require('./dingtalk-image')
 const commandsMixin = require('./dingtalk-commands')
@@ -1031,21 +1035,6 @@ class DingTalkBridge {
     }
 
     const previousTarget = this._sessionTargets.get(sessionId)
-    if (previousTarget?.staffId && previousTarget.staffId !== resolvedStaffId) {
-      this._targetSessionMap.delete(previousTarget.staffId)
-      this._clearRuntimeProactiveTargetBinding(sessionId, previousTarget.staffId)
-    }
-
-    const previousSessionId = this._targetSessionMap.get(resolvedStaffId)
-    if (previousSessionId && previousSessionId !== sessionId) {
-      this._clearCurrentConversationMapBinding(previousSessionId, resolvedStaffId, normalizedTargetType)
-      const previousSessionTarget = this._sessionTargets.get(previousSessionId)
-      if (previousSessionTarget?.staffId) {
-        this._targetSessionMap.delete(previousSessionTarget.staffId)
-      }
-      this._sessionTargets.delete(previousSessionId)
-      this._clearRuntimeProactiveTargetBinding(previousSessionId, resolvedStaffId)
-    }
 
     if (normalizedTargetType === 'chat') {
       this._clearCurrentConversationMapBinding(sessionId, resolvedStaffId, normalizedTargetType)
@@ -1085,8 +1074,21 @@ class DingTalkBridge {
         console.warn('[DingTalk] Failed to persist known group chat:', err.message)
       }
     }
-    this._sessionTargets.set(sessionId, target)
-    this._targetSessionMap.set(resolvedStaffId, sessionId)
+    registerImRuntimeTarget({
+      sessionTargets: this._sessionTargets,
+      targetSessionMap: this._targetSessionMap,
+      sessionId,
+      targetId: resolvedStaffId,
+      target,
+      getTargetId: item => item?.staffId,
+      onReplaceSessionTarget: ({ previousTargetId }) => {
+        this._clearRuntimeProactiveTargetBinding(sessionId, previousTargetId)
+      },
+      onReplaceTargetSession: ({ previousSessionId }) => {
+        this._clearCurrentConversationMapBinding(previousSessionId, resolvedStaffId, normalizedTargetType)
+        this._clearRuntimeProactiveTargetBinding(previousSessionId, resolvedStaffId)
+      },
+    })
     this._sessionMapper.clearPendingChoice(proactiveMapKey)
     this.sessionMap.set(proactiveMapKey, sessionId)
     if (this.agentSessionManager.sessionDatabase?.updateImIdentity) {
@@ -1685,8 +1687,6 @@ class DingTalkBridge {
 
     const target = this._sessionTargets.get(sessionId) || null
     if (target?.staffId) {
-      this._targetSessionMap.delete(target.staffId)
-      this._clearRuntimeProactiveTargetBinding(sessionId, target.staffId)
       if (target.targetType === 'chat') {
         this._clearCurrentConversationMapBinding(sessionId, target.staffId, 'chat')
       } else {
@@ -1694,7 +1694,13 @@ class DingTalkBridge {
       }
     }
 
-    this._sessionTargets.delete(sessionId)
+    clearImRuntimeSessionTarget({
+      sessionTargets: this._sessionTargets,
+      targetSessionMap: this._targetSessionMap,
+      sessionId,
+      getTargetId: item => item?.staffId,
+    })
+    this._clearRuntimeProactiveTargetBinding(sessionId)
     this._sessionWebhooks.delete(sessionId)
     this._desktopPendingBlocks.delete(sessionId)
     const collector = this.responseCollectors.get(sessionId)
@@ -1867,12 +1873,13 @@ class DingTalkBridge {
     this._sessionWebhooks.delete(sessionId)
     this._desktopPendingBlocks.delete(sessionId)
     if (clearTargetBinding) {
-      const target = this._sessionTargets.get(sessionId)
-      if (target?.staffId) {
-        this._targetSessionMap.delete(target.staffId)
-        this._clearRuntimeProactiveTargetBinding(sessionId, target.staffId)
-      }
-      this._sessionTargets.delete(sessionId)
+      clearImRuntimeSessionTarget({
+        sessionTargets: this._sessionTargets,
+        targetSessionMap: this._targetSessionMap,
+        sessionId,
+        getTargetId: item => item?.staffId,
+      })
+      this._clearRuntimeProactiveTargetBinding(sessionId)
     }
   }
 
@@ -1885,13 +1892,14 @@ class DingTalkBridge {
       }
     }
 
-    const target = this._sessionTargets.get(sessionId)
-    if (target?.staffId && this._targetSessionMap.get(target.staffId) === sessionId) {
-      this._targetSessionMap.delete(target.staffId)
-    }
+    clearImRuntimeSessionTarget({
+      sessionTargets: this._sessionTargets,
+      targetSessionMap: this._targetSessionMap,
+      sessionId,
+      getTargetId: item => item?.staffId,
+    })
     this._clearRuntimeProactiveTargetBinding(sessionId)
 
-    this._sessionTargets.delete(sessionId)
     this._sessionWebhooks.delete(sessionId)
     this._desktopPendingBlocks.delete(sessionId)
 
