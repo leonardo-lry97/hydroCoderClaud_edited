@@ -78,11 +78,12 @@ npm run dev
    - 在 Agent / Notebook 聊天工具栏里直接发微信
    - 在定时任务中通过内置微信通知 MCP 主动推送结果
 
-### 使用飞书与钉钉
+### 使用飞书、钉钉与企业微信
 
-1. 飞书：配置飞书应用后，可在飞书中直接发起对话，也可从桌面端主动发送给组织成员。
-2. 钉钉：配置钉钉应用、机器人能力、通讯录权限和 `robotCode` 后，可在钉钉中直接发起对话，也可从桌面端主动发送给组织成员。
-3. 三条 IM 通道的统一手工回归可参考 [IM-REGRESSION-CHECKLIST.zh.md](./user-guide/IM-REGRESSION-CHECKLIST.zh.md)。
+1. 飞书：配置飞书应用后，可在飞书中直接发起对话，也可从桌面端主动发送给联系人或群聊。
+2. 钉钉：配置钉钉应用、机器人能力、通讯录权限和 `robotCode` 后，可在钉钉中直接发起对话，也可从桌面端主动发送给成员。
+3. 企业微信：配置智能机器人后，可在企业微信中直接发起对话；如需桌面端主动发送成员，还需完成 `wecom-cli` 初始化。
+4. 三条 IM 通道的统一手工回归可参考 [IM-REGRESSION-CHECKLIST.zh.md](./user-guide/IM-REGRESSION-CHECKLIST.zh.md)。
 
 ---
 
@@ -130,5 +131,7 @@ npm rebuild node-pty
 - 阅读 [BUILD.md](./BUILD.md) 查看构建与打包流程
 - 阅读 [API-CONFIG-GUIDE.zh.md](./user-guide/API-CONFIG-GUIDE.zh.md) 了解 API Profile 结构
 - 阅读 [WEIXIN-GUIDE.zh.md](./user-guide/WEIXIN-GUIDE.zh.md) 了解微信通知与双向聊天能力
+- 阅读 [FEISHU-GUIDE.zh.md](./user-guide/FEISHU-GUIDE.zh.md) 了解飞书桥接能力
 - 阅读 [DINGTALK-GUIDE.zh.md](./user-guide/DINGTALK-GUIDE.zh.md) 了解钉钉桥接能力
+- 阅读 [ENTERPRISE-WEIXIN-GUIDE.zh.md](./user-guide/ENTERPRISE-WEIXIN-GUIDE.zh.md) 了解企业微信桥接能力
 - 阅读 [IM-REGRESSION-CHECKLIST.zh.md](./user-guide/IM-REGRESSION-CHECKLIST.zh.md) 执行三通统一回归测试

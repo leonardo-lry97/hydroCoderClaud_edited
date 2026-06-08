@@ -464,10 +464,10 @@ new WeixinNotifyService(configManager)
 - 使用 `@larksuiteoapi/node-sdk` WebSocket 长连接
 - 消息接收: 事件订阅回调（`on('message')`）
 - 回复通道: REST API (`client.im.v1.message.create`)
-- 命令层: 自有交互卡片系统（help/status/sessions/history 卡片）
-- 共享模块: `ImSessionMapper`、`ImReplyCollector`、`ImFrontendNotifier`
+- 命令层: 已接入共享命令层，命令结果主模式为文本 / Markdown 风格回复
+- 共享模块: `ImSessionMapper`、`ImReplyCollector`、`ImFrontendNotifier` 以及共享命令模块
 - 图片: SDK `image.create` 上传 → `message.create` 发送
-- `FeishuEventClient` 处理卡片动作回调
+- `FeishuEventClient` 负责事件接入与连接管理
 
 ### EnterpriseWeixinBridge
 
@@ -516,7 +516,7 @@ SessionDatabaseBase (session-database.js)
 | `sessions` | Terminal 模式会话 | `project_id`(FK), `session_uuid`(UNIQUE), `title`, `first_user_message`, `model` |
 | `messages` | 会话消息 | `session_id`(FK), `uuid`(UNIQUE), `role`, `content`, `tokens_in/out` |
 | `messages_fts` | 全文检索（FTS5） | 虚拟表，索引 `content` 字段 |
-| `agent_conversations` | Agent 模式对话 | `session_id`, `sdk_session_id`, `type`, `cwd`, `api_profile_id`, `staff_id` |
+| `agent_conversations` | Agent 模式对话 | `session_id`, `sdk_session_id`, `type`, `source`, `cwd`, `api_profile_id`, `im_channel`, `im_user_id`, `im_chat_id`, `im_chat_type` |
 | `agent_messages` | Agent 消息 | `conversation_id`(FK), `role`, `tool_name`, `tool_input`, `tool_output` |
 | `tags` / `session_tags` / `message_tags` | 标签系统 | 多对多关联 |
 | `prompts` / `prompt_tags` / `prompt_tag_relations` | 提示词管理 | 多对多关联 |

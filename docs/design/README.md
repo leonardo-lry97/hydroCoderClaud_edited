@@ -13,11 +13,12 @@
 | [session-management.md](./session-management.md) | 会话管理设计 |
 | [design-system.md](./design-system.md) | 设计系统 |
 | [image-recognition.md](./image-recognition.md) | 图片识别链路 |
-| [dingtalk-weixin-reuse-evaluation.md](./dingtalk-weixin-reuse-evaluation.md) | 钉钉 / 微信复用评估 |
-| [im-bridge-refactoring.md](./im-bridge-refactoring.md) | IM Bridge 架构（钉钉/飞书/企微/微信 4 渠道） |
-| [im-command-card-unification.md](./im-command-card-unification.md) | IM 命令卡片统一设计（阶段一完成，阶段二/三延后） |
-| [enterprise-weixin-feishu-parity-plan.md](./enterprise-weixin-feishu-parity-plan.md) | 企业微信对齐飞书计划（✅ 已完成） |
-| [session-fields-refactoring-plan.md](./session-fields-refactoring-plan.md) | 会话字段重构方案（✅ 已完成） |
+| [dingtalk-weixin-reuse-evaluation.md](./dingtalk-weixin-reuse-evaluation.md) | 钉钉 / 微信复用评估（历史评估文档） |
+| [im-bridge-refactoring.md](./im-bridge-refactoring.md) | 当前 IM Bridge 架构（钉钉 / 飞书 / 企业微信 / 微信） |
+| [im-session-fields-and-binding.md](./im-session-fields-and-binding.md) | 当前 IM 字段、单聊/群聊语义、运行态绑定模型 |
+| [im-command-card-unification.md](./im-command-card-unification.md) | 历史命令卡片设计（现主链路已改为文本 / Markdown 模式） |
+| [enterprise-weixin-feishu-parity-plan.md](./enterprise-weixin-feishu-parity-plan.md) | 企业微信对齐飞书的历史计划与结果归档 |
+| [im-refactoring-plan.md](./im-refactoring-plan.md) | 本轮 IM 重构目标的历史计划归档 |
 
 ## 内嵌 App
 

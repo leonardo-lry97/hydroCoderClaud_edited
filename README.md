@@ -1,6 +1,6 @@
 # Hydro Desktop
 
-[English](#english) | [中文](#中文) | [DingTalk Guide](docs/user-guide/DINGTALK-GUIDE.zh.md)
+[English](#english) | [中文](#中文) | [DingTalk Guide](docs/user-guide/DINGTALK-GUIDE.zh.md) | [Feishu Guide](docs/user-guide/FEISHU-GUIDE.zh.md) | [Enterprise Weixin Guide](docs/user-guide/ENTERPRISE-WEIXIN-GUIDE.zh.md)
 
 ---
 
@@ -18,7 +18,7 @@ Repository / package identifier: `cc-desktop`.
 - **MCP / Skills / Plugins / Agents / Hooks** — Extensible capability system with visual management, capability settings workbench, and a built-in marketplace
 - **Built-in Plugin Runtime** — Plugin marketplace add/remove/refresh and plugin install/uninstall/update now run in the desktop main process instead of shelling out to `claude plugin ...`
 - **Multi-Provider API Management** — Configure multiple API providers (Anthropic official, proxies, compatible endpoints) with provider-level default model mapping and per-profile default model IDs
-- **DingTalk Bot Integration** — Bridge Claude Code to DingTalk for remote AI-assisted development via mobile
+- **Multi-IM Bridge** — Bridge Claude Code to DingTalk, Feishu, and Enterprise Weixin for remote AI-assisted development, plus keep Weixin notification/chat support
 - **Cross-Platform** — Windows & macOS, 6 color themes, light/dark mode, bilingual UI (English & Chinese)
 
 ### Quick Start
@@ -65,7 +65,7 @@ Custom license — personal use, learning, and development permitted; commercial
 - **MCP / Skills / Plugins / Agents / Hooks** — 可扩展能力体系，可视化管理，内置组件市场与能力设置工作台
 - **内建插件运行时** — 插件市场增删改查与插件安装、卸载、启停、更新已由桌面端主进程直接处理，不再依赖 `claude plugin ...`
 - **多服务商 API 管理** — 支持官方 API、中转服务、兼容端点，按服务商维护默认模型映射，并为 Profile 指定默认模型 ID
-- **钉钉机器人集成** — 将 Claude Code 桥接到钉钉，通过手机远程进行 AI 辅助开发
+- **多 IM 桥接** — 将 Claude Code 桥接到钉钉、飞书、企业微信，并保留微信通知 / 聊天能力
 - **跨平台** — Windows & macOS，6 套配色方案，深色/浅色模式，中英文界面
 
 ### 快速开始
