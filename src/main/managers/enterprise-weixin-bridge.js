@@ -49,6 +49,7 @@ const {
   buildUnknownCommandText,
   resolveCommandCwd,
   mergeCurrentSessionIntoHistory,
+  buildCurrentImHistoryRow,
 } = require('./im-command-policy')
 const {
   resolveStrictCurrentSessionId,
@@ -1213,23 +1214,18 @@ class EnterpriseWeixinBridge {
 
     const liveSession = this._agentSessionManager.sessions.get(currentSessionId)
     const dbRow = this._sessionDatabase?.getAgentConversation?.(currentSessionId)
-    if (!liveSession && (!dbRow || dbRow.status === 'closed')) return rows
     const isGroupChat = identity.chatType === 'group' || identity.chatType === 'chat'
 
-    const currentRow = {
-      ...(dbRow || {}),
-      session_id: dbRow?.session_id || liveSession?.id || currentSessionId,
-      title: dbRow?.title || liveSession?.title || currentSessionId,
-      cwd: dbRow?.cwd || liveSession?.cwd || null,
-      api_profile_id: dbRow?.api_profile_id || liveSession?.apiProfileId || null,
-      updated_at: dbRow?.updated_at || (liveSession?.updatedAt ? new Date(liveSession.updatedAt).getTime() : Date.now()),
+    const currentRow = buildCurrentImHistoryRow({
+      sessionId: currentSessionId,
+      liveSession,
+      dbRow,
+      imChannel: this._imType,
+      imUserId: dbRow?.im_user_id || (isGroupChat ? '' : identity.userId) || '',
+      imChatId: dbRow?.im_chat_id || (isGroupChat ? identity.chatId : '') || '',
       type: 'chat',
       source: 'im-inbound',
-      im_channel: this._imType,
-      im_user_id: dbRow?.im_user_id || (isGroupChat ? '' : identity.userId) || '',
-      im_chat_id: dbRow?.im_chat_id || (isGroupChat ? identity.chatId : '') || '',
-      status: dbRow?.status || liveSession?.status || 'idle',
-    }
+    })
 
     return mergeCurrentSessionIntoHistory({
       history: rows,

@@ -98,6 +98,40 @@ function mergeCurrentSessionIntoHistory({
   return [mergedCurrent, ...deduped]
 }
 
+function buildCurrentImHistoryRow({
+  sessionId,
+  liveSession = null,
+  dbRow = null,
+  imChannel,
+  imUserId = '',
+  imChatId = '',
+  imChatType = null,
+  type = undefined,
+  source = undefined,
+}) {
+  if (!sessionId) return null
+  if (!liveSession && (!dbRow || dbRow.status === 'closed')) return null
+
+  const row = {
+    ...(dbRow || {}),
+    session_id: dbRow?.session_id || liveSession?.id || sessionId,
+    title: dbRow?.title || liveSession?.title || sessionId,
+    cwd: dbRow?.cwd || liveSession?.cwd || null,
+    api_profile_id: dbRow?.api_profile_id || liveSession?.apiProfileId || null,
+    updated_at: dbRow?.updated_at || (liveSession?.updatedAt ? new Date(liveSession.updatedAt).getTime() : Date.now()),
+    type,
+    source,
+    im_channel: imChannel,
+    im_user_id: imUserId,
+    im_chat_id: imChatId,
+    status: dbRow?.status || liveSession?.status || 'idle',
+  }
+  if (imChatType != null) {
+    row.im_chat_type = imChatType
+  }
+  return row
+}
+
 module.exports = {
   buildImCommandHelpText,
   buildAlreadyConnectedText,
@@ -112,4 +146,5 @@ module.exports = {
   buildUnknownCommandText,
   resolveCommandCwd,
   mergeCurrentSessionIntoHistory,
+  buildCurrentImHistoryRow,
 }

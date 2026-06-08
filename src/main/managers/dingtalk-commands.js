@@ -27,6 +27,7 @@ const {
   buildUnknownCommandText,
   resolveCommandCwd,
   mergeCurrentSessionIntoHistory,
+  buildCurrentImHistoryRow,
 } = require('./im-command-policy')
 const { runResumePostAction } = require('./im-resume-post-action')
 
@@ -153,20 +154,16 @@ function getCurrentBoundHistoryRow(bridge, db, identity, options = {}) {
   const liveSession = bridge?.agentSessionManager?.sessions?.get(boundSessionId)
   if (!liveSession) return null
   const chatId = firstDingTalkString(liveSession?.meta?.conversationId, identity?.chatId, identity?.conversationId)
-  return {
-    session_id: boundSessionId,
-    title: liveSession.title || boundSessionId,
-    cwd: liveSession.cwd || null,
-    api_profile_id: liveSession.apiProfileId || null,
-    updated_at: liveSession.updatedAt ? new Date(liveSession.updatedAt).getTime() : Date.now(),
+  return buildCurrentImHistoryRow({
+    sessionId: boundSessionId,
+    liveSession,
+    imChannel: 'dingtalk',
+    imUserId: userId,
+    imChatId: chatId,
+    imChatType: 'p2p',
     type: liveSession.type,
     source: liveSession.source,
-    im_channel: 'dingtalk',
-    im_user_id: userId,
-    im_chat_id: chatId,
-    im_chat_type: 'p2p',
-    status: liveSession.status || 'idle'
-  }
+  })
 }
 
 function buildCurrentHistoryRow(bridge, db, currentSessionId, identity = {}) {
@@ -174,24 +171,19 @@ function buildCurrentHistoryRow(bridge, db, currentSessionId, identity = {}) {
 
   const liveCurrent = bridge?.agentSessionManager?.sessions?.get(currentSessionId) || null
   const dbRow = db?.getAgentConversation?.(currentSessionId) || null
-  if (!liveCurrent && (!dbRow || dbRow.status === 'closed')) return null
   const { userId, chatId, imChatType, isGroupChat } = buildDingTalkCommandIdentityFields(identity)
 
-  return {
-    ...(dbRow || {}),
-    session_id: dbRow?.session_id || liveCurrent?.id || currentSessionId,
-    title: dbRow?.title || liveCurrent?.title || currentSessionId,
-    cwd: dbRow?.cwd || liveCurrent?.cwd || null,
-    api_profile_id: dbRow?.api_profile_id || liveCurrent?.apiProfileId || null,
-    updated_at: dbRow?.updated_at || (liveCurrent?.updatedAt ? new Date(liveCurrent.updatedAt).getTime() : Date.now()),
+  return buildCurrentImHistoryRow({
+    sessionId: currentSessionId,
+    liveSession: liveCurrent,
+    dbRow,
+    imChannel: 'dingtalk',
+    imUserId: dbRow?.im_user_id || (isGroupChat ? '' : userId),
+    imChatId: chatId || dbRow?.im_chat_id || '',
+    imChatType: dbRow?.im_chat_type || imChatType,
     type: dbRow?.type || liveCurrent?.type || 'chat',
     source: dbRow?.source || liveCurrent?.source || 'im-inbound',
-    im_channel: 'dingtalk',
-    im_user_id: dbRow?.im_user_id || (isGroupChat ? '' : userId),
-    im_chat_id: chatId || dbRow?.im_chat_id || '',
-    im_chat_type: dbRow?.im_chat_type || imChatType,
-    status: dbRow?.status || liveCurrent?.status || 'idle'
-  }
+  })
 }
 
 function loadDingTalkHistorySessions(bridge, {

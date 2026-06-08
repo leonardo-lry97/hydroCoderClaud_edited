@@ -42,6 +42,7 @@ const {
   buildUnknownCommandText,
   resolveCommandCwd,
   mergeCurrentSessionIntoHistory,
+  buildCurrentImHistoryRow,
 } = require('./im-command-policy')
 const {
   resolveStrictCurrentSessionId,
@@ -935,23 +936,18 @@ class FeishuBridge {
 
     const liveSession = this._agentSessionManager.sessions.get(sessionId)
     const dbRow = this._sessionDatabase?.getAgentConversation?.(sessionId)
-    if (!liveSession && (!dbRow || dbRow.status === 'closed')) return rows
     const isGroupChat = context.chatType === 'group' || context.chatType === 'chat'
 
-    const currentRow = {
-      ...(dbRow || {}),
-      session_id: dbRow?.session_id || liveSession?.id || sessionId,
-      title: dbRow?.title || liveSession?.title || sessionId,
-      cwd: dbRow?.cwd || liveSession?.cwd || null,
-      api_profile_id: dbRow?.api_profile_id || liveSession?.apiProfileId || null,
-      updated_at: dbRow?.updated_at || (liveSession?.updatedAt ? new Date(liveSession.updatedAt).getTime() : Date.now()),
+    const currentRow = buildCurrentImHistoryRow({
+      sessionId,
+      liveSession,
+      dbRow,
+      imChannel: 'feishu',
+      imUserId: dbRow?.im_user_id || (isGroupChat ? '' : context.senderId) || '',
+      imChatId: dbRow?.im_chat_id || (isGroupChat ? context.chatId : '') || '',
       type: 'chat',
       source: 'im-inbound',
-      im_channel: 'feishu',
-      im_user_id: dbRow?.im_user_id || (isGroupChat ? '' : context.senderId) || '',
-      im_chat_id: dbRow?.im_chat_id || (isGroupChat ? context.chatId : '') || '',
-      status: dbRow?.status || liveSession?.status || 'idle',
-    }
+    })
 
     return mergeCurrentSessionIntoHistory({
       history: rows,
