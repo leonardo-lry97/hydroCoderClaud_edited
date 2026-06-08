@@ -231,6 +231,41 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     return true
   }
 
+  const buildEmbeddedAppClient = (appId) => {
+    const normalizedAppId = typeof appId === 'string' && appId.trim()
+      ? appId.trim()
+      : 'embedded-app'
+    return {
+      clientId: `embed:${normalizedAppId}`,
+      clientType: 'embedded',
+      clientMeta: {
+        appId: normalizedAppId
+      }
+    }
+  }
+
+  const closeEmbeddedAppCurrentSession = async (appId) => {
+    if (!agentSessionBroker || !embeddedAppRuntimeManager || !appId) {
+      return null
+    }
+
+    const sessionId = typeof embeddedAppRuntimeManager.getCurrentSession === 'function'
+      ? embeddedAppRuntimeManager.getCurrentSession(appId)
+      : null
+    if (!sessionId) {
+      return null
+    }
+
+    try {
+      await agentSessionBroker.close(sessionId, buildEmbeddedAppClient(appId))
+      return sessionId
+    } finally {
+      if (typeof embeddedAppRuntimeManager.clearCurrentSessionIfMatches === 'function') {
+        embeddedAppRuntimeManager.clearCurrentSessionIfMatches(appId, sessionId)
+      }
+    }
+  }
+
   const openEmbeddedAppWindow = (menuKey) => {
     const app = typeof getEmbeddedAppByMenuKey === 'function'
       ? getEmbeddedAppByMenuKey(menuKey)
@@ -252,6 +287,26 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
       page: app.page,
       startMaximized: true
     });
+    let closingEmbeddedAppWindow = false
+    window.on('close', async (event) => {
+      if (closingEmbeddedAppWindow) return
+
+      closingEmbeddedAppWindow = true
+      event.preventDefault()
+
+      try {
+        await closeEmbeddedAppCurrentSession(app.id)
+      } catch (err) {
+        console.warn('[EmbeddedApp] Failed to close current session before window close:', {
+          appId: app.id,
+          error: err?.message || String(err)
+        })
+      } finally {
+        if (!window.isDestroyed()) {
+          window.destroy()
+        }
+      }
+    })
     embeddedAppWindows.set(menuKey, window)
     window.once('closed', () => {
       if (embeddedAppWindows.get(menuKey) === window) {
@@ -1146,6 +1201,7 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
     ipcMain.handle('hydro-agent:close', async (event, { client, sessionId } = {}) => {
       return withEmbeddedClient(event, client, async (normalizedClient) => {
         await agentSessionBroker.close(sessionId, normalizedClient)
+        clearEmbeddedCurrentSessionIfMatches(normalizedClient.appId, sessionId)
         return { success: true }
       })
     })
