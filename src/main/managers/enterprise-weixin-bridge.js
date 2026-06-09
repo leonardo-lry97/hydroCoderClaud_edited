@@ -1192,7 +1192,6 @@ class EnterpriseWeixinBridge {
       currentSessionId,
       maxSessions: this._getConfig().maxHistorySessions || DEFAULT_HISTORY_LIMIT,
       getDirName: (cwd) => this._getDirName(cwd),
-      getProfileName: (profileId) => this._getProfileName(profileId),
       isSessionActivated: (sessionId) => !!this._agentSessionManager.sessions.get(sessionId)?.queryGenerator,
       title: options.title || '您有以下历史会话，请回复数字选择：',
       includeActionHint: options.includeActionHint !== false,
@@ -1206,15 +1205,6 @@ class EnterpriseWeixinBridge {
       return path.basename(cwd) || cwd
     } catch {
       return cwd
-    }
-  }
-
-  _getProfileName(profileId) {
-    if (!profileId) return '默认配置'
-    try {
-      return this._configManager.getAPIProfile?.(profileId)?.name || profileId
-    } catch {
-      return profileId
     }
   }
 

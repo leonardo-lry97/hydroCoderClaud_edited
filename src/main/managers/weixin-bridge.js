@@ -587,7 +587,6 @@ class WeixinBridge {
       sessions,
       currentSessionId,
       getDirName: (cwd) => (cwd ? path.basename(cwd) : '-'),
-      getProfileName: (profileId) => profileId || '-',
       isSessionActivated: (sessionId) => {
         const session = this.agentSessionManager?.sessions?.get?.(sessionId)
         return !!session?.queryGenerator
@@ -1102,7 +1101,6 @@ class WeixinBridge {
       currentSessionId,
       maxSessions: 10,
       getDirName: (cwd) => (cwd ? path.basename(cwd) : '-'),
-      getProfileName: (profileId) => profileId || '-',
       isSessionActivated: (sessionId) => !!this.agentSessionManager?.sessions?.get?.(sessionId)?.queryGenerator,
       title: '当前会话状态：',
       includeActionHint: false,

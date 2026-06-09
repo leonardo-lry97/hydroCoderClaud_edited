@@ -1960,9 +1960,6 @@ class DingTalkBridge {
       currentSessionId,
       maxSessions: 10,
       getDirName: (cwd) => path.basename(cwd),
-      getProfileName: (profileId) => profileId
-        ? (this.configManager?.getAPIProfile(profileId)?.name || '未知配置')
-        : '默认配置',
       isSessionActivated: (sessionId) => {
         const session = this.agentSessionManager.sessions.get(sessionId)
         return !!(session && session.queryGenerator)

@@ -3300,7 +3300,7 @@ describe('FeishuBridge', () => {
 
     expect(menu).toContain('1. ✅ ')
     expect(menu).toContain('2. 🔵 ')
-    expect(menu).toContain('默认配置')
+    expect(menu).not.toContain('默认配置')
     expect(menu).toContain('回复 0 开始全新会话')
   })
 

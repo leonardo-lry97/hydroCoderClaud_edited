@@ -428,9 +428,6 @@ module.exports = {
       currentSessionId: statusCurrentSessionId,
       maxSessions: limit,
       getDirName: (cwd) => path.basename(cwd),
-      getProfileName: (profileId) => profileId
-        ? (this.configManager?.getAPIProfile(profileId)?.name || '未知配置')
-        : '默认配置',
       isSessionActivated: (sessionId) => !!this.agentSessionManager.sessions.get(sessionId)?.queryGenerator,
       title: '当前会话状态：',
       includeActionHint: false,

@@ -1682,9 +1682,6 @@ class FeishuBridge {
       currentSessionId,
       maxSessions: 10,
       getDirName: (rawPath) => this._basename(rawPath),
-      getProfileName: (profileId) => profileId
-        ? (this._config?.getAPIProfile?.(profileId)?.name || '未知配置')
-        : '默认配置',
       isSessionActivated: (sessionId) => !!this._agentSessionManager.sessions.get(sessionId)?.queryGenerator,
       title: options.title || '您有以下历史会话，请回复数字选择：',
       includeActionHint: options.includeActionHint !== false,

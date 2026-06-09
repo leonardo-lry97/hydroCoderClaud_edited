@@ -5,7 +5,6 @@ function buildHistoryChoiceMenuText({
   currentSessionId = null,
   maxSessions = 10,
   getDirName,
-  getProfileName,
   isSessionActivated,
   title = '您有以下历史会话，请回复数字选择：',
   includeActionHint = true,
@@ -17,11 +16,10 @@ function buildHistoryChoiceMenuText({
   displaySessions.forEach((row, index) => {
     const timeStr = formatRelativeTime(row.updated_at)
     const dir = row.cwd ? getDirName(row.cwd) : '-'
-    const profileName = getProfileName(row.api_profile_id)
     const marker = currentSessionId && row.session_id === currentSessionId
       ? '✅ '
       : (isSessionActivated(row.session_id) ? '🔵 ' : '⭕ ')
-    lines.push(`${index + 1}. ${marker}[${timeStr}] ${row.title || '(无标题)'} (${dir}) ${profileName}`)
+    lines.push(`${index + 1}. ${marker}[${timeStr}] ${row.title || '(无标题)'} (${dir})`)
   })
 
   if (Array.isArray(sessions) && sessions.length > displaySessions.length) {
