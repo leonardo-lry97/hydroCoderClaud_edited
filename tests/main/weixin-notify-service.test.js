@@ -1050,9 +1050,6 @@ describe('WeixinNotifyService', () => {
 
     expect(service._getBackgroundPollTimeoutMs()).toBe(500)
     expect(service._getBackgroundPollIntervalMs()).toBe(100)
-
-    service._activateFastPolling()
-
     expect(service._getBackgroundPollTimeoutMs()).toBe(500)
     expect(service._getBackgroundPollIntervalMs()).toBe(100)
   })

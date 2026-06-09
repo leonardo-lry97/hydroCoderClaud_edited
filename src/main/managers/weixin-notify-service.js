@@ -3,6 +3,7 @@ const { EventEmitter } = require('events')
 const fs = require('fs')
 const path = require('path')
 const QRCode = require('qrcode')
+const { logWeixinQueueTiming } = require('./weixin-timing-debug')
 
 const DEFAULT_BASE_URL = 'https://ilinkai.weixin.qq.com'
 const DEFAULT_CDN_BASE_URL = 'https://novac2c.cdn.weixin.qq.com/c2c'
@@ -201,20 +202,6 @@ function publicSendResponse(response) {
 
 function isAbortError(err) {
   return err?.name === 'AbortError' || err?.message === 'This operation was aborted'
-}
-
-function isWeixinQueueTimingEnabled() {
-  const value = String(process.env.HYDRO_WEIXIN_QUEUE_TIMING || '').trim().toLowerCase()
-  return value === '1' || value === 'true' || value === 'yes' || value === 'on'
-}
-
-function logWeixinQueueTiming(event, payload = {}) {
-  if (!isWeixinQueueTimingEnabled()) return
-  try {
-    console.log(`[WeixinQueueTiming] ${event}`, JSON.stringify(payload))
-  } catch {
-    console.log(`[WeixinQueueTiming] ${event}`)
-  }
 }
 
 function getDefaultSecretStore() {
@@ -419,7 +406,6 @@ class WeixinNotifyService {
         this._upsertAccount(account)
         this.preCaptureAccountIds.add(account.accountId)
         this._syncRuntimeState()
-        this._activateFastPolling()
         this._saveState()
         return {
           connected: true,
@@ -575,9 +561,6 @@ class WeixinNotifyService {
     if (capturedForPreCapture) {
       this.preCaptureAccountIds.delete(account.accountId)
       this._syncRuntimeState()
-    }
-    if (messages.length) {
-      this._activateFastPolling()
     }
     this._saveState()
     return { messages, inboundMessages, targets }
@@ -748,7 +731,6 @@ class WeixinNotifyService {
     target.lastSentAt = Date.now()
     target.contextExpiredAt = null
     target.lastError = null
-    this._activateFastPolling()
     this._saveState()
     const result = {
       success: true,
@@ -1072,10 +1054,6 @@ class WeixinNotifyService {
 
   _getBackgroundPollTimeoutMs() {
     return this.backgroundPollTimeoutMs
-  }
-
-  _activateFastPolling() {
-    // Polling is now fixed to a single cadence; keep this no-op for call-site compatibility.
   }
 
   _scheduleBackgroundPoll(delayMs = this._getBackgroundPollIntervalMs()) {

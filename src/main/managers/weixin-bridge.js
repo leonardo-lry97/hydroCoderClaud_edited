@@ -25,25 +25,12 @@ const { buildHistoryChoiceMenuText } = require('./im-command-presenter')
 const { ImSessionMapper } = require('./im-session-mapper')
 const { ensureHistoryChoiceOrCurrent, resolveStrictCurrentSessionId } = require('./im-session-decision')
 const { runResumePostAction } = require('./im-resume-post-action')
+const { logWeixinQueueTiming } = require('./weixin-timing-debug')
 const {
   dispatchImCommand,
   resolveCloseCommand,
   resolveRenameCommand,
 } = require('./im-command-executor')
-
-function isWeixinQueueTimingEnabled() {
-  const value = String(process.env.HYDRO_WEIXIN_QUEUE_TIMING || '').trim().toLowerCase()
-  return value === '1' || value === 'true' || value === 'yes' || value === 'on'
-}
-
-function logWeixinQueueTiming(event, payload = {}) {
-  if (!isWeixinQueueTimingEnabled()) return
-  try {
-    console.log(`[WeixinQueueTiming] ${event}`, JSON.stringify(payload))
-  } catch {
-    console.log(`[WeixinQueueTiming] ${event}`)
-  }
-}
 
 class WeixinBridge {
   constructor(configManager, agentSessionManager, weixinNotifyService, mainWindow) {
