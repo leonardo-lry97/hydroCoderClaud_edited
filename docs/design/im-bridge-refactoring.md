@@ -35,8 +35,9 @@ Renderer / Toolbar / Settings
   -> IPC
 Bridge (DingTalk / Feishu / Enterprise Weixin / Weixin)
   -> Shared Command Layer
-  -> Shared Runtime Binding Layer
   -> Shared Session Mapping Layer
+  -> Shared Runtime Binding Layer (DingTalk / Feishu / Enterprise Weixin)
+  -> Weixin local runtime binding + lifecycle facade (Weixin)
   -> AgentSessionManager
   -> SessionDatabase
 ```
@@ -74,7 +75,7 @@ Bridge (DingTalk / Feishu / Enterprise Weixin / Weixin)
 4. 统一历史选择恢复
 5. 统一回写 IM 身份字段
 
-### 2.3 共享运行态绑定层
+### 2.3 共享运行态绑定层（三端）
 
 核心文件：
 
@@ -85,6 +86,12 @@ Bridge (DingTalk / Feishu / Enterprise Weixin / Weixin)
 
 - `im-binding-policy.js` 负责“数据库身份语义”
 - `im-binding-runtime.js` 负责“运行时目标占有关系”
+
+补充说明：
+
+- 钉钉、飞书、企业微信当前走这套共享 runtime binding helper
+- 微信本轮没有强行迁入这层，而是保留 `WeixinNotifyService + WeixinBridge` 双层结构
+- 微信当前复用的是共享会话映射、共享命令语义和统一 IM 身份模型；运行态绑定与 bridge 生命周期仍由自身实现
 
 ---
 
@@ -247,12 +254,16 @@ im_chat_id = chatId
 3. 单聊身份已统一为 `im_channel='weixin' + im_user_id=targetId + im_chat_id='' + im_chat_type='p2p'`
 4. 关闭后再次入站、历史选择、恢复后激活/回放，已按共享语义接入
 5. 主动发送成功后再绑定的语义保持不变
+6. 已补齐标准运行控制外观：`weixin.enabled`、`weixin:getStatus`、`weixin:start/stop/restart`、`weixin:statusChange`
+7. 设置页和工具栏会按 bridge 启用状态联动显示
 
 保留差异：
 
-1. 仅纳入个人微信单聊模型，不补微信群聊
-2. 目标发现仍依赖扫码授权与首条入站捕获
-3. 主动发送仍依赖 `contextToken`，上下文过期后需要对方再次入站激活
+1. 仍保留双层结构：`WeixinNotifyService` 负责授权/轮询/发送，`WeixinBridge` 负责会话桥接
+2. 仅纳入个人微信单聊模型，不补微信群聊
+3. 目标发现仍依赖扫码授权与首条入站捕获
+4. 主动发送仍依赖 `contextToken`，上下文过期后需要对方再次入站激活
+5. 不强行并入钉钉 / 飞书 / 企业微信那套更深的 bridge 共享架构
 
 ---
 

@@ -83,7 +83,7 @@ im_chat_type = 'chat' 或 'group'
 
 ### 4.1 共享运行态结构
 
-当前四端主链路共用以下运行态概念：
+当前 IM 主链路使用以下运行态概念：
 
 | 结构 | 含义 |
 |------|------|
@@ -97,9 +97,15 @@ im_chat_type = 'chat' 或 'group'
 - `sessionMap` 解决“这条入站消息该进哪个当前会话”
 - `_sessionTargets` / `_targetSessionMap` 解决“桌面主动发送绑定后，后续入站如何回到该会话”
 
-这两类结构职责不同，当前代码中都保留，`_targetSessionMap` 不是冗余补丁。
+这两类结构职责不同，当前三端共享主链中都保留，`_targetSessionMap` 不是冗余补丁。
 
-### 4.2 共享运行态 helper
+微信补充说明：
+
+- 微信当前也有 `sessionMap` 与 `sessionTargets` 这类运行态概念
+- 但它没有完全迁入三端共用的 `_targetSessionMap` / `im-binding-runtime.js` 结构
+- 微信当前仍保留本地运行态绑定实现，并在其上补了统一的启停/状态 façade
+
+### 4.2 共享运行态 helper（三端）
 
 `src/main/managers/im-binding-runtime.js` 已成为当前主路径，负责：
 
@@ -107,6 +113,11 @@ im_chat_type = 'chat' 或 'group'
 2. 清理 session -> target 绑定
 3. 清理 target -> session 反向绑定
 4. 保证“一个 session 只绑定一个目标”和“一个目标只归一个 session”
+
+适用范围说明：
+
+- 钉钉、飞书、企业微信：当前走这套共享 runtime helper
+- 微信：当前不强行接入这层，保留双层结构与本地运行态绑定
 
 ---
 

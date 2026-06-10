@@ -976,7 +976,8 @@ export default {
     sendFailed: '发送微信通知失败',
     deleteTargetConfirm: '删除目标“{name}”？不会解绑微信账号。',
     deleteTargetSuccess: '目标已删除',
-    deleteTargetFailed: '删除目标失败'
+    deleteTargetFailed: '删除目标失败',
+    viewGuide: '查看使用指南'
   },
 
   // API 配置管理

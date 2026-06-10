@@ -123,9 +123,11 @@ this._sessionProcessQueues.set(sessionId, currentTask)
 - `WeixinNotifyService`
   - 基于微信 iLink HTTP 接口工作
   - 负责扫码授权、目标捕获、状态持久化、后台长轮询、文本/图片发送
+  - 负责运行态配置读取：`enabled / pollIntervalMs / pollTimeoutMs`
 - `WeixinBridge`
   - 负责把微信入站消息路由到 Agent/Notebook 会话
   - 负责会话与微信目标绑定，以及 Agent 回复再发回微信
+  - 负责 bridge 生命周期、状态广播，以及前端入口联动
 
 ### 授权与捕获模型
 
@@ -165,6 +167,22 @@ this._sessionProcessQueues.set(sessionId, currentTask)
 - 从桌面会话主动发给微信后，后续微信回信会优先落回该会话
 - Agent 文本回复会同步发回微信端
 - 图片已支持双向；语音、视频、文件暂未实现
+
+### 运行开关与前端联动
+
+本轮微信没有并入三端那套更深的共享 bridge 架构，而是在现有双层设计上补了标准 façade：
+
+- 配置项：`weixin.enabled`
+- 运行配置：`weixin.pollIntervalMs`、`weixin.pollTimeoutMs`
+- IPC：`weixin:getStatus`、`weixin:start`、`weixin:stop`、`weixin:restart`、`weixin:setEnabled`、`weixin:updateConfig`
+- 前端事件：`weixin:statusChange`
+
+用户可见行为：
+
+- 设置页可直接启停微信 bridge，并保存轮询参数
+- 微信 bridge 关闭时，聊天工具栏微信按钮会隐藏
+- 微信 bridge 重新启用后，工具栏和设置页状态会自动恢复
+- 关闭 bridge 只影响运行态，不会清空已授权账号和已捕获目标
 
 ### 传输特征
 

@@ -58,6 +58,10 @@
       <div class="feature-item"><strong>文本 + 图片</strong>语音、视频、文件暂未实现</div>
       <div class="feature-item"><strong>长轮询模式</strong>时延比钉钉/飞书略高</div>
     </div>
+    <div class="alert alert-info">
+      <strong>运行状态说明</strong>
+      设置页顶部状态标签表示的是桌面侧微信 bridge 是否在运行，不等于“微信用户是否已经扫码授权”。
+    </div>
   </div>
 </div>
 <div class="card">
@@ -65,7 +69,9 @@
   <div class="card-body">
     <ol>
       <li>打开 Hydro Desktop，进入「能力管理」→「微信通知」</li>
-      <li>点击「开始登录」，系统显示二维码</li>
+      <li>确认「启用微信通知」处于打开状态</li>
+      <li>如有需要，设置「轮询间隔 (ms)」和「轮询超时 (ms)」并保存</li>
+      <li>点击「生成授权二维码」，系统显示二维码</li>
       <li>让需要接收消息的<strong>微信用户自己扫码</strong>并确认授权</li>
       <li>扫码完成后，让该用户<strong>再发送一条微信消息</strong></li>
       <li>系统自动捕获目标，该用户出现在可发送列表中，并收到一条绑定成功提示</li>
@@ -73,6 +79,10 @@
     <div class="alert alert-info">
       <strong>📌 关键步骤</strong>
       扫码后必须让微信用户发一条消息，系统才能拿到 contextToken 完成捕获。只扫码不发消息，目标不会出现。
+    </div>
+    <div class="alert alert-warning">
+      <strong>关闭开关会发生什么？</strong>
+      关闭后会停止后台轮询，并隐藏聊天工具栏里的微信入口；但已授权账号和已捕获目标仍会保留，重新开启后可继续使用。
     </div>
   </div>
 </div>
@@ -123,6 +133,7 @@
     <div class="alert alert-info"><strong>为什么能发给一个人，发给另一个人失败？</strong>另一个人不是有效的已捕获目标。让该用户重新扫码并再发一条消息即可恢复。</div>
     <div class="alert alert-info"><strong>微信回信会不会总是新建会话？</strong>不会。只要目标之前从某个桌面会话主动发出过，回信会优先回到原会话。</div>
     <div class="alert alert-info"><strong>能否发给没扫码的人？</strong>不能。只能发给已扫码授权且已捕获的目标，不读取微信通讯录。</div>
+    <div class="alert alert-info"><strong>设置页显示“运行中”是不是代表已经扫码成功？</strong>不是。这只表示桌面侧微信 bridge 正在运行；目标是否可发送，还取决于扫码授权和首条消息捕获是否完成。</div>
   </div>
 </div>
 </div>

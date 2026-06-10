@@ -131,6 +131,19 @@ IM 用户发消息 → 平台 Stream/WS → DingTalk / Feishu / EnterpriseWeixin
   → 文本/图片在桌面与微信双向流转
 ```
 
+当前微信仍保留“双层结构”而不是并入三端深共享桥：
+
+- `WeixinNotifyService` 负责授权、目标捕获、后台轮询、文本/图片发送
+- `WeixinBridge` 负责会话路由、会话绑定、命令语义和桌面回传
+
+本轮新增的统一能力主要是：
+
+- 标准运行开关 `weixin.enabled`
+- 标准运行状态 `weixin:getStatus` / `weixin:statusChange`
+- 标准运行控制 `weixin:start` / `weixin:stop` / `weixin:restart`
+- 标准轮询配置 `weixin.pollIntervalMs` / `weixin.pollTimeoutMs`
+- 设置页与工具栏按照 bridge 是否启用联动显示
+
 ### 桌面定时任务
 
 ```

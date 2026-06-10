@@ -1,6 +1,6 @@
 <template>
   <div class="weixin-workbench">
-    <div class="header-row">
+    <div v-if="configReady" class="header-row">
       <div>
         <div class="title-line">{{ t('weixinNotify.title') }}</div>
         <div class="subtitle">{{ t('weixinNotify.subtitle') }}</div>
@@ -15,178 +15,195 @@
         </n-button>
       </div>
     </div>
-
-    <n-alert type="info" :show-icon="true">
-      {{ t('weixinNotify.boundary') }}
-    </n-alert>
-
-    <n-card :title="t('weixinNotify.basicConfigTitle')" class="section-card">
-      <n-form-item :label="t('weixinNotify.enableBridge')">
-        <n-switch
-          :value="enabled"
-          :loading="togglingEnabled"
-          @update:value="handleEnabledChange"
-        />
-      </n-form-item>
-
-      <div v-if="!enabled" class="disabled-hint">
-        {{ t('weixinNotify.disabledHint') }}
+    <div v-else class="header-row">
+      <div>
+        <div class="title-line">{{ t('weixinNotify.title') }}</div>
+        <div class="subtitle">{{ t('weixinNotify.subtitle') }}</div>
       </div>
-
-      <div class="advanced-grid">
-        <n-form-item :label="t('weixinNotify.pollIntervalMs')">
-          <n-input-number
-            v-model:value="pollIntervalMs"
-            :min="100"
-            :step="100"
-            :disabled="!enabled"
-          />
-        </n-form-item>
-        <n-form-item :label="t('weixinNotify.pollTimeoutMs')">
-          <n-input-number
-            v-model:value="pollTimeoutMs"
-            :min="500"
-            :step="100"
-            :disabled="!enabled"
-          />
-        </n-form-item>
-      </div>
-
-      <div class="config-actions">
-        <n-button
-          type="primary"
-          :loading="savingConfig"
-          :disabled="!enabled"
-          @click="saveConfig"
-        >
-          {{ t('common.save') }}
-        </n-button>
-      </div>
-    </n-card>
-
-    <div class="section-grid">
-      <n-card :title="t('weixinNotify.loginTitle')" class="section-card">
-        <div class="login-actions">
-          <n-button type="primary" :loading="loginLoading" :disabled="!enabled" @click="startLogin">
-            {{ t('weixinNotify.startLogin') }}
-          </n-button>
-          <n-button :disabled="!enabled || !accounts.length" :loading="polling" @click="pollOnce">
-            {{ t('weixinNotify.captureTarget') }}
-          </n-button>
-        </div>
-
-        <div
-          v-if="preCaptureStatus !== 'idle'"
-          class="pre-capture-status"
-          :class="'status-' + preCaptureStatus"
-        >
-          <span v-if="preCaptureStatus === 'waiting'" class="capture-spinner"></span>
-          <Icon v-else-if="preCaptureStatus === 'success'" name="check" :size="14" />
-          <Icon v-else name="warning" :size="14" />
-          <span>{{ preCaptureStatusText }}</span>
-        </div>
-
-        <div v-if="loginQrcodeUrl" class="qr-panel">
-          <img :src="loginQrcodeUrl" :alt="t('weixinNotify.qrAlt')" class="qr-image">
-          <div class="qr-copy">
-            <div class="qr-title">{{ loginMessage || t('weixinNotify.scanHint') }}</div>
-            <div class="qr-hint">{{ t('weixinNotify.targetHint') }}</div>
-          </div>
-        </div>
-
-        <div v-if="accounts.length" class="compact-list">
-          <div v-for="account in accounts" :key="account.accountId" class="compact-row">
-            <span class="status-dot enabled"></span>
-            <div class="row-copy">
-              <span class="row-title">{{ account.userId || account.accountId }}</span>
-              <span class="row-subtitle">{{ account.accountId }}</span>
-            </div>
-          </div>
-        </div>
-        <div v-if="accounts.length" class="helper-text">
-          {{ t('weixinNotify.accountListHint') }}
-        </div>
-
-        <div v-else class="empty-box">
-          {{ t('weixinNotify.noAccounts') }}
-        </div>
-      </n-card>
-
-      <n-card :title="t('weixinNotify.sendTitle')" class="section-card">
-        <n-form-item :label="t('weixinNotify.target')">
-          <n-select
-            :key="targetSelectVersion"
-            v-model:value="selectedTargetId"
-            :options="targetOptions"
-            :placeholder="t('weixinNotify.targetPlaceholder')"
-            :disabled="!enabled || !targetOptions.length"
-          />
-        </n-form-item>
-        <n-form-item :label="t('weixinNotify.message')">
-          <n-input
-            v-model:value="testText"
-            type="textarea"
-            :autosize="{ minRows: 3, maxRows: 5 }"
-            :placeholder="t('weixinNotify.messagePlaceholder')"
-            :disabled="!enabled"
-          />
-        </n-form-item>
-        <n-button type="primary" :disabled="!enabled || !canSend" :loading="sending" @click="sendTest">
-          {{ t('weixinNotify.sendTest') }}
-        </n-button>
-      </n-card>
+      <div class="helper-text">{{ t('common.loading') }}</div>
     </div>
 
-    <n-card :title="t('weixinNotify.targetsTitle')" class="section-card">
-      <div v-if="targets.length" class="target-list">
-        <div v-for="target in targets" :key="target.id" class="target-row">
-          <div class="target-main">
-            <span class="status-dot" :class="{ enabled: target.hasContextToken }"></span>
-            <div class="row-copy">
-              <n-input
-                v-if="editingTargetId === target.id"
-                v-model:value="targetNameDrafts[target.id]"
-                size="small"
-                class="target-name-input"
-                :placeholder="t('weixinNotify.displayNamePlaceholder')"
-                @keyup.enter="saveTargetDisplayName(target)"
-                @keyup.esc="cancelTargetDisplayName(target)"
-              />
-              <span v-else class="row-title">{{ target.displayName || target.userId }}</span>
-              <span class="row-subtitle">{{ target.id }}</span>
+    <template v-if="configReady">
+      <n-alert type="info" :show-icon="true">
+        {{ t('weixinNotify.boundary') }}
+      </n-alert>
+
+      <n-card :title="t('weixinNotify.basicConfigTitle')" class="section-card">
+        <template #header-extra>
+          <n-button text type="primary" size="small" @click="openGuide">
+            {{ t('weixinNotify.viewGuide') }}
+          </n-button>
+        </template>
+        <n-form-item :label="t('weixinNotify.enableBridge')">
+          <n-switch
+            :value="enabled"
+            :loading="togglingEnabled"
+            @update:value="handleEnabledChange"
+          />
+        </n-form-item>
+
+        <div v-if="!enabled" class="disabled-hint">
+          {{ t('weixinNotify.disabledHint') }}
+        </div>
+
+        <div class="advanced-grid">
+          <n-form-item :label="t('weixinNotify.pollIntervalMs')">
+            <n-input-number
+              v-model:value="pollIntervalMs"
+              :min="100"
+              :step="100"
+              :disabled="!enabled"
+            />
+          </n-form-item>
+          <n-form-item :label="t('weixinNotify.pollTimeoutMs')">
+            <n-input-number
+              v-model:value="pollTimeoutMs"
+              :min="500"
+              :step="100"
+              :disabled="!enabled"
+            />
+          </n-form-item>
+        </div>
+
+        <div class="config-actions">
+          <n-button
+            type="primary"
+            :loading="savingConfig"
+            :disabled="!enabled"
+            @click="saveConfig"
+          >
+            {{ t('common.save') }}
+          </n-button>
+        </div>
+      </n-card>
+
+      <div class="section-grid">
+        <n-card :title="t('weixinNotify.loginTitle')" class="section-card">
+          <div class="login-actions">
+            <n-button type="primary" :loading="loginLoading" :disabled="!enabled" @click="startLogin">
+              {{ t('weixinNotify.startLogin') }}
+            </n-button>
+            <n-button :disabled="!enabled || !accounts.length" :loading="polling" @click="pollOnce">
+              {{ t('weixinNotify.captureTarget') }}
+            </n-button>
+          </div>
+
+          <div
+            v-if="preCaptureStatus !== 'idle'"
+            class="pre-capture-status"
+            :class="'status-' + preCaptureStatus"
+          >
+            <span v-if="preCaptureStatus === 'waiting'" class="capture-spinner"></span>
+            <Icon v-else-if="preCaptureStatus === 'success'" name="check" :size="14" />
+            <Icon v-else name="warning" :size="14" />
+            <span>{{ preCaptureStatusText }}</span>
+          </div>
+
+          <div v-if="loginQrcodeUrl" class="qr-panel">
+            <img :src="loginQrcodeUrl" :alt="t('weixinNotify.qrAlt')" class="qr-image">
+            <div class="qr-copy">
+              <div class="qr-title">{{ loginMessage || t('weixinNotify.scanHint') }}</div>
+              <div class="qr-hint">{{ t('weixinNotify.targetHint') }}</div>
             </div>
           </div>
-          <div class="target-actions">
-            <template v-if="editingTargetId === target.id">
-              <n-button
-                size="small"
-                type="primary"
-                :disabled="!isTargetNameChanged(target)"
-                :loading="savingTargetId === target.id"
-                @click="saveTargetDisplayName(target)"
-              >
-                {{ t('weixinNotify.saveDisplayName') }}
-              </n-button>
-              <n-button size="small" @click="cancelTargetDisplayName(target)">
-                {{ t('common.cancel') }}
-              </n-button>
-            </template>
-            <n-button v-else size="small" @click="startEditTargetDisplayName(target)">
-              {{ t('weixinNotify.editDisplayName') }}
-            </n-button>
-            <n-button size="small" type="error" @click="deleteTarget(target)">
-              {{ t('common.delete') }}
-            </n-button>
+
+          <div v-if="accounts.length" class="compact-list">
+            <div v-for="account in accounts" :key="account.accountId" class="compact-row">
+              <span class="status-dot enabled"></span>
+              <div class="row-copy">
+                <span class="row-title">{{ account.userId || account.accountId }}</span>
+                <span class="row-subtitle">{{ account.accountId }}</span>
+              </div>
+            </div>
           </div>
-          <n-tag class="target-status" :type="target.hasContextToken ? 'success' : 'warning'" size="small" round>
-            {{ target.hasContextToken ? t('weixinNotify.ready') : t('weixinNotify.needsMessage') }}
-          </n-tag>
+          <div v-if="accounts.length" class="helper-text">
+            {{ t('weixinNotify.accountListHint') }}
+          </div>
+
+          <div v-else class="empty-box">
+            {{ t('weixinNotify.noAccounts') }}
+          </div>
+        </n-card>
+
+        <n-card :title="t('weixinNotify.sendTitle')" class="section-card">
+          <n-form-item :label="t('weixinNotify.target')">
+            <n-select
+              :key="targetSelectVersion"
+              v-model:value="selectedTargetId"
+              :options="targetOptions"
+              :placeholder="t('weixinNotify.targetPlaceholder')"
+              :disabled="!enabled || !targetOptions.length"
+            />
+          </n-form-item>
+          <n-form-item :label="t('weixinNotify.message')">
+            <n-input
+              v-model:value="testText"
+              type="textarea"
+              :autosize="{ minRows: 3, maxRows: 5 }"
+              :placeholder="t('weixinNotify.messagePlaceholder')"
+              :disabled="!enabled"
+            />
+          </n-form-item>
+          <n-button type="primary" :disabled="!enabled || !canSend" :loading="sending" @click="sendTest">
+            {{ t('weixinNotify.sendTest') }}
+          </n-button>
+        </n-card>
+      </div>
+
+      <n-card :title="t('weixinNotify.targetsTitle')" class="section-card">
+        <div v-if="targets.length" class="target-list">
+          <div v-for="target in targets" :key="target.id" class="target-row">
+            <div class="target-main">
+              <span class="status-dot" :class="{ enabled: target.hasContextToken }"></span>
+              <div class="row-copy">
+                <n-input
+                  v-if="editingTargetId === target.id"
+                  v-model:value="targetNameDrafts[target.id]"
+                  size="small"
+                  class="target-name-input"
+                  :placeholder="t('weixinNotify.displayNamePlaceholder')"
+                  @keyup.enter="saveTargetDisplayName(target)"
+                  @keyup.esc="cancelTargetDisplayName(target)"
+                />
+                <span v-else class="row-title">{{ target.displayName || target.userId }}</span>
+                <span class="row-subtitle">{{ target.id }}</span>
+              </div>
+            </div>
+            <div class="target-actions">
+              <template v-if="editingTargetId === target.id">
+                <n-button
+                  size="small"
+                  type="primary"
+                  :disabled="!isTargetNameChanged(target)"
+                  :loading="savingTargetId === target.id"
+                  @click="saveTargetDisplayName(target)"
+                >
+                  {{ t('weixinNotify.saveDisplayName') }}
+                </n-button>
+                <n-button size="small" @click="cancelTargetDisplayName(target)">
+                  {{ t('common.cancel') }}
+                </n-button>
+              </template>
+              <n-button v-else size="small" @click="startEditTargetDisplayName(target)">
+                {{ t('weixinNotify.editDisplayName') }}
+              </n-button>
+              <n-button size="small" type="error" @click="deleteTarget(target)">
+                {{ t('common.delete') }}
+              </n-button>
+            </div>
+            <n-tag class="target-status" :type="target.hasContextToken ? 'success' : 'warning'" size="small" round>
+              {{ target.hasContextToken ? t('weixinNotify.ready') : t('weixinNotify.needsMessage') }}
+            </n-tag>
+          </div>
         </div>
-      </div>
-      <div v-else class="empty-box">
-        {{ t('weixinNotify.noTargets') }}
-      </div>
-    </n-card>
+        <div v-else class="empty-box">
+          {{ t('weixinNotify.noTargets') }}
+        </div>
+      </n-card>
+    </template>
+    <div v-else class="empty-box">
+      {{ t('common.loading') }}
+    </div>
   </div>
 </template>
 
@@ -222,11 +239,12 @@ const editingTargetId = ref(null)
 const savingTargetId = ref(null)
 const targetSelectVersion = ref(0)
 const preCaptureStatus = ref('idle')
-const enabled = ref(true)
+const enabled = ref(false)
 const pollIntervalMs = ref(100)
 const pollTimeoutMs = ref(500)
 const runtimeState = ref('disabled')
 const cleanupFns = []
+const configReady = ref(false)
 
 const MANUAL_CAPTURE_POLL_TIMEOUT_MS = 8000
 const PRE_CAPTURE_REFRESH_INTERVAL_MS = 2000
@@ -302,10 +320,12 @@ const refreshAll = async () => {
     if (!hasSelectedTarget) {
       selectedTargetId.value = targets.value.find(target => target.hasContextToken)?.id || targets.value[0]?.id || null
     }
+    configReady.value = true
   } catch (err) {
     console.error('[WeixinNotifyWorkbenchTab] refresh failed:', err)
     message.error(err.message || t('weixinNotify.refreshFailed'))
   } finally {
+    configReady.value = true
     loading.value = false
   }
 }
@@ -344,6 +364,10 @@ const saveConfig = async () => {
   } finally {
     savingConfig.value = false
   }
+}
+
+const openGuide = () => {
+  window.electronAPI?.openImGuide?.('weixin')
 }
 
 const getTargetDisplayName = (target) => target?.displayName || target?.userId || ''

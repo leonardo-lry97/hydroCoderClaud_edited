@@ -973,7 +973,8 @@ export default {
     sendFailed: 'Failed to send Weixin notification',
     deleteTargetConfirm: 'Delete target "{name}"? This will not unbind the Weixin account.',
     deleteTargetSuccess: 'Target deleted',
-    deleteTargetFailed: 'Failed to delete target'
+    deleteTargetFailed: 'Failed to delete target',
+    viewGuide: 'View Guide'
   },
 
   // API Profile Manager

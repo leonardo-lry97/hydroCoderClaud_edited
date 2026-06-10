@@ -55,7 +55,7 @@
 - `ActiveSessionManager` 和 `AgentSessionManager` 互相持有对方引用（`setPeerManager`），用于 CLI 会话 UUID 的跨模式占用检查
 - `SessionDatabase` 在 `setupIPCHandlers()` 中创建，然后通过 `setSessionDatabase()` 注入到 `ActiveSessionManager` 和 `AgentSessionManager`
 - `ScheduledTaskService` 在创建后先挂到 `agentSessionManager.scheduledTaskService`，再在 `setupIPCHandlers()` 内注入 `SessionDatabase` 并启动轮询
-- `WeixinNotifyService` 在 IPC 注册前就已启动，并先注入到 `agentSessionManager.weixinNotifyService`，供 Agent 会话构建内置微信 MCP
+- `WeixinNotifyService` 在主进程启动时先创建并注入到 `agentSessionManager.weixinNotifyService`，供 Agent 会话构建内置微信 MCP；是否真正启动后台轮询由 `weixinBridge.start()` 和 `weixin.enabled` 决定
 - `WeixinBridge` 依赖 `AgentSessionManager` 和 `WeixinNotifyService`，负责会话绑定、入站微信路由和回复回推
 - `EmbeddedAppPreferencesManager` 在 `NotebookManager` 之后初始化，并通过 `setupIPCHandlers()` 暴露给内嵌 app 读写偏好
 - `CapabilityManager` 依赖 `PluginService`、`SkillsManager`、`AgentsManager`、`McpManager`，需在它们之后创建
@@ -431,6 +431,7 @@ new ScheduledTaskService(configManager, agentSessionManager)
 
 ```
 new WeixinNotifyService(configManager)
+  → applyRuntimeConfig()   // 读取 enabled / pollIntervalMs / pollTimeoutMs
   → start()                // 启动后台长轮询
   → startLogin()           // 获取扫码二维码
   → waitLogin()            // 等待扫码授权完成
@@ -444,6 +445,7 @@ new WeixinNotifyService(configManager)
 - 保存可发送目标 `targetId / contextToken`
 - 维护“一个用户一个首选目标”的展示语义
 - 通过后台长轮询接收入站文本/图片消息
+- 对外暴露运行态配置与状态基础能力，供 `WeixinBridge` 和设置页统一使用
 
 ### WeixinBridge
 
@@ -454,6 +456,14 @@ new WeixinNotifyService(configManager)
 - 把微信入站消息写入现有会话，或创建 `source === 'weixin'` 新会话
 - 把 Agent 文本回复、桌面介入内容和图片回推给微信端
 - 向前端广播 `weixin:messageReceived` 与 `weixin:sessionCreated`
+- 统一暴露 bridge 运行态：`getStatus()`、`start()`、`stop()`、`restart()`、`weixin:statusChange`
+
+补充现状：
+
+- 微信仍保留 `WeixinNotifyService + WeixinBridge` 双层结构
+- 主进程启动阶段不再无条件直接启动 `WeixinNotifyService`
+- 当前由 `weixinBridge.start()` 决定是否根据 `weixin.enabled` 真正启动后台轮询
+- 设置页与聊天工具栏会基于 bridge 状态决定入口是否显示
 
 ### FeishuBridge
 
