@@ -40,6 +40,8 @@ function getDefaultDatabase() {
   return DefaultDatabase
 }
 
+const LEGACY_IM_CHANNEL_TYPES = ['dingtalk', 'weixin', 'feishu', 'enterprise-weixin']
+
 /**
  * 基础数据库类
  * 只包含初始化、表创建和统计方法
@@ -145,6 +147,16 @@ class SessionDatabaseBase {
    * Run database migrations for schema updates
    */
   runMigrations() {
+    const legacyImChannelSqlList = LEGACY_IM_CHANNEL_TYPES.map(value => `'${value}'`).join(', ')
+    const resolvedImChannelExpr = `
+      CASE
+        WHEN COALESCE(im_channel, '') <> '' THEN im_channel
+        WHEN type IN (${legacyImChannelSqlList}) THEN type
+        WHEN source IN (${legacyImChannelSqlList}) THEN source
+        ELSE NULL
+      END
+    `.trim()
+
     // Get existing columns in projects table
     const projectColumns = this.db.prepare("PRAGMA table_info(projects)").all()
     const projectColumnNames = projectColumns.map(c => c.name)
@@ -223,6 +235,43 @@ class SessionDatabaseBase {
       this.db.exec('BEGIN TRANSACTION')
       try {
         this.db.exec(`
+          UPDATE agent_conversations
+          SET im_channel = ${resolvedImChannelExpr}
+        `)
+
+        this.db.exec(`
+          UPDATE agent_conversations
+          SET im_user_id = CASE
+            WHEN COALESCE(im_user_id, '') <> '' THEN im_user_id
+            WHEN im_channel = 'weixin' AND COALESCE(staff_id, '') <> '' THEN staff_id
+            WHEN im_channel IN ('dingtalk', 'feishu') AND COALESCE(conversation_id, '') = '' AND COALESCE(staff_id, '') <> '' THEN staff_id
+            WHEN im_channel IN (${legacyImChannelSqlList}) THEN ''
+            ELSE im_user_id
+          END
+        `)
+
+        this.db.exec(`
+          UPDATE agent_conversations
+          SET im_chat_id = CASE
+            WHEN COALESCE(im_chat_id, '') <> '' THEN im_chat_id
+            WHEN im_channel IN ('dingtalk', 'feishu') AND COALESCE(conversation_id, '') <> '' THEN conversation_id
+            WHEN im_channel IN (${legacyImChannelSqlList}) THEN ''
+            ELSE im_chat_id
+          END
+        `)
+
+        this.db.exec(`
+          UPDATE agent_conversations
+          SET im_chat_type = CASE
+            WHEN COALESCE(im_chat_type, '') <> '' THEN im_chat_type
+            WHEN im_channel = 'weixin' AND COALESCE(staff_id, '') <> '' THEN 'p2p'
+            WHEN im_channel IN ('dingtalk', 'feishu') AND COALESCE(conversation_id, '') <> '' THEN 'group'
+            WHEN im_channel IN ('dingtalk', 'feishu') AND COALESCE(staff_id, '') <> '' THEN 'p2p'
+            ELSE im_chat_type
+          END
+        `)
+
+        this.db.exec(`
           CREATE TABLE agent_conversations_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id TEXT UNIQUE NOT NULL,
@@ -285,7 +334,7 @@ class SessionDatabaseBase {
     this.db.exec(`
       UPDATE agent_conversations
       SET type = 'chat'
-      WHERE type IN ('dingtalk', 'weixin', 'feishu', 'enterprise-weixin')
+      WHERE type IN (${legacyImChannelSqlList})
     `)
 
     const scheduledTaskInfo = this.db.prepare("PRAGMA table_info(scheduled_tasks)").all()
@@ -706,6 +755,10 @@ class SessionDatabaseBase {
         last_bootstrapped_runtime TEXT,
         pending_runtime_change TEXT DEFAULT 'unknown',
         queued_messages TEXT DEFAULT '[]',
+        im_user_id TEXT,
+        im_chat_id TEXT,
+        im_channel TEXT,
+        im_chat_type TEXT,
         source TEXT DEFAULT 'manual',
         task_id INTEGER,
         owner_client_id TEXT DEFAULT 'host-ui',
@@ -822,6 +875,8 @@ class SessionDatabaseBase {
       CREATE INDEX IF NOT EXISTS idx_agent_conv_updated ON agent_conversations(updated_at);
       CREATE INDEX IF NOT EXISTS idx_agent_conv_source ON agent_conversations(source);
       CREATE INDEX IF NOT EXISTS idx_agent_conv_task_id ON agent_conversations(task_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_conv_im_identity ON agent_conversations(im_channel, im_user_id, im_chat_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_agent_conv_im_user ON agent_conversations(im_channel, im_user_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_agent_msg_conv ON agent_messages(conversation_id);
       CREATE INDEX IF NOT EXISTS idx_agent_msg_timestamp ON agent_messages(timestamp);
       CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
