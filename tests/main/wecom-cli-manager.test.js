@@ -79,13 +79,21 @@ describe('WecomCliManager', () => {
     await manager._exec(['wecom-cli', 'auth', 'show', '--auth-status'])
 
     expect(envSpy).toHaveBeenCalledWith({})
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'wecom-cli',
-      ['auth', 'show', '--auth-status'],
-      expect.objectContaining({
+    const [spawnCommand, spawnArgs, spawnOptions] = spawnSpy.mock.calls[0]
+    if (process.platform === 'win32') {
+      expect(spawnCommand).toBe(process.env.COMSPEC || 'cmd.exe')
+      expect(spawnArgs).toEqual(['/s', '/c', 'wecom-cli auth show --auth-status'])
+      expect(spawnOptions).toMatchObject({
+        windowsHide: true,
         env: { PATH: '/enhanced/bin', TEST_FLAG: '1' }
       })
-    )
+    } else {
+      expect(spawnCommand).toBe('wecom-cli')
+      expect(spawnArgs).toEqual(['auth', 'show', '--auth-status'])
+      expect(spawnOptions).toMatchObject({
+        env: { PATH: '/enhanced/bin', TEST_FLAG: '1' }
+      })
+    }
   })
 
   it('maps errcode 850002 to CONTACT_NOT_AUTHORIZED', async () => {
