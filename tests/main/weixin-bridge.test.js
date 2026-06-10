@@ -869,6 +869,13 @@ describe('WeixinBridge', () => {
     })
   })
 
+  it('extracts POSIX image paths from assistant text blocks', async () => {
+    const { bridge } = createHarness()
+    const imagePath = '/tmp/hydro-weixin/read-result.png'
+
+    expect(bridge._extractImagePathsFromText(`已读取： ${imagePath}`)).toEqual([imagePath])
+  })
+
   it('shows status as a history-style menu for the current weixin target', async () => {
     const { bridge, manager } = createHarness()
     const current = manager.create({ type: 'chat', source: 'im-inbound', imChannel: 'weixin', title: '当前微信会话' })

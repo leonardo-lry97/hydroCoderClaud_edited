@@ -574,7 +574,9 @@ class WeixinBridge {
   _extractImagePathsFromText(text) {
     if (typeof text !== 'string' || !text.trim()) return []
 
-    const matches = text.match(/[A-Za-z]:[\\/][^\s"'<>|]+?\.(?:png|jpg|jpeg|gif|webp|bmp)/gi) || []
+    const matches = text.match(
+      /(?:[A-Za-z]:[\\/][^\s"'<>|]+?\.(?:png|jpg|jpeg|gif|webp|bmp)|\/[^\s"'<>|]+?\.(?:png|jpg|jpeg|gif|webp|bmp))/gi
+    ) || []
     const unique = new Set()
     for (const rawPath of matches) {
       const normalized = this._normalizePath(rawPath.trim())
