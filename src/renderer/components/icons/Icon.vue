@@ -1,5 +1,14 @@
 <template>
+  <img
+    v-if="assetSrc"
+    :src="assetSrc"
+    :alt="name"
+    :width="size"
+    :height="size"
+    class="icon icon-image"
+  />
   <svg
+    v-else
     :width="size"
     :height="size"
     viewBox="0 0 20 20"
@@ -15,7 +24,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { iconPaths } from './index.js'
+import { iconAssets, iconPaths } from './index.js'
 
 const props = defineProps({
   name: {
@@ -36,13 +45,15 @@ const props = defineProps({
   }
 })
 
+const assetSrc = computed(() => iconAssets[props.name] || '')
+
 const path = computed(() => {
   const p = iconPaths[props.name]
-  if (!p) {
+  if (!p && !assetSrc.value) {
     console.warn(`[Icon] Unknown icon name: ${props.name}`)
     return iconPaths.warning || ''
   }
-  return p
+  return p || ''
 })
 </script>
 
@@ -51,5 +62,9 @@ const path = computed(() => {
   display: inline-block;
   vertical-align: middle;
   flex-shrink: 0;
+}
+
+.icon-image {
+  object-fit: contain;
 }
 </style>

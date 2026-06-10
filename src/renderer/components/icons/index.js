@@ -1,6 +1,11 @@
+import dingtalkIcon from './assets/dingtalk.svg'
+import feishuIcon from './assets/feishu.svg'
+import wecomIcon from './assets/wecom.svg'
+import weixinIcon from './assets/weixin.svg'
+
 /**
  * 统一图标系统
- * 所有图标基于 20x20 viewBox，stroke-based 设计
+ * 普通图标基于 20x20 viewBox，品牌图标走独立 SVG 资源
  * 使用方式：<Icon name="refresh" :size="20" />
  */
 
@@ -58,11 +63,6 @@ export const iconPaths = {
   // 用户类
   user: '<circle cx="10" cy="6" r="3"/><path d="M4 18v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1"/>',
   robot: '<rect x="4" y="6" width="12" height="10" rx="3"/><path d="M7 5.1v.9M13 5.1v.9"/><circle cx="7" cy="3" r="1.5" stroke-width="1.15"/><circle cx="13" cy="3" r="1.5" stroke-width="1.15"/><path d="M7 10h.01M13 10h.01"/><path d="M8 13.5q2 1.5 4 0"/>',
-  dingtalk: '<rect x="3.2" y="3.2" width="13.6" height="13.6" rx="3.1" fill="#2F8CFF" stroke="none"/><path d="M6.2 8.2l3.6 2.1-2.1 1.1 2.5 1.2-1.7 1.7 5.4-2.6-2.3-.9 2.1-2.2-7.5-1.4z" fill="#FFFFFF" stroke="none"/>',
-  weixin: '<path d="M2.1 10c0-4.2 3.4-7 7.9-7 4.6 0 7.9 2.8 7.9 6.8 0 4-3.3 6.8-7.9 6.8-.9 0-1.8-.1-2.6-.4l-3.8 1.4 1.5-2.9C3.2 13.6 2.1 11.9 2.1 10z" fill="#2DC653" stroke="none"/><circle cx="7.7" cy="9.5" r="1" fill="#FFFFFF" stroke="none"/><circle cx="12.3" cy="9.5" r="1" fill="#FFFFFF" stroke="none"/>',
-  wecom: '<path d="M3.6 9.6c0-3.5 2.9-6.2 6.6-6.2 3.8 0 6.8 2.6 6.8 6.1 0 3.4-3 6-6.8 6-.7 0-1.5-.1-2.1-.3L5 16.6l1.1-2.3c-1.6-1.1-2.5-2.7-2.5-4.7z" stroke="#2F90F5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="16.0" cy="12.0" r="1.1" fill="#34C759" stroke="none"/><circle cx="18.0" cy="13.95" r="1.1" fill="#41B6FF" stroke="none"/><circle cx="16.0" cy="15.9" r="1.1" fill="#FF5B57" stroke="none"/><circle cx="14.0" cy="13.95" r="1.1" fill="#F5B83D" stroke="none"/><circle cx="16.0" cy="13.95" r="0.42" fill="#FFFFFF" stroke="none"/>',
-  feishu: '<path d="M3.5 4.1h7.2l3.2 4H6.7L3.5 4.1z" fill="#20C7A7" stroke="none"/><path d="M3.9 8.2h3.2l3.1 3.1 5.6-5.3v1.4c0 4.3-2.9 7.3-7.5 7.3-2.7 0-5-1.1-6.4-3.2l4.7-3.3H3.9V8.2z" fill="#2F6BFF" stroke="none"/>',
-
   // 状态类
   check: '<path d="M4 10l4 4 8-8" stroke-width="2.5"/>',
   warning: '<path d="M10 3L2 17h16L10 3z"/><path d="M10 8v4M10 14v.01"/>',
@@ -217,8 +217,15 @@ export const iconPaths = {
   panelRight: '<rect x="3" y="4" width="14" height="12" rx="1"/><path d="M13 4v12"/>'
 }
 
+export const iconAssets = {
+  dingtalk: dingtalkIcon,
+  weixin: weixinIcon,
+  wecom: wecomIcon,
+  feishu: feishuIcon
+}
+
 // 图标名称列表（用于校验）
-export const iconNames = Object.keys(iconPaths)
+export const iconNames = Array.from(new Set([...Object.keys(iconPaths), ...Object.keys(iconAssets)]))
 
 // 默认导出图标路径
 export default iconPaths
