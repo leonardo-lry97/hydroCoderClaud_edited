@@ -553,6 +553,7 @@ const enterpriseWeixinEditingTargetId = ref(null)
 const enterpriseWeixinAliasDraft = ref('')
 const enterpriseWeixinAliasSavingTargetId = ref(null)
 const dingtalkBridgeEnabled = ref(null)
+const weixinBridgeEnabled = ref(null)
 const feishuBridgeEnabled = ref(null)
 const enterpriseWeixinBridgeEnabled = ref(null)
 const bridgeStatusCleanupFns = []
@@ -572,6 +573,7 @@ const canSendDingTalk = computed(() => Boolean(selectedDingTalkTarget.value && d
 const hasBoundDingTalkTarget = computed(() => Boolean(props.sessionImChannel === 'dingtalk' && selectedDingTalkTarget.value))
 const resolvedDingTalkNotifyApi = computed(() => props.dingtalkNotifyApi || window.electronAPI || null)
 const showWeixinBtn = computed(() => {
+  if (weixinBridgeEnabled.value !== true) return false
   if (!props.sessionId || !(props.weixinNotifyApi || window.electronAPI)?.listWeixinNotifyTargets) return false
   return !resolvedImBindingSource.value || resolvedImBindingSource.value === 'weixin'
 })
@@ -636,6 +638,11 @@ const closeFeishuBridgeUi = () => {
   feishuError.value = ''
 }
 
+const closeWeixinBridgeUi = () => {
+  showWeixinDropdown.value = false
+  weixinError.value = ''
+}
+
 const closeEnterpriseWeixinBridgeUi = () => {
   showEnterpriseWeixinDropdown.value = false
   enterpriseWeixinError.value = ''
@@ -656,6 +663,13 @@ const applyDingTalkBridgeEnabled = (enabled) => {
   dingtalkBridgeEnabled.value = enabled
   if (!enabled) {
     closeDingTalkBridgeUi()
+  }
+}
+
+const applyWeixinBridgeEnabled = (enabled) => {
+  weixinBridgeEnabled.value = enabled
+  if (!enabled) {
+    closeWeixinBridgeUi()
   }
 }
 
@@ -680,15 +694,18 @@ const syncBridgeAvailability = async () => {
   try {
     const config = await api.getConfig?.().catch(() => null)
     const dingtalkFallbackEnabled = Boolean(config?.dingtalk?.enabled)
+    const weixinFallbackEnabled = config?.weixin?.enabled !== false
     const feishuFallbackEnabled = Boolean(config?.feishu?.enabled)
     const enterpriseWeixinFallbackEnabled = Boolean(config?.enterpriseWeixin?.enabled)
-    const [dingtalkStatus, feishuStatus, enterpriseWeixinStatus] = await Promise.all([
+    const [dingtalkStatus, weixinStatus, feishuStatus, enterpriseWeixinStatus] = await Promise.all([
       api.getDingTalkStatus?.().catch(() => null),
+      api.getWeixinStatus?.().catch(() => null),
       api.getFeishuStatus?.().catch(() => null),
       api.getEnterpriseWeixinStatus?.().catch(() => null),
     ])
 
     applyDingTalkBridgeEnabled(resolveBridgeEnabled(dingtalkStatus, dingtalkFallbackEnabled))
+    applyWeixinBridgeEnabled(resolveBridgeEnabled(weixinStatus, weixinFallbackEnabled))
     applyFeishuBridgeEnabled(resolveBridgeEnabled(feishuStatus, feishuFallbackEnabled))
     applyEnterpriseWeixinBridgeEnabled(resolveBridgeEnabled(enterpriseWeixinStatus, enterpriseWeixinFallbackEnabled))
   } catch (err) {
@@ -703,6 +720,11 @@ const bindBridgeStatusListeners = () => {
   if (api.onDingTalkStatusChange) {
     bridgeStatusCleanupFns.push(api.onDingTalkStatusChange((status) => {
       applyDingTalkBridgeEnabled(resolveBridgeEnabled(status, dingtalkBridgeEnabled.value))
+    }))
+  }
+  if (api.onWeixinStatusChange) {
+    bridgeStatusCleanupFns.push(api.onWeixinStatusChange((status) => {
+      applyWeixinBridgeEnabled(resolveBridgeEnabled(status, weixinBridgeEnabled.value))
     }))
   }
   if (api.onFeishuStatusChange) {
@@ -1102,8 +1124,7 @@ const closeDingTalkDropdown = () => {
 }
 
 const closeWeixinDropdown = () => {
-  showWeixinDropdown.value = false
-  weixinError.value = ''
+  closeWeixinBridgeUi()
 }
 
 const closeFeishuDropdown = () => {

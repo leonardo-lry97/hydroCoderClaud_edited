@@ -250,7 +250,40 @@ class WeixinNotifyService {
     )
   }
 
+  _getConfig() {
+    try {
+      return this.configManager?.getConfig?.()?.weixin || {}
+    } catch {
+      return {}
+    }
+  }
+
+  isEnabled() {
+    return this._getConfig().enabled !== false
+  }
+
+  isRunning() {
+    return !this.backgroundStopped
+  }
+
+  applyRuntimeConfig() {
+    const config = this._getConfig()
+    this.backgroundPollIntervalMs = Math.max(
+      Number(config.pollIntervalMs) || BACKGROUND_POLL_INTERVAL_MS,
+      100
+    )
+    this.backgroundPollTimeoutMs = Math.min(
+      Math.max(Number(config.pollTimeoutMs) || BACKGROUND_POLL_TIMEOUT_MS, 500),
+      UPDATES_TIMEOUT_MS
+    )
+    return {
+      pollIntervalMs: this.backgroundPollIntervalMs,
+      pollTimeoutMs: this.backgroundPollTimeoutMs,
+    }
+  }
+
   start() {
+    this.applyRuntimeConfig()
     this.state = this._loadState()
     this.preCaptureAccountIds = new Set(this.state.preCaptureAccountIds || [])
     this.startBackgroundPolling()
@@ -1049,10 +1082,12 @@ class WeixinNotifyService {
   }
 
   _getBackgroundPollIntervalMs() {
+    this.applyRuntimeConfig()
     return this.backgroundPollIntervalMs
   }
 
   _getBackgroundPollTimeoutMs() {
+    this.applyRuntimeConfig()
     return this.backgroundPollTimeoutMs
   }
 

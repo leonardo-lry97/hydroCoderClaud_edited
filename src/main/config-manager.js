@@ -116,6 +116,13 @@ class ConfigManager {
         maxHistorySessions: 5,
       },
 
+      // 微信通知配置
+      weixin: {
+        enabled: true,
+        pollIntervalMs: 100,
+        pollTimeoutMs: 500,
+      },
+
       settings: {
         theme: 'light',
 

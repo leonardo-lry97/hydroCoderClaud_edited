@@ -143,10 +143,10 @@ describe('WeixinBridge', () => {
       senderNick: '雷斯林'
     })
 
-    expect(sent.map(item => item.channel)).toEqual([
+    expect(sent.map(item => item.channel)).toEqual(expect.arrayContaining([
       'weixin:sessionCreated',
       'weixin:messageReceived'
-    ])
+    ]))
   })
 
   it('reuses the same session for the same target', async () => {

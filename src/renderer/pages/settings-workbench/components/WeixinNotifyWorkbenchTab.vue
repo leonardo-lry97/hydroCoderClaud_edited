@@ -5,23 +5,72 @@
         <div class="title-line">{{ t('weixinNotify.title') }}</div>
         <div class="subtitle">{{ t('weixinNotify.subtitle') }}</div>
       </div>
-      <n-button size="small" secondary :loading="loading" @click="refreshAll">
-        <template #icon><Icon name="refresh" :size="14" /></template>
-        {{ t('common.refresh') }}
-      </n-button>
+      <div class="header-actions">
+        <n-tag :type="statusTagType" size="small" round>
+          {{ statusText }}
+        </n-tag>
+        <n-button size="small" secondary :loading="loading" @click="refreshAll">
+          <template #icon><Icon name="refresh" :size="14" /></template>
+          {{ t('common.refresh') }}
+        </n-button>
+      </div>
     </div>
 
     <n-alert type="info" :show-icon="true">
       {{ t('weixinNotify.boundary') }}
     </n-alert>
 
+    <n-card :title="t('weixinNotify.basicConfigTitle')" class="section-card">
+      <n-form-item :label="t('weixinNotify.enableBridge')">
+        <n-switch
+          :value="enabled"
+          :loading="togglingEnabled"
+          @update:value="handleEnabledChange"
+        />
+      </n-form-item>
+
+      <div v-if="!enabled" class="disabled-hint">
+        {{ t('weixinNotify.disabledHint') }}
+      </div>
+
+      <div class="advanced-grid">
+        <n-form-item :label="t('weixinNotify.pollIntervalMs')">
+          <n-input-number
+            v-model:value="pollIntervalMs"
+            :min="100"
+            :step="100"
+            :disabled="!enabled"
+          />
+        </n-form-item>
+        <n-form-item :label="t('weixinNotify.pollTimeoutMs')">
+          <n-input-number
+            v-model:value="pollTimeoutMs"
+            :min="500"
+            :step="100"
+            :disabled="!enabled"
+          />
+        </n-form-item>
+      </div>
+
+      <div class="config-actions">
+        <n-button
+          type="primary"
+          :loading="savingConfig"
+          :disabled="!enabled"
+          @click="saveConfig"
+        >
+          {{ t('common.save') }}
+        </n-button>
+      </div>
+    </n-card>
+
     <div class="section-grid">
       <n-card :title="t('weixinNotify.loginTitle')" class="section-card">
         <div class="login-actions">
-          <n-button type="primary" :loading="loginLoading" @click="startLogin">
+          <n-button type="primary" :loading="loginLoading" :disabled="!enabled" @click="startLogin">
             {{ t('weixinNotify.startLogin') }}
           </n-button>
-          <n-button :disabled="!accounts.length" :loading="polling" @click="pollOnce">
+          <n-button :disabled="!enabled || !accounts.length" :loading="polling" @click="pollOnce">
             {{ t('weixinNotify.captureTarget') }}
           </n-button>
         </div>
@@ -70,7 +119,7 @@
             v-model:value="selectedTargetId"
             :options="targetOptions"
             :placeholder="t('weixinNotify.targetPlaceholder')"
-            :disabled="!targetOptions.length"
+            :disabled="!enabled || !targetOptions.length"
           />
         </n-form-item>
         <n-form-item :label="t('weixinNotify.message')">
@@ -79,9 +128,10 @@
             type="textarea"
             :autosize="{ minRows: 3, maxRows: 5 }"
             :placeholder="t('weixinNotify.messagePlaceholder')"
+            :disabled="!enabled"
           />
         </n-form-item>
-        <n-button type="primary" :disabled="!canSend" :loading="sending" @click="sendTest">
+        <n-button type="primary" :disabled="!enabled || !canSend" :loading="sending" @click="sendTest">
           {{ t('weixinNotify.sendTest') }}
         </n-button>
       </n-card>
@@ -161,6 +211,8 @@ const loading = ref(false)
 const loginLoading = ref(false)
 const polling = ref(false)
 const sending = ref(false)
+const savingConfig = ref(false)
+const togglingEnabled = ref(false)
 const loginQrcodeUrl = ref('')
 const loginMessage = ref('')
 const selectedTargetId = ref(null)
@@ -170,6 +222,11 @@ const editingTargetId = ref(null)
 const savingTargetId = ref(null)
 const targetSelectVersion = ref(0)
 const preCaptureStatus = ref('idle')
+const enabled = ref(true)
+const pollIntervalMs = ref(100)
+const pollTimeoutMs = ref(500)
+const runtimeState = ref('disabled')
+const cleanupFns = []
 
 const MANUAL_CAPTURE_POLL_TIMEOUT_MS = 8000
 const PRE_CAPTURE_REFRESH_INTERVAL_MS = 2000
@@ -185,6 +242,19 @@ const targetOptions = computed(() => targets.value.map(target => ({
 
 const selectedTarget = computed(() => targets.value.find(target => target.id === selectedTargetId.value) || null)
 const canSend = computed(() => Boolean(selectedTarget.value?.hasContextToken && testText.value.trim()))
+const statusTagType = computed(() => {
+  if (!enabled.value || runtimeState.value === 'disabled') return 'default'
+  if (runtimeState.value === 'connected') return 'success'
+  if (runtimeState.value === 'connecting' || runtimeState.value === 'reconnecting') return 'warning'
+  return 'info'
+})
+const statusText = computed(() => {
+  if (!enabled.value || runtimeState.value === 'disabled') return t('weixinNotify.statusDisabled')
+  if (runtimeState.value === 'connected') return t('weixinNotify.statusConnected')
+  if (runtimeState.value === 'connecting') return t('weixinNotify.statusConnecting')
+  if (runtimeState.value === 'reconnecting') return t('weixinNotify.statusReconnecting')
+  return t('weixinNotify.statusDisconnected')
+})
 const preCaptureStatusText = computed(() => {
   if (preCaptureStatus.value === 'waiting') return t('weixinNotify.preCaptureWaiting')
   if (preCaptureStatus.value === 'success') return t('weixinNotify.preCaptureSuccess')
@@ -197,13 +267,29 @@ const throwIfIpcError = (result) => {
   return result
 }
 
+const applyWeixinConfig = (config = {}) => {
+  const weixinConfig = config?.weixin || {}
+  enabled.value = weixinConfig.enabled !== false
+  pollIntervalMs.value = Number(weixinConfig.pollIntervalMs) || 100
+  pollTimeoutMs.value = Number(weixinConfig.pollTimeoutMs) || 500
+}
+
+const applyWeixinStatus = (status = null) => {
+  if (!status || typeof status !== 'object') return
+  runtimeState.value = status.runtimeState || (status.connected ? 'connected' : 'disconnected')
+}
+
 const refreshAll = async () => {
   loading.value = true
   try {
-    const [accountListResult, targetListResult] = await Promise.all([
+    const [config, status, accountListResult, targetListResult] = await Promise.all([
+      window.electronAPI.getConfig?.().catch(() => null),
+      window.electronAPI.getWeixinStatus?.().catch(() => null),
       window.electronAPI.listWeixinNotifyAccounts?.(),
       window.electronAPI.listWeixinNotifyTargets?.()
     ])
+    applyWeixinConfig(config)
+    applyWeixinStatus(status)
     const accountList = throwIfIpcError(accountListResult)
     const targetList = throwIfIpcError(targetListResult)
     accounts.value = Array.isArray(accountList) ? accountList : []
@@ -221,6 +307,42 @@ const refreshAll = async () => {
     message.error(err.message || t('weixinNotify.refreshFailed'))
   } finally {
     loading.value = false
+  }
+}
+
+const buildWeixinConfigPayload = () => ({
+  enabled: enabled.value,
+  pollIntervalMs: Number(pollIntervalMs.value) || 100,
+  pollTimeoutMs: Number(pollTimeoutMs.value) || 500,
+})
+
+const handleEnabledChange = async (nextEnabled) => {
+  if (togglingEnabled.value || nextEnabled === enabled.value) return
+  togglingEnabled.value = true
+  try {
+    const status = throwIfIpcError(await window.electronAPI.setWeixinEnabled?.(nextEnabled))
+    enabled.value = !!nextEnabled
+    applyWeixinStatus(status)
+    await refreshAll()
+  } catch (err) {
+    console.error('[WeixinNotifyWorkbenchTab] toggle enabled failed:', err)
+    message.error(err.message || t('weixinNotify.toggleFailed'))
+  } finally {
+    togglingEnabled.value = false
+  }
+}
+
+const saveConfig = async () => {
+  savingConfig.value = true
+  try {
+    const status = throwIfIpcError(await window.electronAPI.updateWeixinConfig?.(buildWeixinConfigPayload()))
+    applyWeixinStatus(status)
+    message.success(t('weixinNotify.configSaved'))
+  } catch (err) {
+    console.error('[WeixinNotifyWorkbenchTab] save config failed:', err)
+    message.error(err.message || t('weixinNotify.configSaveFailed'))
+  } finally {
+    savingConfig.value = false
   }
 }
 
@@ -456,10 +578,19 @@ const sendTest = async () => {
 
 onMounted(() => {
   refreshAll()
+  if (window.electronAPI?.onWeixinStatusChange) {
+    const cleanup = window.electronAPI.onWeixinStatusChange((status) => {
+      applyWeixinStatus(status)
+    })
+    cleanupFns.push(cleanup)
+  }
 })
 
 onUnmounted(() => {
   stopPreCaptureRefresh()
+  cleanupFns.splice(0).forEach((cleanup) => {
+    try { cleanup?.() } catch {}
+  })
 })
 </script>
 
@@ -481,6 +612,12 @@ onUnmounted(() => {
 .qr-panel {
   display: flex;
   align-items: center;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .header-row {
@@ -514,6 +651,23 @@ onUnmounted(() => {
 
 .section-card {
   background: var(--card-bg);
+}
+
+.advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.config-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.disabled-hint {
+  margin-bottom: 12px;
+  color: var(--text-color-muted);
+  font-size: 12px;
 }
 
 .login-actions {
@@ -672,6 +826,10 @@ onUnmounted(() => {
 
 @media (max-width: 900px) {
   .section-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .advanced-grid {
     grid-template-columns: 1fr;
   }
 }

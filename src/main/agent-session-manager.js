@@ -360,6 +360,16 @@ class AgentSessionManager extends EventEmitter {
     })
   }
 
+  isWeixinNotifyRuntimeEnabled() {
+    if (!this.weixinNotifyService) return false
+    if (typeof this.weixinNotifyService.isEnabled === 'function') {
+      return this.weixinNotifyService.isEnabled()
+    }
+    const configured = this.configManager?.getConfig?.()?.weixin?.enabled
+    if (typeof configured === 'boolean') return configured
+    return true
+  }
+
   _buildSessionRuntimeSignature(session, overrides = {}) {
     const signature = buildRuntimeSignature({
       apiProfileId: overrides.apiProfileId !== undefined ? overrides.apiProfileId : session?.apiProfileId,
@@ -371,7 +381,7 @@ class AgentSessionManager extends EventEmitter {
     if (session?.clientType === 'embedded') {
       signature.embeddedAppEnabled = true
       signature.embeddedAppId = session?.clientMeta?.appId || session?.clientMeta?.embeddedAppId || null
-      signature.weixinNotifyEnabled = Boolean(this.weixinNotifyService)
+      signature.weixinNotifyEnabled = this.isWeixinNotifyRuntimeEnabled()
     }
 
     return signature

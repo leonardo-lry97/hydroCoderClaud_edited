@@ -38,6 +38,8 @@ class WeixinBridge {
     this.agentSessionManager = agentSessionManager
     this.weixinNotifyService = weixinNotifyService
     this.mainWindow = mainWindow
+    this._configKey = 'weixin'
+    this._runtimeState = 'disabled'
     this.sessionMap = new Map()
     this.knownTargets = new Map()
     this.sessionTargets = new Map()
@@ -60,8 +62,55 @@ class WeixinBridge {
     this.sessionMap = this._sessionMapper.sessionMap
   }
 
+  getStatus() {
+    return {
+      connected: this._runtimeState === 'connected',
+      activeSessions: this.sessionMap.size,
+      runtimeState: this._runtimeState,
+    }
+  }
+
+  _getConfig() {
+    try {
+      return this.configManager?.getConfig?.()?.weixin || {}
+    } catch {
+      return {}
+    }
+  }
+
+  _notifyStatusChange() {
+    this._notifyFrontend('weixin:statusChange', this.getStatus())
+  }
+
   start() {
-    if (!this.weixinNotifyService || this._unbindMessage) return false
+    if (!this.weixinNotifyService) {
+      this._runtimeState = 'disabled'
+      this._notifyStatusChange()
+      return false
+    }
+
+    const config = this._getConfig()
+    if (config.enabled === false) {
+      this.stop({ preserveDisabledState: true })
+      return false
+    }
+
+    if (typeof this.weixinNotifyService.applyRuntimeConfig === 'function') {
+      this.weixinNotifyService.applyRuntimeConfig()
+    }
+
+    this._runtimeState = 'connecting'
+    this._notifyStatusChange()
+
+    if (typeof this.weixinNotifyService.start === 'function' && !this.weixinNotifyService.isRunning?.()) {
+      this.weixinNotifyService.start()
+    }
+    if (this._unbindMessage) {
+      this._runtimeState = 'connected'
+      this._notifyStatusChange()
+      return true
+    }
+
     this._unbindMessage = this.weixinNotifyService.on('message', (message) => {
       this._enqueueInboundMessage(message)
     })
@@ -69,10 +118,13 @@ class WeixinBridge {
       this._rememberSentSession(message)
     })
     this._bindAgentEvents()
+    this._runtimeState = 'connected'
+    this._notifyStatusChange()
     return true
   }
 
-  stop() {
+  stop(options = {}) {
+    const preserveDisabledState = options?.preserveDisabledState !== false
     if (this._unbindMessage) {
       this._unbindMessage()
       this._unbindMessage = null
@@ -89,6 +141,17 @@ class WeixinBridge {
     this.pendingInboundMessages.clear()
     this._sessionMapper.clearAll()
     this._resolveInboundCompletionWaiters()
+    if (typeof this.weixinNotifyService?.stop === 'function' && this.weixinNotifyService.isRunning?.()) {
+      this.weixinNotifyService.stop()
+    }
+    const configEnabled = this._getConfig().enabled !== false
+    this._runtimeState = configEnabled || !preserveDisabledState ? 'disconnected' : 'disabled'
+    this._notifyStatusChange()
+  }
+
+  restart() {
+    this.stop({ preserveDisabledState: false })
+    return this.start()
   }
 
   _enqueueInboundMessage(message) {

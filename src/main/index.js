@@ -490,7 +490,6 @@ if (hasSingleInstanceLock) {
 
     // 初始化微信通知服务（内建 iLink 通道，不依赖 OpenClaw）
     weixinNotifyService = new WeixinNotifyService(configManager)
-    weixinNotifyService.start()
     agentSessionManager.weixinNotifyService = weixinNotifyService
     weixinBridge = new WeixinBridge(configManager, agentSessionManager, weixinNotifyService, mainWindow)
     weixinBridge.start()

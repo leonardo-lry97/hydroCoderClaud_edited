@@ -491,6 +491,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   bindSessionToWeixinTarget: (payload) => ipcRenderer.invoke('weixin-notify:bindTarget', payload),
   unbindSessionWeixinTarget: (payload) => ipcRenderer.invoke('weixin-notify:unbindTarget', payload),
   getSessionWeixinBinding: (sessionId) => ipcRenderer.invoke('weixin-notify:getBinding', sessionId),
+  getWeixinStatus: () => ipcRenderer.invoke('weixin:getStatus'),
+  startWeixin: () => ipcRenderer.invoke('weixin:start'),
+  stopWeixin: () => ipcRenderer.invoke('weixin:stop'),
+  restartWeixin: () => ipcRenderer.invoke('weixin:restart'),
+  setWeixinEnabled: (enabled) => ipcRenderer.invoke('weixin:setEnabled', enabled),
+  updateWeixinConfig: (config) => ipcRenderer.invoke('weixin:updateConfig', config),
 
   // ========================================
   // Claude 配置文件
@@ -1193,6 +1199,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (event, data) => callback(data);
     ipcRenderer.on('weixin:messageReceived', listener);
     return () => ipcRenderer.removeListener('weixin:messageReceived', listener);
+  },
+  onWeixinStatusChange: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('weixin:statusChange', listener);
+    return () => ipcRenderer.removeListener('weixin:statusChange', listener);
   },
   onWeixinSessionCreated: (callback) => {
     const listener = (event, data) => callback(data);

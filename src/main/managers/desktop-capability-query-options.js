@@ -490,7 +490,13 @@ function buildExecutionTimeSchema(z, description) {
 
 async function buildDesktopCapabilityQueryOptions({ scheduledTaskService, weixinNotifyService, session }) {
   const includeScheduleTools = shouldAllowScheduleToolsForSession(scheduledTaskService, session)
-  const includeWeixinNotifyTools = Boolean(weixinNotifyService)
+  const includeWeixinNotifyTools = Boolean(
+    weixinNotifyService && (
+      typeof weixinNotifyService.isEnabled === 'function'
+        ? weixinNotifyService.isEnabled()
+        : true
+    )
+  )
 
   if (!includeScheduleTools && !includeWeixinNotifyTools) {
     return {}

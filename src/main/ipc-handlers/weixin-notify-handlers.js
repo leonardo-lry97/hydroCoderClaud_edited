@@ -51,6 +51,63 @@ function setupWeixinNotifyHandlers(ipcMain, weixinNotifyService, weixinBridge, m
     return await weixinNotifyService.pollOnce(options)
   }))
 
+  ipcMain.handle('weixin:getStatus', handleTrusted(async () => {
+    if (weixinBridge?.getStatus) return weixinBridge.getStatus()
+    return {
+      connected: false,
+      activeSessions: 0,
+      runtimeState: weixinNotifyService?.isEnabled?.() === false ? 'disabled' : 'disconnected'
+    }
+  }))
+
+  ipcMain.handle('weixin:start', handleTrusted(async () => {
+    return weixinBridge?.start?.() ?? false
+  }))
+
+  ipcMain.handle('weixin:stop', handleTrusted(async () => {
+    return weixinBridge?.stop?.({ preserveDisabledState: false }) ?? false
+  }))
+
+  ipcMain.handle('weixin:restart', handleTrusted(async () => {
+    return weixinBridge?.restart?.() ?? false
+  }))
+
+  ipcMain.handle('weixin:setEnabled', handleTrusted(async (enabled) => {
+    const current = weixinNotifyService?.configManager?.getConfig?.() || {}
+    current.weixin = {
+      ...current.weixin,
+      enabled: !!enabled,
+    }
+    await weixinNotifyService?.configManager?.save?.(current)
+    if (!enabled) {
+      weixinBridge?.stop?.({ preserveDisabledState: true })
+    } else {
+      weixinBridge?.start?.()
+    }
+    return weixinBridge?.getStatus?.() || {
+      connected: false,
+      activeSessions: 0,
+      runtimeState: !!enabled ? 'disconnected' : 'disabled'
+    }
+  }))
+
+  ipcMain.handle('weixin:updateConfig', handleTrusted(async (config = {}) => {
+    const current = weixinNotifyService?.configManager?.getConfig?.() || {}
+    current.weixin = {
+      ...current.weixin,
+      ...config,
+    }
+    await weixinNotifyService?.configManager?.save?.(current)
+    if (typeof weixinNotifyService?.applyRuntimeConfig === 'function') {
+      weixinNotifyService.applyRuntimeConfig()
+    }
+    return weixinBridge?.getStatus?.() || {
+      connected: false,
+      activeSessions: 0,
+      runtimeState: current.weixin?.enabled === false ? 'disabled' : 'disconnected'
+    }
+  }))
+
   ipcMain.handle('weixin-notify:sendText', handleTrusted(async (payload = {}) => {
     if (weixinBridge?.sendToTarget) {
       return await weixinBridge.sendToTarget(payload)
