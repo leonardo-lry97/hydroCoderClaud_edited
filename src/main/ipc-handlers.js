@@ -706,7 +706,6 @@ function setupIPCHandlers(mainWindow, configManager, terminalManager, activeSess
       dingtalk: 'dingtalk-guide.html',
       feishu: 'feishu-guide.html',
       'enterprise-weixin': 'enterprise-weixin-guide.html',
-      weixin: 'weixin-guide.html',
     };
     const filename = GUIDE_MAP[channel];
     if (!filename) {
