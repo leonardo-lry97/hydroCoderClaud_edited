@@ -104,7 +104,7 @@
       {
         "from": "docs/user-guide",
         "to": "guides",
-        "filter": ["*.html"]
+        "filter": ["*.html", "*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif", "*.svg"]
       }
     ],
     "win": {

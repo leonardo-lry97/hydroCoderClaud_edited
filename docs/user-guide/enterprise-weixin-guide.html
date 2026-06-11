@@ -5,32 +5,214 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>企业微信桥接配置指南 — Hydro Desktop</title>
 <style>
-  :root { --primary: #07c160; --bg: #f5f7fa; --card-bg: #ffffff; --text: #1f1f1f; --text-secondary: #666; --border: #e8e8e8; --radius: 12px; --shadow: 0 2px 8px rgba(0,0,0,.06); }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
-  .hero { background: linear-gradient(135deg, #07c160 0%, #059048 50%, #06ae56 100%); color: #fff; padding: 48px 24px; text-align: center; }
-  .hero h1 { font-size: 32px; margin-bottom: 8px; }
-  .container { max-width: 840px; margin: 0 auto; padding: 32px 24px; }
-  .top-nav { display: flex; gap: 10px; justify-content: center; padding: 0 0 32px; flex-wrap: wrap; }
-  .top-nav a { padding: 10px 20px; background: #fff; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text); box-shadow: var(--shadow); }
-  .top-nav a.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-  .card { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 24px; overflow: hidden; }
-  .card-header { padding: 18px 22px; border-bottom: 1px solid var(--border); font-size: 18px; font-weight: 600; }
-  .card-body { padding: 22px; }
-  .card-body ol, .card-body ul { margin: 8px 0 16px 20px; }
-  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; }
-  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); }
-  th { background: #fafafa; font-size: 13px; color: var(--text-secondary); }
-  .alert { padding: 14px 18px; border-radius: 8px; margin: 12px 0 16px; background: #e6f4ff; border-left: 4px solid #1677ff; }
-  code { background: #f5f5f5; border: 1px solid #e8e8e8; border-radius: 4px; padding: 2px 6px; }
+  :root {
+    --primary: #07c160;
+    --primary-deep: #059048;
+    --bg: #f4fbf7;
+    --panel: #ffffff;
+    --text: #182338;
+    --muted: #66748d;
+    --line: #e6efe9;
+    --soft: #eefaf3;
+    --shadow: 0 16px 40px rgba(7, 193, 96, 0.08);
+    --radius: 22px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(circle at top right, rgba(7, 193, 96, 0.12), transparent 24%),
+      linear-gradient(180deg, #f9fdfb 0%, var(--bg) 100%);
+    line-height: 1.7;
+  }
+  code {
+    font-family: "Cascadia Code", "Consolas", monospace;
+    background: var(--soft);
+    color: var(--primary-deep);
+    border-radius: 6px;
+    padding: 2px 6px;
+  }
+  .shell {
+    width: min(960px, calc(100% - 28px));
+    margin: 0 auto;
+    padding: 24px 0 48px;
+  }
+  .top-nav {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 18px;
+  }
+  .top-nav a {
+    text-decoration: none;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid #edf4ef;
+    color: var(--muted);
+    font-size: 14px;
+    box-shadow: 0 8px 24px rgba(24, 35, 56, 0.04);
+  }
+  .top-nav a.active {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
+    color: #fff;
+    border-color: transparent;
+  }
+  .hero {
+    border-radius: 28px;
+    padding: 34px 30px;
+    color: #fff;
+    background: linear-gradient(135deg, #06b35a 0%, #07c160 55%, #3dd27e 100%);
+    box-shadow: 0 28px 80px rgba(7, 193, 96, 0.18);
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    margin: 0 0 10px;
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.1;
+  }
+  .hero p {
+    margin: 0;
+    max-width: 720px;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 15px;
+  }
+  .content { display: grid; gap: 18px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid #eef5f0;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .card-body { padding: 24px; }
+  .section-head { margin-bottom: 14px; }
+  .section-head h2 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+  }
+  .section-head p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .tips, .checklist, .faq { display: grid; gap: 12px; }
+  .tip, .check, .faq-item {
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: #f8fdf9;
+    border: 1px solid var(--line);
+  }
+  .tip strong, .check strong, .faq-item strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 15px;
+  }
+  .tip p, .tip li, .check p, .faq-item p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .tip ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+  }
+  .steps {
+    display: grid;
+    gap: 12px;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 16px;
+    padding: 18px;
+    border-radius: 20px;
+    background: #fbfefc;
+    border: 1px solid var(--line);
+  }
+  .step-no {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
+  }
+  .step h3 {
+    margin: 0 0 6px;
+    font-size: 17px;
+  }
+  .step p, .step li {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .step ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+  }
+  .step img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin-top: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    box-shadow: 0 10px 24px rgba(24, 35, 56, 0.06);
+  }
+  .step-caption {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .tip img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin-top: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    box-shadow: 0 10px 24px rgba(24, 35, 56, 0.06);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  th, td {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    font-size: 14px;
+  }
+  th {
+    background: #f8fdf9;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .footer-note {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 22px;
+  }
+  @media (max-width: 720px) {
+    .shell { width: min(100% - 18px, 960px); padding-top: 14px; }
+    .hero, .card-body { padding: 20px; }
+    .step { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
-<div class="hero">
-  <h1>企业微信桥接配置指南</h1>
-  <p>企业微信与桌面 Agent 双向对话，保留原生流式回复能力</p>
-</div>
-<div class="container">
+<div class="shell">
   <div class="top-nav">
     <a href="dingtalk-guide.html">钉钉</a>
     <a href="feishu-guide.html">飞书</a>
@@ -38,57 +220,217 @@
     <a href="weixin-guide.html">微信</a>
   </div>
 
-  <div class="card">
-    <div class="card-header">前提与配置</div>
-    <div class="card-body">
-      <ol>
-        <li>在企业微信创建智能机器人，获取 <code>Bot ID</code> 与 <code>Secret</code></li>
-        <li>开通消息收发与媒体文件上传权限</li>
-        <li>在 Hydro Desktop 的企业微信设置中填写配置并连接</li>
-      </ol>
-      <div class="alert">如需桌面端主动给成员发消息，还需要额外完成 <code>wecom-cli</code> 初始化。</div>
-    </div>
-  </div>
+  <section class="hero">
+    <h1>企业微信桥接配置指南</h1>
+  </section>
 
-  <div class="card">
-    <div class="card-header">当前行为</div>
-    <div class="card-body">
-      <ul>
-        <li>单聊按用户维度维护会话，群聊按群维度维护会话</li>
-        <li>主动发送绑定后，后续 IM 回复会优先回当前绑定会话</li>
-        <li>文本回复保留企业微信原生流式输出</li>
-        <li>群名称展示可优先使用本地 alias / 已知群名</li>
-      </ul>
-    </div>
-  </div>
+  <main class="content">
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>开始前先准备好</h2>
+        </div>
+        <div class="tips">
+          <div class="tip">
+            <strong>必要条件</strong>
+            <ul>
+              <li>企业已经开通企业微信</li>
+              <li>你有管理员，或至少有创建和启用智能机器人的权限</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
 
-  <div class="card">
-    <div class="card-header">命令系统</div>
-    <div class="card-body">
-      <table>
-        <tr><th>命令</th><th>说明</th></tr>
-        <tr><td><code>/help</code></td><td>显示帮助</td></tr>
-        <tr><td><code>/status</code></td><td>查看当前聊天上下文下的历史会话状态</td></tr>
-        <tr><td><code>/sessions</code></td><td>列出活跃会话</td></tr>
-        <tr><td><code>/new [目录]</code></td><td>新建会话</td></tr>
-        <tr><td><code>/resume [编号]</code></td><td>恢复历史会话</td></tr>
-        <tr><td><code>/rename &lt;名称&gt;</code></td><td>重命名当前会话</td></tr>
-        <tr><td><code>/close</code></td><td>关闭当前会话</td></tr>
-      </table>
-      <p><code>/close</code> 当前不支持带编号参数。</p>
-    </div>
-  </div>
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>第一部分：建立企业微信智能机器人</h2>
+        </div>
+        <div class="steps">
+          <article class="step">
+            <div class="step-no">1</div>
+            <div>
+              <h3>创建主桥接智能机器人</h3>
+              <p>从企业微信桌面端或者 Web 端登录后，先进入工作台，找到“智能机器人”入口。申请入口：<a href="https://work.weixin.qq.com/" target="_blank" rel="noopener noreferrer">企业微信管理后台</a></p>
+              <img src="wecom-step1-workbench.png" alt="企业微信工作台中进入智能机器人的入口">
+              <div class="step-caption">先进入工作台，再找到“智能机器人”入口。</div>
 
-  <div class="card">
-    <div class="card-header">状态标记</div>
-    <div class="card-body">
-      <ul>
-        <li><code>✅</code> 当前映射会话</li>
-        <li><code>🔵</code> 已激活但不是当前映射</li>
-        <li><code>⭕</code> 历史存在但当前未激活</li>
-      </ul>
-    </div>
-  </div>
+              <p>进入智能机器人页面后，点击“创建机器人”。</p>
+              <img src="wecom-step1-create-entry.png" alt="企业微信智能机器人页面中的创建机器人入口">
+              <div class="step-caption">在“创建”页点击“创建机器人”。</div>
+
+              <p>在弹出的创建窗口中，先选择“手动创建”。</p>
+              <img src="wecom-step1-manual-create.png" alt="企业微信创建机器人时选择手动创建">
+              <div class="step-caption">先走手动创建，不直接用 AI 自动生成。</div>
+
+              <p>进入手动创建页后，在页面下方点击“API 模式创建”。</p>
+              <img src="wecom-step1-api-mode.png" alt="企业微信手动创建页面底部切换到 API 模式创建">
+              <div class="step-caption">切换到 API 模式后，才能按 Bot ID / Secret 的方式接入。</div>
+
+              <p>最后完成主桥接机器人的关键配置：</p>
+              <ul>
+                <li>给机器人改名</li>
+                <li>修改可见范围</li>
+                <li>连接方式选择“长连接”</li>
+                <li>点击获取 <code>Secret</code>，记录 <code>Bot ID</code> 和 <code>Secret</code></li>
+                <li>最后保存，注意不要修改可使用权限</li>
+              </ul>
+              <img src="wecom-step1-long-connection.png" alt="企业微信 API 配置页面中选择长连接并获取 Bot ID 和 Secret">
+              <div class="step-caption">主桥接机器人要使用“长连接”，并记录好 <code>Bot ID</code> 和 <code>Secret</code>。</div>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-no">2</div>
+            <div>
+              <h3>创建通讯录辅助机器人</h3>
+              <p>再建立一个辅助机器人，专门用于拉取通讯录，名字可以叫“通讯录机器人”。</p>
+              <p>创建流程和主桥接智能机器人保持一致，同样是手动创建，再切换到 API 模式创建。</p>
+              <p>最后完成通讯录辅助机器人的关键配置：</p>
+              <ul>
+                <li>设置机器人名称</li>
+                <li>修改可见范围</li>
+                <li>连接方式同样选择“长连接”</li>
+                <li>记录这个通讯录辅助机器人的 <code>Bot ID</code> 和 <code>Secret</code></li>
+                <li>最后一步额外开通“通讯录”权限</li>
+              </ul>
+              <img src="wecom-step2-contacts-robot-masked.png" alt="通讯录辅助机器人示意图，Bot ID 和 Secret 已脱敏">
+              <div class="step-caption">通讯录辅助机器人和主桥接机器人创建方式一致，但这里要额外开通“通讯录”权限。</div>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>第二部分：Hydro Desktop 配置主桥接机器人</h2>
+        </div>
+        <div class="tips" style="margin-bottom:12px;">
+          <div class="tip">
+            <p>进入设置，渠道配置，选择企业微信。</p>
+            <p style="margin-top:8px;">在页面中开启企业微信开关，并填入如下内容。</p>
+          </div>
+        </div>
+        <table>
+          <tr>
+            <th>字段</th>
+            <th>怎么填</th>
+          </tr>
+          <tr>
+            <td>启用企业微信桥接</td>
+            <td>打开</td>
+          </tr>
+          <tr>
+            <td>Bot ID</td>
+            <td>填写主桥接智能机器人的 <code>Bot ID</code></td>
+          </tr>
+          <tr>
+            <td>Secret</td>
+            <td>填写主桥接智能机器人的 <code>Secret</code></td>
+          </tr>
+          <tr>
+            <td>默认工作目录</td>
+            <td>可选，不填也可以</td>
+          </tr>
+          <tr>
+            <td>历史会话数量</td>
+            <td>可选，默认通常就够用</td>
+          </tr>
+        </table>
+        <div class="tips" style="margin-top:12px;">
+          <div class="tip">
+            <strong>填写完成后</strong>
+            <ul>
+              <li>点击“连接”</li>
+              <li>等待状态变成“已连接”</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>第三部分：配置通讯录机器人</h2>
+        </div>
+        <div class="tips">
+          <div class="tip">
+            <strong>在企业微信配置界面中依次执行</strong>
+            <ul>
+              <li>检测 CLI</li>
+              <li>安装 CLI</li>
+              <li>打开初始化终端</li>
+              <li>在打开的终端中选择：手动输入 <code>Bot ID</code> 和 <code>Secret</code></li>
+              <li>然后依次输入第二步通讯录机器人的 <code>Bot ID</code> 和 <code>Secret</code></li>
+              <li>最后显示配置成功</li>
+            </ul>
+            <img src="wecom-cli-init-select.png" alt="企业微信机器人初始化终端中选择手动输入 Bot ID 和 Secret">
+            <img src="wecom-cli-init-success.png" alt="企业微信机器人初始化终端中输入 Bot ID 和 Secret 后初始化成功">
+          </div>
+          <div class="tip">
+            <strong>最后执行</strong>
+            <p>测试读取联系人，会弹出读取联系人成功的信息。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>第四部分：验证和使用</h2>
+        </div>
+        <div class="checklist">
+          <div class="check">
+            <strong>验证 1：单聊</strong>
+            <p>用企业微信测试账号给机器人发一条普通文本，确认 Hydro Desktop 能收到消息，并且机器人能正常回复。</p>
+          </div>
+          <div class="check">
+            <strong>验证 2：群聊</strong>
+            <p>把机器人加入测试群，在群里发消息，确认桌面端能收到，并且群聊消息不会错落到某个单聊用户会话里。</p>
+          </div>
+          <div class="check">
+            <strong>验证 3：桌面主动发送（可选）</strong>
+            <p>只有在你做了联系人读取初始化后，才验证这一项：在 Hydro Desktop 会话工具栏里点击企业微信发送入口，选择成员发消息，再从企业微信回一条，确认它能回到原会话。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>常见问题</h2>
+          <p>配置失败时，先看这些最常见原因。</p>
+        </div>
+        <div class="faq">
+          <div class="faq-item">
+            <strong>明明填了 Bot ID 和 Secret，为什么还是不对？</strong>
+            <p>先检查智能机器人是否已经创建成功，消息收发权限是否已经开通，以及配置是否已经生效。</p>
+          </div>
+          <div class="faq-item">
+            <strong>为什么桌面端主动发送列表为空？</strong>
+            <p>通常先检查 <code>wecom-cli</code> 是否已安装、是否完成初始化、联系人读取授权是否完成，以及是否把桥接聊天和联系人读取混在一起用了。</p>
+          </div>
+          <div class="faq-item">
+            <strong>为什么企业微信和飞书 / 钉钉表现不太一样？</strong>
+            <p>因为企业微信当前保留了原生流式回复能力，所以你看到的回复节奏可能和飞书、钉钉不同，这是正常现象。</p>
+          </div>
+          <div class="faq-item">
+            <strong>为什么建议不要复用桥接机器人的 Bot ID / Secret 做联系人读取？</strong>
+            <p>因为桥接聊天和联系人读取是两条不同链路。拆开配置更稳妥，也更不容易在排障时混淆问题来源。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="footer-note">企业微信桥接配置指南 · 以用户实际操作步骤为主</div>
 </div>
 </body>
 </html>

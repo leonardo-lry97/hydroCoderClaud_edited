@@ -5,32 +5,216 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>钉钉桥接配置指南 — Hydro Desktop</title>
 <style>
-  :root { --primary: #1677ff; --bg: #f5f7fa; --card-bg: #ffffff; --text: #1f1f1f; --text-secondary: #666; --border: #e8e8e8; --radius: 12px; --shadow: 0 2px 8px rgba(0,0,0,.06); }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
-  .hero { background: linear-gradient(135deg, #1677ff 0%, #0070f3 50%, #0090ff 100%); color: #fff; padding: 48px 24px; text-align: center; }
-  .hero h1 { font-size: 32px; margin-bottom: 8px; }
-  .container { max-width: 840px; margin: 0 auto; padding: 32px 24px; }
-  .top-nav { display: flex; gap: 10px; justify-content: center; padding: 0 0 32px; flex-wrap: wrap; }
-  .top-nav a { padding: 10px 20px; background: #fff; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text); box-shadow: var(--shadow); }
-  .top-nav a.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-  .card { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 24px; overflow: hidden; }
-  .card-header { padding: 18px 22px; border-bottom: 1px solid var(--border); font-size: 18px; font-weight: 600; }
-  .card-body { padding: 22px; }
-  .card-body ol, .card-body ul { margin: 8px 0 16px 20px; }
-  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; }
-  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); }
-  th { background: #fafafa; font-size: 13px; color: var(--text-secondary); }
-  .alert { padding: 14px 18px; border-radius: 8px; margin: 12px 0 16px; background: #e6f4ff; border-left: 4px solid var(--primary); }
-  code { background: #f5f5f5; border: 1px solid #e8e8e8; border-radius: 4px; padding: 2px 6px; }
+  :root {
+    --primary: #1677ff;
+    --primary-deep: #0f56cb;
+    --bg: #f3f8ff;
+    --panel: #ffffff;
+    --text: #182338;
+    --muted: #66748d;
+    --line: #e6ebf5;
+    --soft: #eef5ff;
+    --shadow: 0 16px 40px rgba(22, 119, 255, 0.08);
+    --radius: 22px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(circle at top right, rgba(22, 119, 255, 0.12), transparent 24%),
+      linear-gradient(180deg, #f9fbff 0%, var(--bg) 100%);
+    line-height: 1.7;
+  }
+  code {
+    font-family: "Cascadia Code", "Consolas", monospace;
+    background: var(--soft);
+    color: var(--primary-deep);
+    border-radius: 6px;
+    padding: 2px 6px;
+  }
+  .shell {
+    width: min(960px, calc(100% - 28px));
+    margin: 0 auto;
+    padding: 24px 0 48px;
+  }
+  .top-nav {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 18px;
+  }
+  .top-nav a {
+    text-decoration: none;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid #edf1f7;
+    color: var(--muted);
+    font-size: 14px;
+    box-shadow: 0 8px 24px rgba(24, 35, 56, 0.04);
+  }
+  .top-nav a.active {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
+    color: #fff;
+    border-color: transparent;
+  }
+  .hero {
+    border-radius: 28px;
+    padding: 34px 30px;
+    color: #fff;
+    background: linear-gradient(135deg, #0f62eb 0%, #1677ff 55%, #5aa7ff 100%);
+    box-shadow: 0 28px 80px rgba(22, 119, 255, 0.18);
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    margin: 0 0 10px;
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.1;
+  }
+  .hero p {
+    margin: 0;
+    max-width: 720px;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 15px;
+  }
+  .content { display: grid; gap: 18px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid #eef2f8;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .card-body { padding: 24px; }
+  .section-head { margin-bottom: 14px; }
+  .section-head h2 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+  }
+  .section-head p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .tips, .checklist, .faq { display: grid; gap: 12px; }
+  .tip, .check, .faq-item {
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: #f8fbff;
+    border: 1px solid var(--line);
+  }
+  .tip strong, .check strong, .faq-item strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 15px;
+  }
+  .tip p, .tip li, .check p, .faq-item p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .tip ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+  }
+  .steps {
+    display: grid;
+    gap: 12px;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 16px;
+    padding: 18px;
+    border-radius: 20px;
+    background: #fbfdff;
+    border: 1px solid var(--line);
+  }
+  .step-no {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
+  }
+  .step h3 {
+    margin: 0 0 6px;
+    font-size: 17px;
+  }
+  .step p, .step li {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .step ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+  }
+  .step img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin-top: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    box-shadow: 0 10px 24px rgba(24, 35, 56, 0.06);
+  }
+  .step-note {
+    margin-top: 12px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: var(--soft);
+    color: var(--text);
+    font-size: 14px;
+  }
+  .step-note strong {
+    display: block;
+    margin-bottom: 6px;
+  }
+  .step-note ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  th, td {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    font-size: 14px;
+  }
+  th {
+    background: #f8fbff;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .footer-note {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 22px;
+  }
+  @media (max-width: 720px) {
+    .shell { width: min(100% - 18px, 960px); padding-top: 14px; }
+    .hero, .card-body { padding: 20px; }
+    .step { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
-<div class="hero">
-  <h1>钉钉桥接配置指南</h1>
-  <p>钉钉与桌面 Agent 双向对话，当前单聊 / 群聊现象已与飞书、企业微信对齐</p>
-</div>
-<div class="container">
+<div class="shell">
   <div class="top-nav">
     <a href="dingtalk-guide.html" class="active">钉钉</a>
     <a href="feishu-guide.html">飞书</a>
@@ -38,58 +222,205 @@
     <a href="weixin-guide.html">微信</a>
   </div>
 
-  <div class="card">
-    <div class="card-header">前提与配置</div>
-    <div class="card-body">
-      <ol>
-        <li>在钉钉开放平台创建企业内部应用并添加机器人能力</li>
-        <li>记录 <code>AppKey</code>、<code>AppSecret</code>、<code>robotCode</code></li>
-        <li>如需主动发送，开通通讯录与机器人发消息权限</li>
-        <li>在 Hydro Desktop 的钉钉设置中填写配置并连接</li>
-      </ol>
-      <div class="alert">如果桌面端主动发送列表为空，优先检查 <code>robotCode</code> 与通讯录权限。</div>
-    </div>
-  </div>
+  <section class="hero">
+    <h1>钉钉桥接配置指南</h1>
+  </section>
 
-  <div class="card">
-    <div class="card-header">当前行为</div>
-    <div class="card-body">
-      <ul>
-        <li>单聊按用户维度维护会话</li>
-        <li>群聊按群维度维护会话</li>
-        <li>群聊不会再错误绑定到某个单聊用户</li>
-        <li>主动发送绑定后，后续 IM 回复会优先回当前绑定会话</li>
-      </ul>
-    </div>
-  </div>
+  <main class="content">
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>开始前先准备好</h2>
+          <p>钉钉这边最关键的是企业内部应用、机器人能力，以及主动发送所需的 <code>robotCode</code> 和通讯录权限。</p>
+        </div>
+        <div class="tips">
+          <div class="tip">
+            <strong>必要条件</strong>
+            <ul>
+              <li>企业已经开通钉钉</li>
+              <li>你有组织管理员，或至少有创建和发布企业内部应用的权限</li>
+            </ul>
+          </div>
+          <div class="tip">
+            <strong>如果你还要桌面端主动发钉钉</strong>
+            <ul>
+              <li>应用必须有机器人能力</li>
+              <li>需要拿到 <code>robotCode</code></li>
+              <li>需要申请通讯录相关权限</li>
+              <li>不要让多台桌面端同时连接同一个机器人</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
 
-  <div class="card">
-    <div class="card-header">命令系统</div>
-    <div class="card-body">
-      <table>
-        <tr><th>命令</th><th>说明</th></tr>
-        <tr><td><code>/help</code></td><td>显示帮助</td></tr>
-        <tr><td><code>/status</code></td><td>查看当前聊天上下文下的历史会话状态</td></tr>
-        <tr><td><code>/sessions</code></td><td>列出活跃会话</td></tr>
-        <tr><td><code>/new [目录]</code></td><td>新建会话</td></tr>
-        <tr><td><code>/resume [编号]</code></td><td>恢复历史会话</td></tr>
-        <tr><td><code>/rename &lt;名称&gt;</code></td><td>重命名当前会话</td></tr>
-        <tr><td><code>/close</code></td><td>关闭当前会话</td></tr>
-      </table>
-      <p><code>/close</code> 当前不支持带编号参数。</p>
-    </div>
-  </div>
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>第一部分：钉钉侧怎么配</h2>
+          <p>先在钉钉开放平台把应用和权限准备好。</p>
+        </div>
+        <div class="steps">
+          <article class="step">
+            <div class="step-no">1</div>
+            <div>
+              <h3>创建企业内部应用</h3>
+              <p>登录钉钉开放平台，创建一个 <strong>企业内部开发应用</strong>，并给它添加机器人能力。申请入口：<a href="https://open-dev.dingtalk.com/" target="_blank" rel="noopener noreferrer">钉钉开放平台</a></p>
+              <ul>
+                <li>创建完成后，记录 <code>AppKey</code>、<code>AppSecret</code>、<code>robotCode</code></li>
+              </ul>
+              <div class="step-note">
+                <strong><code>robotCode</code> 获取方法</strong>
+                <ul>
+                  <li>应用页面左侧点击“机器人与消息推送”</li>
+                  <li>右侧页面中点击“复制 RobotCode”</li>
+                  <li>右侧页面最下端“消息接收模式”选择“Stream 模式”</li>
+                </ul>
+              </div>
+              <img src="dingtalk-robotcode.png" alt="钉钉机器人与消息推送页面中的复制 RobotCode 按钮">
+            </div>
+          </article>
 
-  <div class="card">
-    <div class="card-header">状态标记</div>
-    <div class="card-body">
-      <ul>
-        <li><code>✅</code> 当前映射会话</li>
-        <li><code>🔵</code> 已激活但不是当前映射</li>
-        <li><code>⭕</code> 历史存在但当前未激活</li>
-      </ul>
-    </div>
-  </div>
+          <article class="step">
+            <div class="step-no">2</div>
+            <div>
+              <h3>配置权限</h3>
+              <p>如果你还要支持桌面端主动给成员发消息，建议至少开通这些方向的权限：</p>
+              <ul>
+                <li>上传媒体文件</li>
+                <li>机器人发消息</li>
+                <li>部门列表读取</li>
+                <li>部门成员读取</li>
+              </ul>
+              <img src="dingtalk-permissions-contacts.png" alt="钉钉开放平台中的通讯录相关权限配置">
+              <img src="dingtalk-permissions-send.png" alt="钉钉开放平台中的基础 API 和机器人发消息权限配置">
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-no">3</div>
+            <div>
+              <h3>事件与回调配置</h3>
+              <p>进入应用的事件订阅页面，选择 <strong>Stream 模式推送</strong>，然后保存。</p>
+              <img src="dingtalk-stream-mode.png" alt="钉钉事件订阅页面中选择 Stream 模式推送">
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-no">4</div>
+            <div>
+              <h3>发布应用</h3>
+              <p>能力和权限配好后提交发布，等待应用生效。</p>
+              <ul>
+                <li>后面如果补开权限，通常还要重新发布一次</li>
+              </ul>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>第二部分：Hydro Desktop 里怎么配</h2>
+          <p>钉钉侧准备好以后，再回到软件里填写配置。</p>
+        </div>
+        <table>
+          <tr>
+            <th>字段</th>
+            <th>怎么填</th>
+          </tr>
+          <tr>
+            <td>启用钉钉桥接</td>
+            <td>打开</td>
+          </tr>
+          <tr>
+            <td>AppKey</td>
+            <td>填写钉钉开放平台里的 <code>AppKey</code></td>
+          </tr>
+          <tr>
+            <td>AppSecret</td>
+            <td>填写钉钉开放平台里的 <code>AppSecret</code></td>
+          </tr>
+          <tr>
+            <td>robotCode</td>
+            <td>填写钉钉开放平台里的 <code>robotCode</code></td>
+          </tr>
+          <tr>
+            <td>默认工作目录</td>
+            <td>可选，不填也可以</td>
+          </tr>
+          <tr>
+            <td>历史会话数量</td>
+            <td>可选，默认通常就够用</td>
+          </tr>
+        </table>
+        <div class="tips" style="margin-top:12px;">
+          <div class="tip">
+            <strong>填写完成后</strong>
+            <ul>
+              <li>点击“保存”</li>
+              <li>点击“连接”</li>
+              <li>等待状态变成“已连接”</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>第三部分：怎么确认已经配成功</h2>
+          <p>建议按这个顺序验证，最省时间。</p>
+        </div>
+        <div class="checklist">
+          <div class="check">
+            <strong>验证 1：单聊</strong>
+            <p>用钉钉测试账号给机器人发一条普通文本，确认 Hydro Desktop 能收到消息，并且机器人能正常回复。</p>
+          </div>
+          <div class="check">
+            <strong>验证 2：群聊</strong>
+            <p>把机器人加入测试群，在群里发消息，确认桌面端能收到，并且群聊消息不会错落到某个单聊用户会话里。</p>
+          </div>
+          <div class="check">
+            <strong>验证 3：桌面主动发送</strong>
+            <p>在 Hydro Desktop 会话工具栏里点击钉钉发送入口，选择成员发一条消息；然后再从钉钉回一条，确认它能回到原会话。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>常见问题</h2>
+          <p>配置失败时，先看这些最常见原因。</p>
+        </div>
+        <div class="faq">
+          <div class="faq-item">
+            <strong>明明填了 AppKey 和 AppSecret，为什么还是不对？</strong>
+            <p>先检查应用是不是企业内部应用，机器人能力有没有开启，应用是否已经发布生效，以及 <code>robotCode</code> 是否已经填写。</p>
+          </div>
+          <div class="faq-item">
+            <strong>为什么桌面端发送列表为空？</strong>
+            <p>通常先检查 <code>robotCode</code> 是否已填写、通讯录权限是否已开通，以及权限改完后是否重新发布了应用。</p>
+          </div>
+          <div class="faq-item">
+            <strong>主动发送时报 <code>MissinguserIds</code> 怎么办？</strong>
+            <p>通常说明当前目标被按单聊发送，但平台要求成员 ID。优先检查目标是不是群聊、身份建立是否正确，以及 <code>robotCode</code> 是否配置正确。</p>
+          </div>
+          <div class="faq-item">
+            <strong>为什么建议只让一台桌面端连接这个机器人？</strong>
+            <p>多台桌面端同时连接同一个钉钉机器人时，最容易出现重复回复、抢消息或回复错乱。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="footer-note">钉钉桥接配置指南 · 以用户实际操作步骤为主</div>
 </div>
 </body>
 </html>

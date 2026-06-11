@@ -5,33 +5,250 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>飞书桥接配置指南 — Hydro Desktop</title>
 <style>
-  :root { --primary: #3370ff; --bg: #f5f7fa; --card-bg: #ffffff; --text: #1f1f1f; --text-secondary: #666; --border: #e8e8e8; --radius: 12px; --shadow: 0 2px 8px rgba(0,0,0,.06); }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
-  .hero { background: linear-gradient(135deg, #3370ff 0%, #1e4bd2 50%, #2b5fd9 100%); color: #fff; padding: 48px 24px; text-align: center; }
-  .hero h1 { font-size: 32px; margin-bottom: 8px; }
-  .container { max-width: 840px; margin: 0 auto; padding: 32px 24px; }
-  .top-nav { display: flex; gap: 10px; justify-content: center; padding: 0 0 32px; flex-wrap: wrap; }
-  .top-nav a { padding: 10px 20px; background: #fff; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text); box-shadow: var(--shadow); }
-  .top-nav a.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-  .card { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 24px; overflow: hidden; }
-  .card-header { padding: 18px 22px; border-bottom: 1px solid var(--border); font-size: 18px; font-weight: 600; }
-  .card-body { padding: 22px; }
-  .card-body p { margin-bottom: 12px; }
-  .card-body ol, .card-body ul { margin: 8px 0 16px 20px; }
-  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; }
-  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); }
-  th { background: #fafafa; font-size: 13px; color: var(--text-secondary); }
-  .alert { padding: 14px 18px; border-radius: 8px; margin: 12px 0 16px; background: #e6f4ff; border-left: 4px solid var(--primary); }
-  code { background: #f5f5f5; border: 1px solid #e8e8e8; border-radius: 4px; padding: 2px 6px; }
+  :root {
+    --primary: #3370ff;
+    --primary-deep: #224fd0;
+    --bg: #f4f7ff;
+    --panel: #ffffff;
+    --text: #182338;
+    --muted: #66748d;
+    --line: #e6ebf5;
+    --soft: #eef4ff;
+    --shadow: 0 16px 40px rgba(51, 112, 255, 0.08);
+    --radius: 22px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(circle at top right, rgba(51, 112, 255, 0.12), transparent 24%),
+      linear-gradient(180deg, #f9fbff 0%, var(--bg) 100%);
+    line-height: 1.7;
+  }
+  code {
+    font-family: "Cascadia Code", "Consolas", monospace;
+    background: var(--soft);
+    color: var(--primary-deep);
+    border-radius: 6px;
+    padding: 2px 6px;
+  }
+  .shell {
+    width: min(960px, calc(100% - 28px));
+    margin: 0 auto;
+    padding: 24px 0 48px;
+  }
+  .top-nav {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 18px;
+  }
+  .top-nav a {
+    text-decoration: none;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid #edf1f7;
+    color: var(--muted);
+    font-size: 14px;
+    box-shadow: 0 8px 24px rgba(24, 35, 56, 0.04);
+  }
+  .top-nav a.active {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
+    color: #fff;
+    border-color: transparent;
+  }
+  .hero {
+    border-radius: 28px;
+    padding: 34px 30px;
+    color: #fff;
+    background: linear-gradient(135deg, #2d67ff 0%, #3370ff 55%, #6a98ff 100%);
+    box-shadow: 0 28px 80px rgba(51, 112, 255, 0.18);
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    margin: 0 0 10px;
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.1;
+  }
+  .hero p {
+    margin: 0;
+    max-width: 720px;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 15px;
+  }
+  .content {
+    display: grid;
+    gap: 18px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid #eef2f8;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .card-body {
+    padding: 24px;
+  }
+  .section-head {
+    margin-bottom: 14px;
+  }
+  .section-head h2 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+  }
+  .section-head p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .tips {
+    display: grid;
+    gap: 12px;
+  }
+  .tip {
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: #f8fbff;
+    border: 1px solid var(--line);
+  }
+  .tip strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 15px;
+  }
+  .tip p, .tip li {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .tip ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+  }
+  .steps {
+    display: grid;
+    gap: 12px;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 16px;
+    padding: 18px;
+    border-radius: 20px;
+    background: #fbfdff;
+    border: 1px solid var(--line);
+  }
+  .step-no {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
+  }
+  .step h3 {
+    margin: 0 0 6px;
+    font-size: 17px;
+  }
+  .step p, .step li {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .step ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+  }
+  .step img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin-top: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    box-shadow: 0 10px 24px rgba(24, 35, 56, 0.06);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  th, td {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    font-size: 14px;
+  }
+  th {
+    background: #f8fbff;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .checklist {
+    display: grid;
+    gap: 10px;
+  }
+  .check {
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: #fbfdff;
+    border: 1px solid var(--line);
+  }
+  .check strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 15px;
+  }
+  .check p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .faq {
+    display: grid;
+    gap: 10px;
+  }
+  .faq-item {
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: #fbfdff;
+    border: 1px solid var(--line);
+  }
+  .faq-item strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 15px;
+  }
+  .faq-item p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .footer-note {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 22px;
+  }
+  @media (max-width: 720px) {
+    .shell { width: min(100% - 18px, 960px); padding-top: 14px; }
+    .hero, .card-body { padding: 20px; }
+    .step { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
-<div class="hero">
-  <h1>飞书桥接配置指南</h1>
-  <p>飞书与桌面 Agent 双向对话，当前命令结果统一为文本 / Markdown 风格回复</p>
-</div>
-<div class="container">
+<div class="shell">
   <div class="top-nav">
     <a href="dingtalk-guide.html">钉钉</a>
     <a href="feishu-guide.html" class="active">飞书</a>
@@ -39,58 +256,213 @@
     <a href="weixin-guide.html">微信</a>
   </div>
 
-  <div class="card">
-    <div class="card-header">前提与配置</div>
-    <div class="card-body">
-      <ol>
-        <li>在飞书开放平台创建企业自建应用，获取 <code>App ID</code> 与 <code>App Secret</code></li>
-        <li>开通机器人、发送消息、通讯录、图片相关权限</li>
-        <li>在 Hydro Desktop 的飞书设置中填写凭据并连接</li>
-      </ol>
-      <div class="alert">飞书桥接使用 WebSocket 长连接接收入站，不需要配置 HTTP 回调 URL。</div>
-    </div>
-  </div>
+  <section class="hero">
+    <h1>飞书桥接配置指南</h1>
+  </section>
 
-  <div class="card">
-    <div class="card-header">当前行为</div>
-    <div class="card-body">
-      <ul>
-        <li>单聊按用户维度维护会话，群聊按群维度维护会话</li>
-        <li>桌面端主动发送后，会把当前桌面会话绑定到该飞书目标</li>
-        <li>后续该目标从飞书回复时，会优先回到当前绑定会话</li>
-        <li>关闭当前会话后，再次入站会进入历史选择 / 新建逻辑</li>
-      </ul>
-    </div>
-  </div>
+  <main class="content">
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>开始前先准备好</h2>
+          <p>先把环境和账号条件准备齐，后面的步骤会顺很多。</p>
+        </div>
+        <div class="tips">
+          <div class="tip">
+            <strong>必要条件</strong>
+            <ul>
+              <li>企业已经开通飞书</li>
+              <li>你有企业管理员、应用管理员，或至少有创建和发布企业自建应用的权限</li>
+            </ul>
+          </div>
+          <div class="tip">
+            <strong>建议额外准备</strong>
+            <ul>
+              <li>一个飞书测试账号</li>
+              <li>一个测试群聊，方便验证群聊场景</li>
+              <li>只让一台桌面端连接这个飞书应用，避免重复回复或抢消息</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
 
-  <div class="card">
-    <div class="card-header">命令系统</div>
-    <div class="card-body">
-      <p>发送以 <code>/</code> 开头的消息，会走命令链路，不进入 AI 对话。</p>
-      <table>
-        <tr><th>命令</th><th>说明</th></tr>
-        <tr><td><code>/help</code></td><td>显示帮助</td></tr>
-        <tr><td><code>/status</code></td><td>查看当前聊天上下文下的历史会话状态</td></tr>
-        <tr><td><code>/sessions</code></td><td>列出活跃会话</td></tr>
-        <tr><td><code>/new [目录]</code></td><td>新建会话</td></tr>
-        <tr><td><code>/resume [编号]</code></td><td>恢复历史会话</td></tr>
-        <tr><td><code>/rename &lt;名称&gt;</code></td><td>重命名当前会话</td></tr>
-        <tr><td><code>/close</code></td><td>关闭当前会话</td></tr>
-      </table>
-      <p>说明：飞书本轮已经移除交互卡片主方案，命令结果不再依赖卡片按钮。</p>
-    </div>
-  </div>
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>第一部分：飞书侧怎么配</h2>
+          <p>先在飞书开放平台把应用准备好。</p>
+        </div>
+        <div class="steps">
+          <article class="step">
+            <div class="step-no">1</div>
+            <div>
+              <h3>创建企业自建应用</h3>
+              <p>登录飞书开放平台，进入开发者后台，创建一个 <strong>企业自建应用</strong>。申请入口：<a href="https://open.feishu.cn/" target="_blank" rel="noopener noreferrer">飞书开放平台</a></p>
+              <ul>
+                <li>应用名建议起得直观一点，例如“Hydro Desktop 助手”</li>
+                <li>创建完成后，记录 <code>App ID</code> 和 <code>App Secret</code></li>
+              </ul>
+              <img src="feishu-app-credentials.png" alt="飞书开放平台中的应用凭证页面，显示 App ID 和 App Secret">
+            </div>
+          </article>
 
-  <div class="card">
-    <div class="card-header">状态标记</div>
-    <div class="card-body">
-      <ul>
-        <li><code>✅</code> 当前映射会话</li>
-        <li><code>🔵</code> 已激活但不是当前映射</li>
-        <li><code>⭕</code> 历史存在但当前未激活</li>
-      </ul>
-    </div>
-  </div>
+          <article class="step">
+            <div class="step-no">2</div>
+            <div>
+              <h3>开启机器人能力</h3>
+              <p>在应用后台找到“应用能力”，开启 <strong>机器人</strong>。</p>
+              <ul>
+                <li>没有机器人能力，就没法把这个应用当聊天入口来用</li>
+              </ul>
+              <img src="feishu-bot-ability.png" alt="飞书开放平台中添加应用能力并开启机器人能力">
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-no">3</div>
+            <div>
+              <h3>配置权限</h3>
+              <p>为了让聊天、图片和联系人功能正常工作，建议至少把这些方向的权限开好：</p>
+              <ul>
+                <li>消息接收</li>
+                <li>消息发送</li>
+                <li>图片上传 / 图片读取</li>
+                <li>用户信息读取</li>
+                <li>通讯录 / 部门成员读取</li>
+              </ul>
+              <p>下面图片仅作示意图参考；如果你不确定具体要开哪些权限，也可以先全部开通。</p>
+              <img src="feishu-permissions-contacts.png" alt="飞书权限管理中与通讯录相关的权限示意">
+              <img src="feishu-permissions-resource.png" alt="飞书权限管理中与图片或文件资源相关的权限示意">
+              <img src="feishu-permissions-message.png" alt="飞书权限管理中与消息读取和发送相关的权限示意">
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-no">4</div>
+            <div>
+              <h3>配置事件订阅</h3>
+              <p>进入应用后台的“事件订阅”，选择 <strong>长连接接收事件</strong>。</p>
+              <ul>
+                <li>订阅消息接收事件</li>
+                <li>当前最关键的是 <code>im.message.receive_v1</code></li>
+                <li>不需要你自己准备公网回调地址</li>
+              </ul>
+              <img src="feishu-event-callback.png" alt="飞书开放平台事件配置页面，使用长连接接收事件">
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-no">5</div>
+            <div>
+              <h3>发布应用</h3>
+              <p>前面的能力、权限、事件订阅配好后，提交应用发布，等待生效。</p>
+              <ul>
+                <li>后面如果你又改了权限或事件订阅，通常还要重新发布一次</li>
+              </ul>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>第二部分：Hydro Desktop 里怎么配</h2>
+          <p>飞书侧准备好以后，再回到软件里填写配置。</p>
+        </div>
+        <table>
+          <tr>
+            <th>字段</th>
+            <th>怎么填</th>
+          </tr>
+          <tr>
+            <td>启用飞书桥接</td>
+            <td>打开</td>
+          </tr>
+          <tr>
+            <td>App ID</td>
+            <td>填写飞书开放平台里的 <code>App ID</code></td>
+          </tr>
+          <tr>
+            <td>App Secret</td>
+            <td>填写飞书开放平台里的 <code>App Secret</code></td>
+          </tr>
+          <tr>
+            <td>默认工作目录</td>
+            <td>可选，不填也可以</td>
+          </tr>
+          <tr>
+            <td>历史会话数量</td>
+            <td>可选，默认通常就够用</td>
+          </tr>
+        </table>
+        <div class="tips" style="margin-top:12px;">
+          <div class="tip">
+            <strong>填写完成后</strong>
+            <ul>
+              <li>点击“保存”</li>
+              <li>点击“连接”</li>
+              <li>等待状态变成“已连接”</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>第三部分：怎么确认已经配成功</h2>
+          <p>建议按这个顺序验证，最省时间。</p>
+        </div>
+        <div class="checklist">
+          <div class="check">
+            <strong>验证 1：单聊</strong>
+            <p>用飞书测试账号给机器人发一条普通文本，确认 Hydro Desktop 能收到消息，并且机器人能正常回复。</p>
+          </div>
+          <div class="check">
+            <strong>验证 2：桌面主动发送</strong>
+            <p>在 Hydro Desktop 会话工具栏里点击飞书发送入口，选择联系人发一条消息；然后再从飞书回一条，确认它能回到原会话。</p>
+          </div>
+          <div class="check">
+            <strong>验证 3：群聊</strong>
+            <p>把机器人加入测试群，在群里发消息，确认桌面端能收到，并且群聊消息不会错落到某个单聊用户会话里。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <div class="section-head">
+          <h2>常见问题</h2>
+          <p>配置失败时，先看这些最常见原因。</p>
+        </div>
+        <div class="faq">
+          <div class="faq-item">
+            <strong>明明填了 App ID 和 App Secret，为什么还是连不上？</strong>
+            <p>先检查应用是否已经发布生效，机器人能力是否已开启，事件订阅是否配置为长连接，以及消息接收事件是否已订阅。</p>
+          </div>
+          <div class="faq-item">
+            <strong>为什么桌面端看不到可发送联系人？</strong>
+            <p>通常是通讯录 / 部门成员读取权限不够，或者权限改完后还没有重新发布应用。</p>
+          </div>
+          <div class="faq-item">
+            <strong>为什么飞书里发消息没有反应？</strong>
+            <p>先看 Hydro Desktop 里飞书桥接状态是不是“已连接”，再确认这台电脑上的 Agent / 模型功能本来就是可用的。</p>
+          </div>
+          <div class="faq-item">
+            <strong>为什么建议只让一台桌面端连接这个应用？</strong>
+            <p>多台桌面端同时连接同一个飞书应用时，最容易出现重复回复、抢消息或回复错乱。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="footer-note">飞书桥接配置指南 · 以用户实际操作步骤为主</div>
 </div>
 </body>
 </html>
