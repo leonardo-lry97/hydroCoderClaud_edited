@@ -890,13 +890,13 @@ export default {
 
   channelSettings: {
     title: 'Channel Settings',
-    subtitle: 'Manage desktop messaging channels from one place. DingTalk and WeChat are supported now, with room for Feishu and more later.',
+    subtitle: 'Manage desktop messaging channels from one place. DingTalk, Feishu, and WeCom are currently supported.',
     sidebarTitle: 'Channels',
     commonSettings: {
       boundary: 'Configure shared copy and presentation text used across all built-in IM channels.',
       imTextTitle: 'Shared Copy',
       desktopInterventionLabel: 'Desktop intervention label',
-      desktopInterventionLabelHint: 'This label is used as the prefix when desktop-side follow-up messages are sent back to IM. A trailing colon is added automatically and the same setting is applied to DingTalk, Feishu, WeCom, and WeChat.',
+      desktopInterventionLabelHint: 'This label is used as the prefix when desktop-side follow-up messages are sent back to IM. A trailing colon is added automatically and the same setting is applied to DingTalk, Feishu, and WeCom.',
       previewTitle: 'Preview',
       saveSuccess: 'Shared IM copy saved',
     },

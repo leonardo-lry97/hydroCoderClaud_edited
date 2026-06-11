@@ -61,6 +61,7 @@ const IM_BUILTIN_TOOL_NAMES = [
 const IM_BUILTIN_ALLOWED_TOOLS = IM_BUILTIN_TOOL_NAMES.map(
   toolName => `mcp__${DESKTOP_CAPABILITY_SERVER_NAME}__${toolName}`
 )
+const PERSONAL_WEIXIN_ENABLED = false
 
 const WEIXIN_NOTIFY_SYSTEM_PROMPT = [
   'You can send Weixin notification messages through Hydro Desktop when the user explicitly asks to notify someone or when a scheduled task needs to report its result.',
@@ -73,7 +74,7 @@ const WEIXIN_NOTIFY_SYSTEM_PROMPT = [
 ].join(' ')
 
 const IM_BUILTIN_SYSTEM_PROMPT = [
-  'You can send built-in IM messages through Hydro Desktop for enabled channels such as DingTalk, Feishu, Enterprise Weixin, and Weixin when those channels are available in this session.',
+  'You can send built-in IM messages through Hydro Desktop for enabled channels such as DingTalk, Feishu, and Enterprise Weixin when those channels are available in this session.',
   'If the current session is already bound to an IM target and the user did not ask to change recipient, call im_send directly and default to that bound target.',
   'Use im_list_targets before sending only when the current session is not already bound to a target, or when the user explicitly wants to choose or change the recipient.',
   'Prefer the channel and targetKey returned by im_list_targets.',
@@ -783,8 +784,49 @@ function buildBoundImPrompt(bound = {}, provider = null, { channelAvailable = tr
   return `The current session is already bound to ${channelLabel} target "${targetLabel}". Unless the user explicitly asks to change recipient, call im_send directly and reuse this bound target.`
 }
 
+function filterImTargetsToBoundEntry(payload = {}, bound = {}, provider = null) {
+  const entries = Array.isArray(payload?.entries) ? payload.entries : []
+  const resolvedEntry = entries.find(entry => isSameBoundTarget(bound, entry))
+    || normalizeBoundImTargetEntry(bound, provider)
+  const filteredEntries = resolvedEntry ? [resolvedEntry] : []
+  const filteredTargets = filteredEntries.map(toPublicImTarget)
+
+  return {
+    ...payload,
+    entries: filteredEntries,
+    targets: filteredTargets,
+    targetCount: filteredTargets.length,
+  }
+}
+
+function normalizeBoundWeixinNotifyTarget(bound = {}, weixinNotifyService = null) {
+  if (bound?.channel !== 'weixin' || !bound?.targetId) return null
+  const restored = typeof weixinNotifyService?.getTargetById === 'function'
+    ? weixinNotifyService.getTargetById(bound.targetId)
+    : null
+  return restored || {
+    id: bound.targetId,
+    accountId: bound.accountId || null,
+    userId: bound.targetId,
+    displayName: bound.displayName || bound.targetId,
+    targetSource: 'bound_session',
+    isAuthorizedAccountUser: false,
+    hasContextToken: true,
+  }
+}
+
+function filterWeixinNotifyTargetsToBoundTarget(targets = [], bound = {}, weixinNotifyService = null) {
+  const normalizedTargets = Array.isArray(targets) ? targets : []
+  const matched = normalizedTargets.find(target =>
+    normalizeImText(target?.id) === normalizeImText(bound?.targetId)
+    && normalizeImText(target?.accountId) === normalizeImText(bound?.accountId)
+  )
+  return matched ? [matched] : [normalizeBoundWeixinNotifyTarget(bound, weixinNotifyService)].filter(Boolean)
+}
+
 function collectEnabledImProviders({
   weixinNotifyService,
+  weixinBridge,
   dingtalkBridge,
   feishuBridge,
   enterpriseWeixinBridge,
@@ -793,7 +835,7 @@ function collectEnabledImProviders({
 }) {
   const providers = []
 
-  if (weixinNotifyService && (
+  if (PERSONAL_WEIXIN_ENABLED && weixinNotifyService && (
     includeDisabled
       || typeof weixinNotifyService.isEnabled !== 'function'
       || weixinNotifyService.isEnabled()
@@ -818,6 +860,9 @@ function collectEnabledImProviders({
           }
         }
       },
+      getBinding: typeof weixinBridge?.getBinding === 'function'
+        ? (sessionId) => weixinBridge.getBinding(sessionId)
+        : null,
       send: async (args = {}) => {
         const sendArgs = buildWeixinSendArgs(args)
         const result = await weixinNotifyService.sendText(sendArgs)
@@ -959,6 +1004,7 @@ function collectEnabledImProviders({
 async function buildDesktopCapabilityQueryOptions({
   scheduledTaskService,
   weixinNotifyService,
+  weixinBridge,
   dingtalkBridge,
   feishuBridge,
   enterpriseWeixinBridge,
@@ -968,20 +1014,22 @@ async function buildDesktopCapabilityQueryOptions({
   const includeScheduleTools = shouldAllowScheduleToolsForSession(scheduledTaskService, session)
   const getImProviders = ({ includeDisabled = false } = {}) => collectEnabledImProviders({
     weixinNotifyService,
+    weixinBridge,
     dingtalkBridge,
     feishuBridge,
     enterpriseWeixinBridge,
     wecomCliManager,
     includeDisabled
   })
+  const isScheduledSourceSession = Boolean(session?.taskId)
   const includeWeixinNotifyTools = Boolean(
-    weixinNotifyService && (
+    PERSONAL_WEIXIN_ENABLED && isScheduledSourceSession && weixinNotifyService && (
       typeof weixinNotifyService.isEnabled === 'function'
         ? weixinNotifyService.isEnabled()
         : true
     )
   )
-  const includeImBuiltinTools = getImProviders({ includeDisabled: true }).some(provider => provider.channel !== 'weixin')
+  const includeImBuiltinTools = !isScheduledSourceSession && getImProviders({ includeDisabled: true }).length > 0
   const initialImProviders = includeImBuiltinTools ? getImProviders({ includeDisabled: true }) : []
   const initialAvailableImProviders = includeImBuiltinTools ? getImProviders() : []
   const initialSessionProvider = session?.imChannel
@@ -997,6 +1045,10 @@ async function buildDesktopCapabilityQueryOptions({
     ? buildBoundImPrompt(initialBoundImTarget, initialSessionProvider, {
       channelAvailable: initialBoundChannelAvailable
     })
+    : null
+  const initialWeixinProvider = getImProviders({ includeDisabled: true }).find(provider => provider.channel === 'weixin') || null
+  const initialBoundWeixinTarget = session?.id
+    ? getBoundImTargetFromSession(session, initialWeixinProvider)
     : null
 
   if (!includeScheduleTools && !includeWeixinNotifyTools && !includeImBuiltinTools) {
@@ -1203,10 +1255,14 @@ async function buildDesktopCapabilityQueryOptions({
         const targets = typeof weixinNotifyService.listTargets === 'function'
           ? weixinNotifyService.listTargets()
           : []
-        const serializedTargets = serializeWeixinTargetsForTool(targets)
+        const filteredTargets = initialBoundWeixinTarget
+          ? filterWeixinNotifyTargetsToBoundTarget(targets, initialBoundWeixinTarget, weixinNotifyService)
+          : targets
+        const serializedTargets = serializeWeixinTargetsForTool(filteredTargets)
 
         return buildToolResult({
           action: 'weixin_notify_list_targets',
+          boundSession: Boolean(initialBoundWeixinTarget),
           accountCount: Array.isArray(accounts) ? accounts.length : 0,
           targetCount: serializedTargets.length,
           accounts,
@@ -1229,7 +1285,28 @@ async function buildDesktopCapabilityQueryOptions({
       },
       async (args) => {
         const sendArgs = buildWeixinSendArgs(args)
-        if (!sendArgs.targetId) {
+        if (initialBoundWeixinTarget) {
+          const attemptedTarget = normalizeImText(sendArgs.targetId)
+          if (attemptedTarget && attemptedTarget !== normalizeImText(initialBoundWeixinTarget.targetId)) {
+            const attemptedEntry = serializeWeixinTargetsForTool([{
+              id: attemptedTarget,
+              accountId: sendArgs.accountId || '',
+              userId: attemptedTarget,
+              displayName: sendArgs.displayName || attemptedTarget,
+              hasContextToken: true
+            }])[0]
+            throw buildBoundTargetMismatchError(initialBoundWeixinTarget, {
+              channel: 'weixin',
+              rawTargetId: attemptedTarget,
+              accountId: sendArgs.accountId || '',
+              displayLabel: attemptedEntry?.displayLabel || sendArgs.displayName || attemptedTarget,
+              displayName: attemptedEntry?.displayName || sendArgs.displayName || attemptedTarget
+            }, 'weixin')
+          }
+
+          sendArgs.targetId = initialBoundWeixinTarget.targetId
+          sendArgs.accountId = initialBoundWeixinTarget.accountId || sendArgs.accountId
+        } else if (!sendArgs.targetId) {
           throw new Error('必须提供 targetKey、targetId 或 displayName')
         }
         if (session?.id) {
@@ -1250,9 +1327,41 @@ async function buildDesktopCapabilityQueryOptions({
   const imBuiltinTools = includeImBuiltinTools ? [
     tool(
       IM_BUILTIN_TOOL_NAMES[0],
-      '列出当前会话可用的内置 IM 渠道目标，包括钉钉、飞书、企业微信、微信。仅返回当前已启用且可发送的渠道目标。',
+      '列出当前会话可用的内置 IM 渠道目标，包括钉钉、飞书、企业微信。仅返回当前已启用且可发送的渠道目标。',
       {},
       async () => {
+        const sessionBoundProvider = session?.imChannel
+          ? getImProviders({ includeDisabled: true }).find(provider => provider.channel === session.imChannel)
+          : null
+        const boundTarget = session?.id
+          ? getBoundImTargetFromSession(session, sessionBoundProvider)
+          : null
+
+        if (boundTarget) {
+          const boundProvider = getImProviders().find(provider => provider.channel === boundTarget.channel)
+          if (!boundProvider) {
+            throw buildBoundChannelUnavailableError(boundTarget, sessionBoundProvider)
+          }
+
+          const payload = filterImTargetsToBoundEntry(
+            await boundProvider.listTargets(),
+            boundTarget,
+            boundProvider
+          )
+
+          return buildToolResult({
+            action: 'im_list_targets',
+            boundSession: true,
+            channelCount: 1,
+            targetCount: Array.isArray(payload.targets) ? payload.targets.length : 0,
+            channels: [{
+              channel: boundProvider.channel,
+              channelLabel: boundProvider.channelLabel,
+              ...payload,
+            }],
+          })
+        }
+
         const imProviders = getImProviders()
         const channels = []
         let totalTargetCount = 0
@@ -1281,7 +1390,7 @@ async function buildDesktopCapabilityQueryOptions({
       IM_BUILTIN_TOOL_NAMES[1],
       '通过 Hydro Desktop 内置 IM 渠道发送一条短文本消息。若当前会话已绑定 IM 目标且用户未要求更换收件人，可直接只传 text 发送到该绑定目标；否则先用 im_list_targets 获取 channel 与 targetKey，再用本工具发送。',
       {
-        channel: z.enum(['dingtalk', 'feishu', 'enterprise-weixin', 'weixin']).optional().describe('目标 IM 渠道。若当前会话已绑定 IM 目标且不更换收件人，可省略。'),
+        channel: z.enum(['dingtalk', 'feishu', 'enterprise-weixin']).optional().describe('目标 IM 渠道。若当前会话已绑定 IM 目标且不更换收件人，可省略。'),
         targetKey: z.string().min(1).optional().describe('推荐使用 im_list_targets 返回的 targetKey。'),
         targetId: z.string().min(1).optional().describe('兼容字段：目标 ID。'),
         targetType: z.enum(['user', 'chat']).optional().describe('目标类型。群聊使用 chat，单聊使用 user。'),

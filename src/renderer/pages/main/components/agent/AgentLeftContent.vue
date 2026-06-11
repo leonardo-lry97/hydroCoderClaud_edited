@@ -200,7 +200,8 @@ const externalSourceLabelKeys = {
   'enterprise-weixin': 'agent.sourceEnterpriseWeixin'
 }
 
-const sourceMenuTypes = ['feishu', 'dingtalk', 'weixin', 'enterprise-weixin']
+const PERSONAL_WEIXIN_ENABLED = false
+const sourceMenuTypes = ['feishu', 'dingtalk', 'enterprise-weixin']
 
 const sourceIconMap = {
   all: 'chat',

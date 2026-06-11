@@ -21,7 +21,6 @@ describe('useAgentPanel filters', () => {
           { id: 'scheduled-2', type: 'chat', source: 'scheduled', cwd: 'C:/shared', updatedAt: '2026-04-21T03:00:00.000Z' },
           { id: 'ding-1', type: 'chat', source: 'im-inbound', imChannel: 'dingtalk', cwd: 'C:/dingtalk-a', updatedAt: '2026-04-20T03:00:00.000Z' },
           { id: 'feishu-1', type: 'chat', source: 'im-inbound', imChannel: 'feishu', taskId: 201, cwd: 'C:/feishu-a', updatedAt: '2026-04-20T03:30:00.000Z' },
-          { id: 'wx-1', type: 'chat', source: 'im-inbound', imChannel: 'weixin', cwd: 'C:/weixin-a', updatedAt: '2026-04-20T04:00:00.000Z' },
           { id: 'notebook-1', type: 'notebook', source: 'manual', cwd: 'C:/notebook-a', updatedAt: '2026-04-22T04:00:00.000Z' },
           { id: 'embed-owner', type: 'chat', ownerClientId: 'embed:hydrology-workbench', source: 'manual', cwd: 'C:/embed-owner', updatedAt: '2026-04-22T04:00:00.000Z' },
           { id: 'embed-type', type: 'chat', clientType: 'embedded', source: 'manual', cwd: 'C:/embed-type', updatedAt: '2026-04-22T05:00:00.000Z' },
@@ -39,7 +38,6 @@ describe('useAgentPanel filters', () => {
       'C:/scheduled-a',
       'C:/shared',
       'C:/manual-a',
-      'C:/weixin-a',
       'C:/feishu-a',
       'C:/dingtalk-a'
     ])
@@ -103,12 +101,12 @@ describe('useAgentPanel filters', () => {
     const panel = useAgentPanel()
     await panel.loadConversations()
 
-    panel.selectedSource.value = 'weixin'
+    panel.selectedSource.value = 'dingtalk'
     panel.selectedTaskFilter.value = 'all'
     await nextTick()
 
     expect(panel.availableCwds.value).toEqual([
-      'C:/weixin-a'
+      'C:/dingtalk-a'
     ])
 
     panel.selectedTaskFilter.value = 'with-task'

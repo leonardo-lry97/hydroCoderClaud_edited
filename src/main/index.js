@@ -29,6 +29,10 @@ const { getStableUserDataPath } = require('./utils/user-data-path');
 const stableUserDataPath = getStableUserDataPath()
 app.setPath('userData', stableUserDataPath)
 
+// Temporary product decision: keep personal Weixin code in repo, but do not
+// initialize it in this release.
+const PERSONAL_WEIXIN_ENABLED = false
+
 // 保持窗口引用
 let mainWindow = null;
 let configManager = null;
@@ -467,18 +471,22 @@ if (hasSingleInstanceLock) {
     capMcpManager.settingsManager = new SettingsManager()  // 注入 settingsManager，供 MCP 安装时自动写入工具权限
     capabilityManager = new CapabilityManager(configManager, pluginCli, skillsManager, agentsManager, capMcpManager)
     const wecomCliManager = new WecomCliManager()
+    agentSessionManager.wecomCliManager = wecomCliManager
 
     // 初始化更新管理器
     updateManager = new UpdateManager(mainWindow, configManager)
 
     // 初始化钉钉桥接（构造函数内部自动绑定 agentSessionManager 事件）
     dingtalkBridge = new DingTalkBridge(configManager, agentSessionManager, mainWindow)
+    agentSessionManager.dingtalkBridge = dingtalkBridge
 
     // 初始化飞书桥接
     feishuBridge = new FeishuBridge(configManager, agentSessionManager, mainWindow)
+    agentSessionManager.feishuBridge = feishuBridge
 
     // 初始化企业微信桥接
     enterpriseWeixinBridge = new EnterpriseWeixinBridge(configManager, agentSessionManager, mainWindow)
+    agentSessionManager.enterpriseWeixinBridge = enterpriseWeixinBridge
 
     // 初始化 Notebook 管理器（需要 configManager 和 agentSessionManager）
     notebookManager = new NotebookManager(configManager, agentSessionManager)
@@ -488,11 +496,19 @@ if (hasSingleInstanceLock) {
     scheduledTaskService = new ScheduledTaskService(configManager, agentSessionManager)
     agentSessionManager.scheduledTaskService = scheduledTaskService
 
-    // 初始化微信通知服务（内建 iLink 通道，不依赖 OpenClaw）
-    weixinNotifyService = new WeixinNotifyService(configManager)
-    agentSessionManager.weixinNotifyService = weixinNotifyService
-    weixinBridge = new WeixinBridge(configManager, agentSessionManager, weixinNotifyService, mainWindow)
-    weixinBridge.start()
+    if (PERSONAL_WEIXIN_ENABLED) {
+      // 初始化微信通知服务（内建 iLink 通道，不依赖 OpenClaw）
+      weixinNotifyService = new WeixinNotifyService(configManager)
+      agentSessionManager.weixinNotifyService = weixinNotifyService
+      weixinBridge = new WeixinBridge(configManager, agentSessionManager, weixinNotifyService, mainWindow)
+      agentSessionManager.weixinBridge = weixinBridge
+      weixinBridge.start()
+    } else {
+      weixinNotifyService = null
+      weixinBridge = null
+      agentSessionManager.weixinNotifyService = null
+      agentSessionManager.weixinBridge = null
+    }
 
     localAgentApiServer = new LocalAgentApiServer({
       configManager

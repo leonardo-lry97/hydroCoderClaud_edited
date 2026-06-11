@@ -42,7 +42,8 @@ import ChannelCommonSettings from './ChannelCommonSettings.vue'
 import EmbeddedDingTalkSettings from './EmbeddedDingTalkSettings.vue'
 import EmbeddedFeishuSettings from './EmbeddedFeishuSettings.vue'
 import EmbeddedEnterpriseWeixinSettings from './EmbeddedEnterpriseWeixinSettings.vue'
-import WeixinNotifyWorkbenchTab from '@/pages/settings-workbench/components/WeixinNotifyWorkbenchTab.vue'
+
+const PERSONAL_WEIXIN_ENABLED = false
 
 const { cssVars } = useTheme()
 const { t } = useLocale()
@@ -59,11 +60,6 @@ const channels = computed(() => ([
     description: t('channelSettings.channels.dingtalk.description')
   },
   {
-    id: 'weixin',
-    label: t('channelSettings.channels.weixin.label'),
-    description: t('channelSettings.channels.weixin.description')
-  },
-  {
     id: 'feishu',
     label: t('channelSettings.channels.feishu.label'),
     description: t('channelSettings.channels.feishu.description')
@@ -73,12 +69,11 @@ const channels = computed(() => ([
     label: t('channelSettings.channels.enterpriseWeixin.label'),
     description: t('channelSettings.channels.enterpriseWeixin.description')
   }
-]))
+].filter(channel => PERSONAL_WEIXIN_ENABLED || channel.id !== 'weixin')))
 
 const channelComponents = {
   common: markRaw(ChannelCommonSettings),
   dingtalk: markRaw(EmbeddedDingTalkSettings),
-  weixin: markRaw(WeixinNotifyWorkbenchTab),
   feishu: markRaw(EmbeddedFeishuSettings),
   'enterprise-weixin': markRaw(EmbeddedEnterpriseWeixinSettings)
 }

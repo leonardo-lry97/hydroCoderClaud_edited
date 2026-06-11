@@ -1087,7 +1087,7 @@ describe('AgentSessionManager interactions', () => {
     })
   })
 
-  it('rebuilds embedded session runtime when weixin notify tools become available', async () => {
+  it('does not inject personal weixin MCP tools even when weixin notify service exists', async () => {
     const { manager } = createManager()
     manager.configManager.getDefaultProfile = vi.fn(() => ({
       id: 'p1',
@@ -1169,12 +1169,14 @@ describe('AgentSessionManager interactions', () => {
     expect(manager.runner.createQuery).toHaveBeenCalledOnce()
     const createQueryOptions = manager.runner.createQuery.mock.calls[0][1]
     expect(createQueryOptions.resume).toBe('sdk-embedded-old')
-    expect(Object.keys(createQueryOptions.mcpServers || {})).toEqual(['hydrodesktop', 'embeddedapp', 'hydrology'])
-    expect(createQueryOptions.allowedTools).toEqual(expect.arrayContaining([
+    expect(Object.keys(createQueryOptions.mcpServers || {})).toEqual(['embeddedapp', 'hydrology'])
+    expect(createQueryOptions.allowedTools || []).not.toEqual(expect.arrayContaining([
+      'mcp__hydrodesktop__im_list_targets',
+      'mcp__hydrodesktop__im_send',
       'mcp__hydrodesktop__weixin_notify_list_targets',
       'mcp__hydrodesktop__weixin_notify_send'
     ]))
-    expect(createQueryOptions.appendSystemPrompt).toContain('Weixin notification')
+    expect(createQueryOptions.appendSystemPrompt || '').not.toContain('built-in IM messages')
     expect(session.lastBootstrappedRuntime).toMatchObject({
       embeddedAppEnabled: true,
       embeddedAppId: 'hydrology-workbench',

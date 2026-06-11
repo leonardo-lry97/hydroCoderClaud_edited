@@ -106,7 +106,7 @@ describe('desktop capability query options', () => {
     return { options, tools, scheduledTaskService, task }
   }
 
-  async function createOptionsWithWeixin({ session = { source: 'manual' }, serviceOverrides = {} } = {}) {
+  async function createOptionsWithWeixin({ session = { source: 'manual' }, serviceOverrides = {}, bridgeOverrides = {} } = {}) {
     const weixinNotifyService = {
       listAccounts: vi.fn(() => [{ accountId: 'bot@im.bot', hasToken: true }]),
       listTargets: vi.fn(() => [{
@@ -135,18 +135,24 @@ describe('desktop capability query options', () => {
       })),
       ...serviceOverrides
     }
+    const weixinBridge = {
+      getBinding: vi.fn((sessionId) => sessionId === session.id ? null : null),
+      ...bridgeOverrides
+    }
     const options = await buildDesktopCapabilityQueryOptions({
       scheduledTaskService: session.taskId ? null : {
         configManager: { getConfig: () => ({ settings: { locale: 'zh-CN' } }) },
         listTasks: vi.fn(() => [])
       },
       weixinNotifyService,
+      weixinBridge,
       session
     })
+    const hydroTools = options?.mcpServers?.hydrodesktop?.tools || []
     const tools = Object.fromEntries(
-      options.mcpServers.hydrodesktop.tools.map(tool => [tool.name, tool])
+      hydroTools.map(tool => [tool.name, tool])
     )
-    return { options, tools, weixinNotifyService }
+    return { options, tools, weixinNotifyService, weixinBridge }
   }
 
   async function createOptionsWithBuiltinIm({
@@ -649,103 +655,23 @@ describe('desktop capability query options', () => {
     })
   })
 
-  it('exposes weixin notification tools without leaking credentials', async () => {
-    const { options, tools, weixinNotifyService } = await createOptionsWithWeixin()
+  it('injects unified builtin IM tools for weixin-capable normal sessions', async () => {
+    const { options, tools } = await createOptionsWithWeixin()
 
-    expect(Object.keys(tools)).toEqual(expect.arrayContaining([
+    expect(Object.keys(tools)).toEqual([
       'schedule_list',
-      'weixin_notify_list_targets',
-      'weixin_notify_send'
-    ]))
-    expect(options.allowedTools).toEqual(expect.arrayContaining([
-      'mcp__hydrodesktop__weixin_notify_list_targets',
-      'mcp__hydrodesktop__weixin_notify_send'
-    ]))
-    expect(options.appendSystemPrompt).toContain('Weixin notification')
-
-    const listPayload = parseToolPayload(await tools.weixin_notify_list_targets.handler())
-    expect(listPayload.accounts[0]).not.toHaveProperty('token')
-    expect(listPayload.targets[0]).toMatchObject({
-      userId: 'target@im.wechat',
-      displayName: '张三',
-      targetKey: '张三',
-      displayLabel: '张三',
-      targetSource: 'authorized_user',
-      isAuthorizedAccountUser: true,
-      sendable: true,
-      hasContextToken: true
-    })
-    expect(listPayload.targets[0].aliases).toEqual(expect.arrayContaining([
-      '张三',
-      'bot@im.bot:target@im.wechat',
-      'target@im.wechat'
-    ]))
-    expect(listPayload.usage.sendWith).toContain('targetKey')
-
-    const sendPayload = parseToolPayload(await tools.weixin_notify_send.handler({
-      accountId: 'bot@im.bot',
-      targetKey: '张三',
-      text: 'hello'
-    }))
-    expect(weixinNotifyService.sendText).toHaveBeenCalledWith({
-      accountId: 'bot@im.bot',
-      targetId: '张三',
-      text: 'hello'
-    })
-    expect(sendPayload.recipient).toMatchObject({
-      displayName: '张三',
-      targetKey: '张三',
-      sendable: true
-    })
-    expect(sendPayload.result).toMatchObject({
-      success: true,
-      messageId: 'msg-1'
-    })
-  })
-
-  it('passes current session id to weixin notification sends', async () => {
-    const { tools, weixinNotifyService } = await createOptionsWithWeixin({
-      session: { id: 'chat-session-1', source: 'manual' }
-    })
-
-    await tools.weixin_notify_send.handler({
-      accountId: 'bot@im.bot',
-      targetKey: '张三',
-      text: 'hello'
-    })
-
-    expect(weixinNotifyService.sendText).toHaveBeenCalledWith({
-      accountId: 'bot@im.bot',
-      targetId: '张三',
-      text: 'hello',
-      sessionId: 'chat-session-1'
-    })
-  })
-
-  it('uses full target id as targetKey when display names are ambiguous', async () => {
-    const { tools } = await createOptionsWithWeixin({
-      serviceOverrides: {
-        listTargets: vi.fn(() => [{
-          id: 'bot-a@im.bot:target@im.wechat',
-          accountId: 'bot-a@im.bot',
-          userId: 'target@im.wechat',
-          displayName: '张三',
-          hasContextToken: true
-        }, {
-          id: 'bot-b@im.bot:target@im.wechat',
-          accountId: 'bot-b@im.bot',
-          userId: 'target@im.wechat',
-          displayName: '张三',
-          hasContextToken: true
-        }])
-      }
-    })
-
-    const payload = parseToolPayload(await tools.weixin_notify_list_targets.handler())
-    expect(payload.targets[0]).toMatchObject({
-      targetKey: 'bot-a@im.bot:target@im.wechat',
-      displayLabel: '张三 (bot-a@im.bot)'
-    })
+      'schedule_get',
+      'schedule_runs',
+      'schedule_create',
+      'schedule_update',
+      'schedule_enable',
+      'schedule_disable',
+      'schedule_run_now',
+      'schedule_delete'
+    ])
+    expect(options.allowedTools).toEqual(DESKTOP_CAPABILITY_ALLOWED_TOOLS)
+    expect(options.appendSystemPrompt).not.toContain('built-in IM messages')
+    expect(options.appendSystemPrompt).not.toContain('Weixin notification')
   })
 
   it('keeps scheduled source sessions limited to weixin notification tools', async () => {
@@ -753,16 +679,8 @@ describe('desktop capability query options', () => {
       session: { taskId: 1 }
     })
 
-    expect(Object.keys(tools)).toEqual([
-      'weixin_notify_list_targets',
-      'weixin_notify_send'
-    ])
-    expect(options.allowedTools).toEqual([
-      'mcp__hydrodesktop__weixin_notify_list_targets',
-      'mcp__hydrodesktop__weixin_notify_send'
-    ])
-    expect(options.disallowedTools).toBeUndefined()
-    expect(options.appendSystemPrompt).toContain('Weixin notification')
+    expect(Object.keys(tools)).toEqual([])
+    expect(options).toEqual({})
   })
 
   it('injects unified builtin IM tools for non-weixin channels', async () => {
@@ -860,6 +778,81 @@ describe('desktop capability query options', () => {
       channel: 'enterprise-weixin',
       displayName: '企微王五'
     })
+  })
+
+  it('limits builtin IM target listing to the bound target for a bound session', async () => {
+    const session = {
+      id: 'chat-im-bound-list-1',
+      source: 'manual',
+      imChannel: 'feishu'
+    }
+    const { tools, feishuBridge, dingtalkBridge } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        feishuBridge: {
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'oc_group_a', displayName: 'agent群A', targetType: 'chat' }
+            : null)
+        }
+      },
+      feishuTargets: [{
+        id: 'oc_group_a',
+        openId: 'oc_group_a',
+        displayName: 'agent群A',
+        targetType: 'chat',
+        hasContextToken: true
+      }, {
+        id: 'ou_user_b',
+        openId: 'ou_user_b',
+        displayName: '飞书李四',
+        targetType: 'user',
+        hasContextToken: true
+      }]
+    })
+
+    const payload = parseToolPayload(await tools.im_list_targets.handler())
+
+    expect(payload.boundSession).toBe(true)
+    expect(payload.channelCount).toBe(1)
+    expect(payload.targetCount).toBe(1)
+    expect(payload.channels).toHaveLength(1)
+    expect(payload.channels[0]).toMatchObject({
+      channel: 'feishu',
+      channelLabel: '飞书',
+      targetCount: 1
+    })
+    expect(payload.channels[0].targets).toEqual([expect.objectContaining({
+      channel: 'feishu',
+      targetKey: 'agent群A',
+      displayName: 'agent群A',
+      targetType: 'chat'
+    })])
+    expect(feishuBridge.listSendableTargets).toHaveBeenCalledTimes(1)
+    expect(dingtalkBridge.listTargets).not.toHaveBeenCalled()
+  })
+
+  it('blocks builtin IM target listing when the bound channel is unavailable', async () => {
+    const session = {
+      id: 'chat-im-bound-list-disabled-1',
+      source: 'manual',
+      imChannel: 'enterprise-weixin'
+    }
+    const { tools } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        enterpriseWeixinBridge: {
+          _getConfig: () => ({ enabled: false }),
+          getStatus: () => ({ runtimeState: 'disabled' }),
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'zhangyuesheng', displayName: 'ZhangYueSheng', targetType: 'user' }
+            : null)
+        }
+      }
+    })
+
+    await expect(tools.im_list_targets.handler()).rejects.toThrow(
+      '当前会话已绑定企业微信联系人「ZhangYueSheng」，但该渠道当前不可用'
+    )
   })
 
   it('dynamically re-resolves builtin IM providers after a channel is re-enabled', async () => {
