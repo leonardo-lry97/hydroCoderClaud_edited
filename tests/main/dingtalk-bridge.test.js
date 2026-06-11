@@ -297,6 +297,31 @@ describe('DingTalkBridge', () => {
     })
   })
 
+  it('rejects proactive sends when the DingTalk bridge is disabled', async () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
+    const session = manager.sessions.get(created.id)
+    const fetchMock = vi.fn()
+    const tokenSpy = vi.spyOn(bridge, '_getAccessToken').mockResolvedValue('token')
+    vi.stubGlobal('fetch', fetchMock)
+
+    bridge.configManager.getConfig = () => ({
+      settings: { agent: { outputBaseDir: tempDir } },
+      dingtalk: { enabled: false, maxHistorySessions: 5, robotCode: 'robot-1' }
+    })
+
+    await expect(bridge.sendToTarget({
+      sessionId: session.id,
+      targetId: 'staff-1',
+      displayName: '张三',
+      text: '任务已完成'
+    })).rejects.toThrow('钉钉未连接')
+
+    expect(tokenSpy).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(bridge.getBinding(session.id)).toBe(null)
+  })
+
   it('sends proactive DingTalk group text through the groupMessages endpoint and binds the group target', async () => {
     const { bridge, manager } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
@@ -1577,6 +1602,72 @@ describe('DingTalkBridge', () => {
       'https://example.com/new',
       '💻 桌面端介入：\n> 新会话应回发\n\n新会话回复'
     )
+  })
+
+  it('continues forwarding desktop intervention after proactive DingTalk send without requiring a webhook', async () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '主动发送会话' })
+    const session = manager.sessions.get(created.id)
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).includes('/v1.0/robot/oToMessages/batchSend')) {
+        return {
+          ok: true,
+          json: async () => ({ success: true }),
+        }
+      }
+      return {
+        ok: true,
+        json: async () => ({ success: true }),
+      }
+    })
+    vi.spyOn(bridge, '_getAccessToken').mockResolvedValue('token')
+    const replyToDingTalk = vi.spyOn(bridge, '_replyToDingTalk').mockResolvedValue()
+    vi.spyOn(bridge, '_sendBase64Images').mockResolvedValue()
+    vi.spyOn(bridge, '_sendCollectedImages').mockResolvedValue()
+    vi.stubGlobal('fetch', fetchMock)
+    bridge.configManager.getConfig = () => ({
+      settings: { agent: { outputBaseDir: tempDir } },
+      dingtalk: { enabled: true, maxHistorySessions: 5, robotCode: 'robot-1' }
+    })
+
+    await bridge.sendToTarget({
+      sessionId: session.id,
+      targetId: 'staff-1',
+      targetType: 'user',
+      displayName: '张三',
+      text: '先主动发一条'
+    })
+
+    expect(bridge._sessionWebhooks.has(session.id)).toBe(false)
+    expect(bridge.getBinding(session.id)).toEqual({
+      targetId: 'staff-1',
+      displayName: '张三',
+      targetType: 'user',
+    })
+
+    bridge.onUserMessage(session.id, '桌面继续追问', null)
+    bridge.onAgentMessage(session.id, {
+      type: 'assistant',
+      content: [{ type: 'text', text: '这是桌面继续回复' }],
+    })
+    await bridge.onAgentResult(session.id)
+
+    expect(replyToDingTalk).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'x-acs-dingtalk-access-token': 'token'
+        }),
+      })
+    )
+    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+    const lastBody = JSON.parse(lastCall[1].body)
+    expect(lastBody.userIds).toEqual(['staff-1'])
+    expect(JSON.parse(lastBody.msgParam)).toEqual({
+      content: '💻 桌面端介入：\n> 桌面继续追问\n\n这是桌面继续回复'
+    })
   })
 
   it('reuses the same DingTalk group session for different senders in the same chat', async () => {

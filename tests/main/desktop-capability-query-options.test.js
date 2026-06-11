@@ -149,6 +149,97 @@ describe('desktop capability query options', () => {
     return { options, tools, weixinNotifyService }
   }
 
+  async function createOptionsWithBuiltinIm({
+    session = { id: 'chat-im-1', source: 'manual' },
+    dingtalkTargets = [{
+      id: 'staff-1',
+      staffId: 'staff-1',
+      userId: 'staff-1',
+      displayName: '钉钉张三',
+      hasContextToken: true,
+      targetType: 'user'
+    }],
+    feishuTargets = [{
+      id: 'ou_123',
+      openId: 'ou_123',
+      userId: 'user_123',
+      displayName: '飞书李四',
+      hasContextToken: true,
+      targetType: 'user'
+    }],
+    enterpriseWeixinTargets = [{
+      id: 'wecom-user-1',
+      userId: 'wecom-user-1',
+      targetId: 'wecom-user-1',
+      displayName: '企微王五',
+      targetType: 'user'
+    }],
+    overrides = {}
+  } = {}) {
+    const dingtalkBridge = {
+      _getConfig: () => ({ enabled: true }),
+      getStatus: () => ({ runtimeState: 'connected' }),
+      listTargets: vi.fn(async () => dingtalkTargets),
+      getBinding: vi.fn((sessionId) => sessionId === session.id ? null : null),
+      sendToTarget: vi.fn(async input => ({
+        success: true,
+        messageId: 'ding-msg-1',
+        targetId: input.targetId || input.staffId
+      })),
+      ...overrides.dingtalkBridge
+    }
+    const feishuBridge = {
+      _getConfig: () => ({ enabled: true }),
+      getStatus: () => ({ runtimeState: 'connected' }),
+      listSendableTargets: vi.fn(async () => feishuTargets),
+      getBinding: vi.fn((sessionId) => sessionId === session.id ? null : null),
+      sendToTarget: vi.fn(async input => ({
+        success: true,
+        messageId: 'feishu-msg-1',
+        targetId: input.targetId || input.openId
+      })),
+      ...overrides.feishuBridge
+    }
+    const enterpriseWeixinBridge = {
+      _getConfig: () => ({ enabled: true }),
+      getStatus: () => ({ runtimeState: 'connected' }),
+      _knownChats: new Map(),
+      getBinding: vi.fn((sessionId) => sessionId === session.id ? null : null),
+      sendToTarget: vi.fn(async input => ({
+        success: true,
+        targetId: input.targetId || input.userId
+      })),
+      ...overrides.enterpriseWeixinBridge
+    }
+    const wecomCliManager = {
+      listContacts: vi.fn(async () => enterpriseWeixinTargets),
+      ...overrides.wecomCliManager
+    }
+
+    const options = await buildDesktopCapabilityQueryOptions({
+      scheduledTaskService: null,
+      weixinNotifyService: null,
+      dingtalkBridge,
+      feishuBridge,
+      enterpriseWeixinBridge,
+      wecomCliManager,
+      session
+    })
+
+    const tools = Object.fromEntries(
+      options.mcpServers.hydrodesktop.tools.map(tool => [tool.name, tool])
+    )
+
+    return {
+      options,
+      tools,
+      dingtalkBridge,
+      feishuBridge,
+      enterpriseWeixinBridge,
+      wecomCliManager
+    }
+  }
+
   it('exposes the extended scheduled-task toolset', async () => {
     const { options, tools } = await createOptions()
 
@@ -672,5 +763,446 @@ describe('desktop capability query options', () => {
     ])
     expect(options.disallowedTools).toBeUndefined()
     expect(options.appendSystemPrompt).toContain('Weixin notification')
+  })
+
+  it('injects unified builtin IM tools for non-weixin channels', async () => {
+    const { options, tools } = await createOptionsWithBuiltinIm()
+
+    expect(Object.keys(tools)).toEqual([
+      'im_list_targets',
+      'im_send'
+    ])
+    expect(options.allowedTools).toEqual([
+      'mcp__hydrodesktop__im_list_targets',
+      'mcp__hydrodesktop__im_send'
+    ])
+    expect(options.appendSystemPrompt).toContain('built-in IM messages')
+  })
+
+  it('tells the model to send directly to the bound IM target by default', async () => {
+    const session = {
+      id: 'chat-im-bound-prompt-1',
+      source: 'manual',
+      imChannel: 'feishu'
+    }
+    const { options, tools } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        feishuBridge: {
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'oc_group_a', displayName: 'agent群A', targetType: 'chat' }
+            : null)
+        }
+      },
+      feishuTargets: [{
+        id: 'oc_group_a',
+        openId: 'oc_group_a',
+        displayName: 'agent群A',
+        targetType: 'chat',
+        hasContextToken: true
+      }]
+    })
+
+    expect(options.appendSystemPrompt).toContain('call im_send directly and default to that bound target')
+    expect(options.appendSystemPrompt).toContain('agent群A')
+    expect(tools.im_send.description).toContain('可直接只传 text 发送到该绑定目标')
+    expect(tools.im_send.inputSchema.channel.safeParse(undefined).success).toBe(true)
+  })
+
+  it('tells the model not to proceed when the bound IM channel is currently unavailable', async () => {
+    const session = {
+      id: 'chat-im-bound-prompt-disabled-1',
+      source: 'manual',
+      imChannel: 'enterprise-weixin'
+    }
+    const { options } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        enterpriseWeixinBridge: {
+          _getConfig: () => ({ enabled: false }),
+          getStatus: () => ({ runtimeState: 'disabled' }),
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'zhangyuesheng', displayName: 'ZhangYueSheng', targetType: 'user' }
+            : null)
+        }
+      }
+    })
+
+    expect(options.appendSystemPrompt).toContain('but that channel is currently unavailable')
+    expect(options.appendSystemPrompt).toContain('Do not ask for message content')
+    expect(options.appendSystemPrompt).toContain('ZhangYueSheng')
+  })
+
+  it('lists available builtin IM targets by channel', async () => {
+    const { tools } = await createOptionsWithBuiltinIm()
+
+    const payload = parseToolPayload(await tools.im_list_targets.handler())
+
+    expect(payload.action).toBe('im_list_targets')
+    expect(payload.channelCount).toBe(3)
+    expect(payload.targetCount).toBe(3)
+    expect(payload.channels[0]).toMatchObject({
+      channel: 'dingtalk',
+      channelLabel: '钉钉',
+      targetCount: 1
+    })
+    expect(payload.channels[0].targets[0]).toMatchObject({
+      targetKey: '钉钉张三',
+      displayName: '钉钉张三',
+      targetType: 'user'
+    })
+    expect(payload.channels[0].targets[0]).not.toHaveProperty('rawTargetId')
+    expect(payload.channels[1].targets[0]).toMatchObject({
+      channel: 'feishu',
+      displayName: '飞书李四'
+    })
+    expect(payload.channels[2].targets[0]).toMatchObject({
+      channel: 'enterprise-weixin',
+      displayName: '企微王五'
+    })
+  })
+
+  it('dynamically re-resolves builtin IM providers after a channel is re-enabled', async () => {
+    let feishuEnabled = false
+    const feishuTargets = [{
+      id: 'oc_group_a',
+      openId: 'oc_group_a',
+      displayName: 'agent群A',
+      targetType: 'chat',
+      hasContextToken: true
+    }]
+    const { tools, feishuBridge } = await createOptionsWithBuiltinIm({
+      overrides: {
+        feishuBridge: {
+          _getConfig: () => ({ enabled: feishuEnabled }),
+          getStatus: () => ({ runtimeState: feishuEnabled ? 'connected' : 'disabled' }),
+          listSendableTargets: vi.fn(async () => feishuTargets)
+        }
+      }
+    })
+
+    const beforePayload = parseToolPayload(await tools.im_list_targets.handler())
+    expect(beforePayload.channels.some(channel => channel.channel === 'feishu')).toBe(false)
+
+    feishuEnabled = true
+
+    const afterPayload = parseToolPayload(await tools.im_list_targets.handler())
+    const feishuChannel = afterPayload.channels.find(channel => channel.channel === 'feishu')
+    expect(feishuChannel).toMatchObject({
+      channel: 'feishu',
+      targetCount: 1
+    })
+    expect(feishuChannel.targets[0]).toMatchObject({
+      targetKey: 'agent群A',
+      displayName: 'agent群A',
+      targetType: 'chat'
+    })
+
+    await tools.im_send.handler({
+      channel: 'feishu',
+      targetKey: 'agent群A',
+      text: 'hello restored feishu'
+    })
+    expect(feishuBridge.sendToTarget).toHaveBeenCalledWith(expect.objectContaining({
+      channel: 'feishu',
+      targetId: 'oc_group_a',
+      openId: 'oc_group_a',
+      displayName: 'agent群A',
+      text: 'hello restored feishu'
+    }))
+  })
+
+  it('passes current session id through unified builtin IM sends', async () => {
+    const {
+      tools,
+      dingtalkBridge,
+      feishuBridge,
+      enterpriseWeixinBridge
+    } = await createOptionsWithBuiltinIm()
+
+    const dingPayload = parseToolPayload(await tools.im_send.handler({
+      channel: 'dingtalk',
+      targetKey: '钉钉张三',
+      text: 'hello ding'
+    }))
+    expect(dingtalkBridge.sendToTarget).toHaveBeenCalledWith({
+      channel: 'dingtalk',
+      targetId: 'staff-1',
+      staffId: 'staff-1',
+      targetType: 'user',
+      displayName: '钉钉张三',
+      text: 'hello ding',
+      sessionId: 'chat-im-1'
+    })
+    expect(dingPayload.channel).toBe('dingtalk')
+
+    await tools.im_send.handler({
+      channel: 'feishu',
+      targetId: 'ou_123',
+      targetType: 'user',
+      text: 'hello feishu'
+    })
+    expect(feishuBridge.sendToTarget).toHaveBeenCalledWith({
+      channel: 'feishu',
+      targetId: 'ou_123',
+      targetType: 'user',
+      displayName: '飞书李四',
+      openId: 'ou_123',
+      text: 'hello feishu',
+      sessionId: 'chat-im-1'
+    })
+
+    await tools.im_send.handler({
+      channel: 'enterprise-weixin',
+      userId: 'wecom-user-1',
+      text: 'hello wecom'
+    })
+    expect(enterpriseWeixinBridge.sendToTarget).toHaveBeenCalledWith({
+      channel: 'enterprise-weixin',
+      targetId: 'wecom-user-1',
+      targetType: 'user',
+      displayName: '企微王五',
+      text: 'hello wecom',
+      userId: 'wecom-user-1',
+      sessionId: 'chat-im-1'
+    })
+  })
+
+  it('uses bound target by default when im_send omits channel and target', async () => {
+    const session = {
+      id: 'chat-im-bound-1',
+      source: 'manual',
+      imChannel: 'feishu'
+    }
+    const { tools, feishuBridge } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        feishuBridge: {
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'oc_group_a', displayName: 'agent群A', targetType: 'chat' }
+            : null)
+        }
+      },
+      feishuTargets: [{
+        id: 'oc_group_a',
+        openId: 'oc_group_a',
+        displayName: 'agent群A',
+        targetType: 'chat',
+        hasContextToken: true
+      }]
+    })
+
+    await tools.im_send.handler({
+      text: 'hello bound'
+    })
+
+    expect(feishuBridge.sendToTarget).toHaveBeenCalledWith({
+      channel: 'feishu',
+      targetId: 'oc_group_a',
+      targetType: 'chat',
+      displayName: 'agent群A',
+      openId: 'oc_group_a',
+      text: 'hello bound',
+      sessionId: 'chat-im-bound-1'
+    })
+  })
+
+  it('keeps Feishu persisted group bindings sending as chat targets after restore', async () => {
+    const session = {
+      id: 'chat-im-bound-restore-1',
+      source: 'manual',
+      imChannel: 'feishu'
+    }
+    const { tools, feishuBridge } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        feishuBridge: {
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'oc_group_a', displayName: 'agent群A', targetType: 'chat' }
+            : null),
+          sendToTarget: vi.fn(async input => ({
+            success: true,
+            messageId: 'feishu-msg-restored-group',
+            targetId: input.targetId || input.openId
+          }))
+        }
+      },
+      feishuTargets: []
+    })
+
+    await tools.im_send.handler({
+      text: 'hello restored bound group'
+    })
+
+    expect(feishuBridge.sendToTarget).toHaveBeenCalledWith({
+      channel: 'feishu',
+      targetId: 'oc_group_a',
+      targetType: 'chat',
+      displayName: 'agent群A',
+      openId: 'oc_group_a',
+      text: 'hello restored bound group',
+      sessionId: 'chat-im-bound-restore-1'
+    })
+  })
+
+  it('accepts alias names for the currently bound target', async () => {
+    const session = {
+      id: 'chat-im-bound-2',
+      source: 'manual',
+      imChannel: 'feishu'
+    }
+    const { tools, feishuBridge } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        feishuBridge: {
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'oc_group_a', displayName: 'agent群A', targetType: 'chat' }
+            : null)
+        }
+      },
+      feishuTargets: [{
+        id: 'oc_group_a',
+        openId: 'oc_group_a',
+        displayName: 'agent群A',
+        targetType: 'chat',
+        hasContextToken: true
+      }]
+    })
+
+    await tools.im_send.handler({
+      channel: 'feishu',
+      targetKey: 'agent群A',
+      text: 'hello alias'
+    })
+
+    expect(feishuBridge.sendToTarget).toHaveBeenCalledWith(expect.objectContaining({
+      targetId: 'oc_group_a',
+      displayName: 'agent群A'
+    }))
+  })
+
+  it('rejects switching a bound session to a different alias target', async () => {
+    const session = {
+      id: 'chat-im-bound-3',
+      source: 'manual',
+      imChannel: 'feishu'
+    }
+    const { tools } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        feishuBridge: {
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'oc_group_a', displayName: 'agent群A', targetType: 'chat' }
+            : null)
+        }
+      },
+      feishuTargets: [{
+        id: 'oc_group_a',
+        openId: 'oc_group_a',
+        displayName: 'agent群A',
+        targetType: 'chat',
+        hasContextToken: true
+      }, {
+        id: 'oc_group_b',
+        openId: 'oc_group_b',
+        displayName: 'agent群B',
+        targetType: 'chat',
+        hasContextToken: true
+      }]
+    })
+
+    await expect(tools.im_send.handler({
+      channel: 'feishu',
+      targetKey: 'agent群B',
+      text: 'hello drift'
+    })).rejects.toThrow(/当前会话已绑定飞书联系人/)
+  })
+
+  it('rejects switching a bound session to a different channel even when that channel is available', async () => {
+    const session = {
+      id: 'chat-im-bound-cross-channel-1',
+      source: 'manual',
+      imChannel: 'feishu'
+    }
+    const { tools, dingtalkBridge } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        feishuBridge: {
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'oc_group_a', displayName: 'agent群A', targetType: 'chat' }
+            : null)
+        }
+      },
+      feishuTargets: [{
+        id: 'oc_group_a',
+        openId: 'oc_group_a',
+        displayName: 'agent群A',
+        targetType: 'chat',
+        hasContextToken: true
+      }]
+    })
+
+    await expect(tools.im_send.handler({
+      channel: 'dingtalk',
+      targetKey: '钉钉张三',
+      text: 'hello cross channel drift'
+    })).rejects.toThrow(/当前会话已绑定feishu渠道，不能再发送到dingtalk/)
+
+    expect(dingtalkBridge.sendToTarget).not.toHaveBeenCalled()
+  })
+
+  it('fails with bound-channel-unavailable instead of drifting to another explicit channel', async () => {
+    const session = {
+      id: 'chat-im-bound-cross-channel-disabled-1',
+      source: 'manual',
+      imChannel: 'enterprise-weixin'
+    }
+    const { tools, dingtalkBridge } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        enterpriseWeixinBridge: {
+          _getConfig: () => ({ enabled: false }),
+          getStatus: () => ({ runtimeState: 'disabled' }),
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'zhangyuesheng', displayName: 'ZhangYueSheng', targetType: 'user' }
+            : null)
+        }
+      }
+    })
+
+    await expect(tools.im_send.handler({
+      channel: 'dingtalk',
+      targetKey: '钉钉张三',
+      text: 'hello cross channel while bound disabled'
+    })).rejects.toThrow(/当前会话已绑定企业微信联系人「ZhangYueSheng」，但该渠道当前不可用/)
+
+    expect(dingtalkBridge.sendToTarget).not.toHaveBeenCalled()
+  })
+
+  it('fails early with a bound-channel-unavailable error for a bound session', async () => {
+    const session = {
+      id: 'chat-im-bound-disabled-1',
+      source: 'manual',
+      imChannel: 'enterprise-weixin'
+    }
+    const { tools, enterpriseWeixinBridge } = await createOptionsWithBuiltinIm({
+      session,
+      overrides: {
+        enterpriseWeixinBridge: {
+          _getConfig: () => ({ enabled: false }),
+          getStatus: () => ({ runtimeState: 'disabled' }),
+          getBinding: vi.fn((sessionId) => sessionId === session.id
+            ? { targetId: 'zhangyuesheng', displayName: 'ZhangYueSheng', targetType: 'user' }
+            : null),
+          sendToTarget: vi.fn(async () => ({ success: true, targetId: 'zhangyuesheng' }))
+        }
+      }
+    })
+
+    await expect(tools.im_send.handler({
+      text: 'hello disabled bound'
+    })).rejects.toThrow(/当前会话已绑定企业微信联系人「ZhangYueSheng」，但该渠道当前不可用/)
+
+    expect(enterpriseWeixinBridge.sendToTarget).not.toHaveBeenCalled()
   })
 })

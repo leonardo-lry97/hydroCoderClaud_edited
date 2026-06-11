@@ -114,7 +114,8 @@ describe('FeishuBridge', () => {
     expect(sendResult).toMatchObject({ success: true, targetId: 'ou_target', messageId: 'om_send_1' })
     expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'ou_target',
-      displayName: '张三'
+      displayName: '张三',
+      targetType: 'user'
     })
 
     const sessionId = await bridge._ensureSession(
@@ -521,7 +522,8 @@ describe('FeishuBridge', () => {
     expect(sendSpy).not.toHaveBeenCalled()
     expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'ou_target_1',
-      displayName: '张三'
+      displayName: '张三',
+      targetType: 'user'
     })
     expect(bridge._targetSessionMap.get('ou_target_2')).toBeUndefined()
   })
@@ -588,6 +590,11 @@ describe('FeishuBridge', () => {
       targetType: 'chat',
       displayName: '另一个群'
     })).toThrow(/当前会话已绑定飞书联系人「oc_group_1」/)
+    expect(bridge.getBinding(session.id)).toEqual({
+      targetId: 'oc_group_1',
+      displayName: 'oc_group_1',
+      targetType: 'chat'
+    })
   })
 
   it('restores a persisted Feishu target binding for toolbar filtering after memory is lost', () => {
@@ -616,7 +623,8 @@ describe('FeishuBridge', () => {
 
     expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'ou_target',
-      displayName: 'ou_target'
+      displayName: 'ou_target',
+      targetType: 'user'
     })
     expect(bridge._targetSessionMap.get('ou_target')).toBe(session.id)
     expect(bridge._sessionIdentities.get(session.id)).toEqual({
@@ -657,7 +665,8 @@ describe('FeishuBridge', () => {
 
     expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'ou_target',
-      displayName: 'ou_target'
+      displayName: 'ou_target',
+      targetType: 'user'
     })
     expect(bridge._targetSessionMap.get('ou_target')).toBe(session.id)
     expect(bridge._sessionIdentities.get(session.id)).toEqual({
@@ -695,7 +704,8 @@ describe('FeishuBridge', () => {
 
     expect(bridge.getBinding(session.id)).toEqual({
       targetId: 'ou_target',
-      displayName: 'ou_target'
+      displayName: 'ou_target',
+      targetType: 'user'
     })
   })
 

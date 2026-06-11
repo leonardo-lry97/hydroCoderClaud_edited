@@ -1755,6 +1755,9 @@ class DingTalkBridge {
       this.agentSessionManager.assertSessionImBindingAllowed(sessionId, 'dingtalk')
       this._assertSessionTargetAllowed(sessionId, resolvedStaffId, displayName)
     }
+    if (this._getConfig().enabled === false) {
+      throw new Error('钉钉未连接')
+    }
     const token = await this._getAccessToken()
     const robotCode = this._getConfig().robotCode || ''
     if (!robotCode) {
@@ -2228,12 +2231,21 @@ class DingTalkBridge {
    * 限制：只有当前连接的会话才能介入，避免多会话信息混乱
    */
   onUserMessage(sessionId, userInput, inputImages = null) {
-    if (!this._sessionWebhooks.has(sessionId)) return
+    const webhookInfo = this._sessionWebhooks.get(sessionId) || null
+    const boundTarget = this._sessionTargets.get(sessionId) || null
+    if (!webhookInfo && !boundTarget?.staffId) return
 
     // 检查是否是当前连接的会话（在 sessionMap 中）
+    const sessionMapTarget = webhookInfo
+      ? this.sessionMap
+      : this._targetSessionMap
+    const mapKey = webhookInfo
+      ? null
+      : boundTarget.staffId
     const isCurrentSession = isMappedCurrentSession({
-      sessionMap: this.sessionMap,
+      sessionMap: sessionMapTarget,
       sessionId,
+      mapKey,
     })
     if (!isCurrentSession) {
       console.log(`[DingTalk] Desktop intervention blocked for session ${sessionId}: not current connected session`)
@@ -2264,8 +2276,9 @@ class DingTalkBridge {
 
       this._desktopPendingBlocks.delete(sessionId)
 
-      const webhookInfo = this._sessionWebhooks.get(sessionId)
-      if (!webhookInfo) return
+      const webhookInfo = this._sessionWebhooks.get(sessionId) || null
+      const boundTarget = this._sessionTargets.get(sessionId) || null
+      if (!webhookInfo && !boundTarget?.staffId) return
 
       const responseText = pending.textChunks.join('\n\n')
 
@@ -2281,21 +2294,43 @@ class DingTalkBridge {
           lines.push('')
           lines.push(responseText)
         }
-        this._replyToDingTalk(webhookInfo.webhook, lines.join('\n')).catch(err => {
-          console.error('[DingTalk] Desktop intervention reply failed:', err.message)
-        })
+        const replyText = lines.join('\n')
+        if (webhookInfo?.webhook) {
+          this._replyToDingTalk(webhookInfo.webhook, replyText).catch(err => {
+            console.error('[DingTalk] Desktop intervention reply failed:', err.message)
+          })
+        } else if (boundTarget?.staffId) {
+          this.sendToTarget({
+            sessionId,
+            targetId: boundTarget.staffId,
+            targetType: boundTarget.targetType,
+            displayName: boundTarget.displayName,
+            text: replyText,
+          }).catch(err => {
+            console.error('[DingTalk] Desktop intervention proactive reply failed:', err.message)
+          })
+        }
       }
 
       // 异步发送用户输入的图片（桌面端粘贴的截图等 base64 图片）
-      if (pending.inputImages && pending.inputImages.length > 0) {
-        this._sendBase64Images(pending.inputImages, webhookInfo).catch(err => {
+      const imageSendContext = webhookInfo || (boundTarget?.staffId
+        ? {
+            robotCode: this._getConfig().robotCode || '',
+            senderStaffId: boundTarget.targetType === 'chat' ? '' : boundTarget.staffId,
+            conversationId: boundTarget.targetType === 'chat' ? boundTarget.staffId : '',
+            conversationType: boundTarget.targetType === 'chat' ? '2' : '1',
+          }
+        : null)
+
+      if (imageSendContext && pending.inputImages && pending.inputImages.length > 0) {
+        this._sendBase64Images(pending.inputImages, imageSendContext).catch(err => {
           console.error('[DingTalk] Desktop intervention input image forward failed:', err.message)
         })
       }
 
       // 异步发送 Agent 读取的磁盘图片（与钉钉发起路径保持一致）
-      if (pending.imagePaths.size > 0) {
-        this._sendCollectedImages(pending.imagePaths, webhookInfo).catch(err => {
+      if (imageSendContext && pending.imagePaths.size > 0) {
+        this._sendCollectedImages(pending.imagePaths, imageSendContext).catch(err => {
           console.error('[DingTalk] Desktop intervention image forward failed:', err.message)
         })
       }

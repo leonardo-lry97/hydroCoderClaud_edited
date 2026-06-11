@@ -1404,6 +1404,7 @@ class FeishuBridge {
         return {
           targetId,
           displayName: this._sessionTargets.get(sessionId)?.displayName || targetId,
+          targetType: 'chat',
         }
       }
       const restoredTarget = this._restoreP2PTargetBinding(sessionId, openId, {
@@ -1412,11 +1413,13 @@ class FeishuBridge {
       return {
         targetId: restoredTarget.openId,
         displayName: restoredTarget.displayName,
+        targetType: 'user',
       }
     }
     return {
       targetId: target.openId,
       displayName: target.displayName,
+      targetType: this._sessionIdentities.get(sessionId)?.chatType === 'group' ? 'chat' : 'user',
     }
   }
 
