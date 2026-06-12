@@ -11,10 +11,10 @@
 - 当前内置 MCP 不是能力市场里的普通 MCP，也不是写入用户 MCP 配置的外部 server。
 - 它是在 Agent 会话创建 `queryOptions` 时动态注入的 SDK MCP server。
 - 现有 server 名称是 `hydrodesktop`，暴露桌面端定时任务工具和微信通知工具。
-- 定时任务管理工具默认会注入普通手动聊天会话；对于 `source === 'scheduled'` 的会话，是否继续注入由全局开关 `settings.agent.allowScheduledSessionScheduleTools` 决定，默认开启。
+- 定时任务管理工具会统一注入可用的 Agent 会话，不再按“任务执行会话”做特殊区分。
 - 微信通知工具会注入定时任务执行会话，用于让定时任务主动把结果推送给已绑定的微信目标。
 - 当前通过会话级 `allowedTools` 和 `disallowedTools` 做短期工具路由：允许 `mcp__hydrodesktop__schedule_*`，禁用 Claude Code 内建 `Cron*` 工具，避免用户意图被路由到错误调度系统。
-- `source === 'scheduled'` 当前不再单独屏蔽普通身份 prompt；它只影响定时任务工具是否继续注入。
+- 会话是否绑定 `taskId` 不再影响内置 MCP 注入；只要能力可用，就按同一规则注入。
 - 测试时如果是在“由定时任务自动创建/恢复”的会话里继续聊天，是否能看到 `schedule_*` 工具取决于上述全局开关。
 
 ---
@@ -82,7 +82,7 @@ MCP 公共输入中的调度时间统一使用 `firstRunAt`。`dailyTime` 仍只
 - 定时任务不再维护独立 `apiProfileId` / `modelId`；执行时统一复用绑定会话的当前 runtime。
 - 普通聊天创建的 `sessionBindingMode=current` 任务仍静态绑定创建时的具体会话。
 - embedded app 创建的 `sessionBindingMode=current` 任务是“跟随该 app 当前会话”，不是静态回用旧会话。
-- embedded current 绑定任务在目标 app 当前没有会话时会记一次 `skipped`，不会回落到新建普通 scheduled session。
+- embedded current 绑定任务在目标 app 当前没有会话时会记一次 `skipped`，不会回落到新建独立任务会话。
 
 `hydrodesktop` 还暴露 2 个微信通知工具：
 
@@ -128,7 +128,7 @@ MCP 公共输入中的调度时间统一使用 `firstRunAt`。`dailyTime` 仍只
 ## 当前边界
 
 - 这套机制目前不是通用内置 MCP registry，逻辑集中在 `desktop-capability-query-options.js`。
-- 手动会话的 `allowedTools` 会合并定时任务工具和微信通知工具；定时任务会话在开关开启时也可继续注入定时任务工具，关闭时则只保留微信通知能力。
+- 具备桌面内置能力的会话会按同一规则注入 `allowedTools`；不再因为会话是否关联定时任务而做区别注入。
 - `disallowedTools` 对 Claude Code 内建 `Cron*` 是硬编码短期策略。远期需要更细粒度地区分目标域，而不是一刀切禁用。
 - 内置 MCP 工具与 UI IPC 共享底层 `ScheduledTaskService`，但不是同一入口；行为一致性主要靠服务层和测试保障。
 - GitNexus 当前没有识别出这些工具为标准 MCP tool nodes，理解链路时需要直接看源码和测试。
@@ -136,7 +136,7 @@ MCP 公共输入中的调度时间统一使用 `firstRunAt`。`dailyTime` 仍只
 
 待回头处理的问题：
 
-- 定时任务执行时偶发出现 `Bash: 获取当前日期和时间` 这类无关工具调用/回复，怀疑与定时任务 MCP 注入、系统提示或工具选择策略有关。微信双向聊天阶段完成后，需要回到 `buildDesktopCapabilityQueryOptions()` 和定时任务执行链路排查：确认 scheduled source 会话的 MCP 注入、allowed/disallowedTools、prompt 约束和模型工具选择是否导致任务结果被 Bash 时间查询污染。
+- 定时任务执行时偶发出现 `Bash: 获取当前日期和时间` 这类无关工具调用/回复，怀疑与定时任务 MCP 注入、系统提示或工具选择策略有关。微信双向聊天阶段完成后，需要回到 `buildDesktopCapabilityQueryOptions()` 和定时任务执行链路排查：确认任务触发运行时的 MCP 注入、allowed/disallowedTools、prompt 约束和模型工具选择是否导致任务结果被 Bash 时间查询污染。
 
 ---
 
@@ -203,7 +203,7 @@ MCP 公共输入中的调度时间统一使用 `firstRunAt`。`dailyTime` 仍只
 - `tests/main/desktop-capability-query-options.test.js`
   - 验证 `hydrodesktop` server 和 9 个工具被暴露
   - 验证工具 payload 序列化、任务定位、运行记录、立即执行和删除委托
-  - 验证 `allowedTools` 名称、当前会话默认绑定语义、embedded current-session 跟随语义，以及 scheduled 会话开关控制
+  - 验证 `allowedTools` 名称、当前会话默认绑定语义，以及 embedded current-session 跟随语义
 - `tests/main/agent-interactions.test.js`
   - 验证普通手动会话会注入定时任务 MCP 工具
   - 验证普通身份 prompt 注入与会话级 queryOptions 合并
