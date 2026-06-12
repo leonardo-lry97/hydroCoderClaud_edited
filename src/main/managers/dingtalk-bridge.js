@@ -1742,9 +1742,12 @@ class DingTalkBridge {
     return { success: true }
   }
 
-  async sendToTarget({ sessionId, targetId, targetType, displayName, text, staffId } = {}) {
+  async sendToTarget({ sessionId, targetId, targetType, displayName, text, staffId, imagePaths = [] } = {}) {
     const content = typeof text === 'string' ? text.trim() : ''
-    if (!content) {
+    const normalizedImagePaths = Array.isArray(imagePaths)
+      ? imagePaths.map(item => typeof item === 'string' ? item.trim() : '').filter(Boolean)
+      : []
+    if (!content && normalizedImagePaths.length === 0) {
       throw new Error('发送内容不能为空')
     }
     const resolvedId = targetId || staffId || this._sessionTargets.get(sessionId)?.staffId || ''
@@ -1765,32 +1768,45 @@ class DingTalkBridge {
       throw new Error('钉钉未配置 robotCode，无法主动发送')
     }
     const normalizedTargetType = normalizeDingTalkTargetType(targetType)
-    const body = {
-      robotCode,
-      msgKey: 'sampleText',
-      msgParam: JSON.stringify({ content })
-    }
-    let endpoint = 'https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend'
-    if (normalizedTargetType === 'chat') {
-      endpoint = 'https://api.dingtalk.com/v1.0/robot/groupMessages/send'
-      body.openConversationId = resolvedStaffId
-    } else {
-      body.userIds = [resolvedStaffId]
-    }
-    const response = await globalThis.fetch(
-      endpoint,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-acs-dingtalk-access-token': token
-        },
-        body: JSON.stringify(body)
+    const sendResults = []
+    if (content) {
+      const body = {
+        robotCode,
+        msgKey: 'sampleText',
+        msgParam: JSON.stringify({ content })
       }
-    )
-    const result = await response.json().catch(() => ({}))
-    if (!response.ok) {
-      throw new Error(`钉钉主动发送失败: ${response.status} ${JSON.stringify(result)}`)
+      let endpoint = 'https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend'
+      if (normalizedTargetType === 'chat') {
+        endpoint = 'https://api.dingtalk.com/v1.0/robot/groupMessages/send'
+        body.openConversationId = resolvedStaffId
+      } else {
+        body.userIds = [resolvedStaffId]
+      }
+      const response = await globalThis.fetch(
+        endpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-acs-dingtalk-access-token': token
+          },
+          body: JSON.stringify(body)
+        }
+      )
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(`钉钉主动发送失败: ${response.status} ${JSON.stringify(result)}`)
+      }
+      sendResults.push({ kind: 'text', result })
+    }
+    if (normalizedImagePaths.length > 0) {
+      const sentImageCount = await this._sendCollectedImages(normalizedImagePaths, {
+        robotCode,
+        senderStaffId: resolvedStaffId,
+        conversationId: resolvedStaffId,
+        conversationType: normalizedTargetType === 'chat' ? '2' : '1'
+      })
+      sendResults.push({ kind: 'images', count: sentImageCount })
     }
     if (sessionId) {
       this.bindTarget(sessionId, { targetId: resolvedStaffId, targetType: normalizedTargetType, displayName })
@@ -1798,7 +1814,13 @@ class DingTalkBridge {
         this._markRuntimeProactiveTargetBinding(resolvedStaffId, sessionId)
       }
     }
-    return { success: true, targetId: resolvedStaffId, result }
+    return {
+      success: true,
+      targetId: resolvedStaffId,
+      result: sendResults[0]?.result,
+      sentText: Boolean(content),
+      imageCount: normalizedImagePaths.length
+    }
   }
 
   _restoreRuntimeBinding(sessionId, identity = {}, { mapKey = '' } = {}) {

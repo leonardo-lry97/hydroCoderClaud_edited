@@ -1,3 +1,5 @@
+const { validateLocalImagePaths } = require('./im-utils')
+
 const DESKTOP_CAPABILITY_SYSTEM_PROMPT = [
   'You can manage hydrodesktop scheduled tasks with MCP tools.',
   'You do have direct access to HydroDesktop scheduled tasks through the hydrodesktop MCP server in this session.',
@@ -81,7 +83,7 @@ const IM_BUILTIN_SYSTEM_PROMPT = [
   'Use im_list_targets before sending only when the current session is not already bound to a target, or when the user explicitly wants to choose or change the recipient.',
   'Prefer the channel and targetKey returned by im_list_targets.',
   'If the recipient name matches multiple targets or no target, ask the user to clarify instead of guessing.',
-  'Use im_send only for short text messages to already available built-in IM targets.',
+  'Use im_send for short text messages and local image files to already available built-in IM targets.',
   'Do not claim you can message arbitrary contacts. Only use enabled Hydro Desktop IM channels and targets actually returned by im_list_targets.',
   'After sending, report the channel, recipient displayName, and returned message identifier when available.'
 ].join(' ')
@@ -653,11 +655,17 @@ function resolveImSendArgs(args = {}) {
   const targetId = typeof (args.targetKey || args.targetId || args.userId || args.openId || args.staffId || args.displayName || '') === 'string'
     ? String(args.targetKey || args.targetId || args.userId || args.openId || args.staffId || args.displayName || '').trim()
     : ''
+  const imagePaths = Array.isArray(args.imagePaths)
+    ? args.imagePaths
+      .map(item => typeof item === 'string' ? item.trim() : '')
+      .filter(Boolean)
+    : []
   const sendArgs = {
     channel,
     text: typeof args.text === 'string' ? args.text : '',
   }
   if (targetId) sendArgs.targetId = targetId
+  if (imagePaths.length > 0) sendArgs.imagePaths = imagePaths
   if (targetType) sendArgs.targetType = targetType
   if (typeof args.displayName === 'string' && args.displayName.trim()) sendArgs.displayName = args.displayName.trim()
   if (typeof args.accountId === 'string' && args.accountId.trim()) sendArgs.accountId = args.accountId.trim()
@@ -1395,7 +1403,7 @@ async function buildDesktopCapabilityQueryOptions({
     ),
     tool(
       IM_BUILTIN_TOOL_NAMES[1],
-      '通过 Hydro Desktop 内置 IM 渠道发送一条短文本消息。若当前会话已绑定 IM 目标且用户未要求更换收件人，可直接只传 text 发送到该绑定目标；否则先用 im_list_targets 获取 channel 与 targetKey，再用本工具发送。',
+      '通过 Hydro Desktop 内置 IM 渠道发送文本和本地图片。若当前会话已绑定 IM 目标且用户未要求更换收件人，可直接只传 text 或 imagePaths 发送到该绑定目标；否则先用 im_list_targets 获取 channel 与 targetKey，再用本工具发送。',
       {
         channel: z.enum(['dingtalk', 'feishu', 'enterprise-weixin']).optional().describe('目标 IM 渠道。若当前会话已绑定 IM 目标且不更换收件人，可省略。'),
         targetKey: z.string().min(1).optional().describe('推荐使用 im_list_targets 返回的 targetKey。'),
@@ -1406,10 +1414,17 @@ async function buildDesktopCapabilityQueryOptions({
         userId: z.string().min(1).optional().describe('企业微信兼容字段。'),
         openId: z.string().min(1).optional().describe('飞书兼容字段。'),
         staffId: z.string().min(1).optional().describe('钉钉兼容字段。'),
-        text: z.string().min(1).max(4000).describe('要发送的文本内容。')
+        text: z.string().min(1).max(4000).optional().describe('要发送的文本内容。可为空，但 text 与 imagePaths 不能同时为空。'),
+        imagePaths: z.array(z.string().min(1)).optional().describe('要发送的本地图片绝对路径列表。可单独发送图片，或与 text 一起发送。')
       },
       async (args) => {
         const sendArgs = resolveImSendArgs(args)
+        if (!sendArgs.text.trim() && (!Array.isArray(sendArgs.imagePaths) || sendArgs.imagePaths.length === 0)) {
+          throw new Error('text 与 imagePaths 不能同时为空')
+        }
+        if (Array.isArray(sendArgs.imagePaths) && sendArgs.imagePaths.length > 0) {
+          sendArgs.imagePaths = await validateLocalImagePaths(sendArgs.imagePaths)
+        }
         const explicitChannel = normalizeImText(sendArgs.channel)
         const allImProviders = getImProviders({ includeDisabled: true })
         const currentImProviders = getImProviders()

@@ -29,18 +29,24 @@ module.exports = {
    */
   async _sendCollectedImages(imagePaths, { robotCode, senderStaffId, conversationId, conversationType }) {
     const token = await this._getAccessToken()
+    let sentCount = 0
     for (const filePath of imagePaths) {
       try {
         const stats = await fs.promises.stat(filePath).catch(() => null)
-        if (!stats || stats.size > IMAGE_MAX_SIZE || stats.size === 0) continue
+        if (!stats || stats.size > IMAGE_MAX_SIZE || stats.size === 0) {
+          throw new Error(`Invalid image file: ${filePath}`)
+        }
 
         const mediaId = await this._uploadImage(filePath, token)
         await this._sendImageViaApi(mediaId, { robotCode, senderStaffId, conversationId, conversationType, token })
         console.log(`[DingTalk] Image forwarded: ${filePath}`)
+        sentCount += 1
       } catch (err) {
         console.error(`[DingTalk] Failed to forward image ${filePath}:`, err.message)
+        throw new Error(`钉钉图片发送失败: ${filePath} (${err.message})`)
       }
     }
+    return sentCount
   },
 
   /**

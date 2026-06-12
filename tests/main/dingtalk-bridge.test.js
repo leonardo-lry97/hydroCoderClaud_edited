@@ -360,6 +360,65 @@ describe('DingTalkBridge', () => {
     })
   })
 
+  it('supports proactive DingTalk image-only sends', async () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
+    const session = manager.sessions.get(created.id)
+
+    vi.spyOn(bridge, '_getAccessToken').mockResolvedValue('token')
+    vi.spyOn(bridge, '_sendCollectedImages').mockResolvedValue()
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    bridge.configManager.getConfig = () => ({
+      settings: { agent: { outputBaseDir: tempDir } },
+      dingtalk: { maxHistorySessions: 5, robotCode: 'robot-1' }
+    })
+
+    const result = await bridge.sendToTarget({
+      sessionId: session.id,
+      targetId: 'staff-1',
+      displayName: '张三',
+      imagePaths: ['C:\\workspace\\output\\cover.png']
+    })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(bridge._sendCollectedImages).toHaveBeenCalledWith(
+      ['C:\\workspace\\output\\cover.png'],
+      expect.objectContaining({
+        robotCode: 'robot-1',
+        senderStaffId: 'staff-1',
+        conversationId: 'staff-1',
+        conversationType: '1'
+      })
+    )
+    expect(result).toMatchObject({
+      success: true,
+      targetId: 'staff-1',
+      sentText: false,
+      imageCount: 1
+    })
+  })
+
+  it('fails proactive DingTalk image sends when image forwarding fails', async () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
+    const session = manager.sessions.get(created.id)
+
+    vi.spyOn(bridge, '_getAccessToken').mockResolvedValue('token')
+    vi.spyOn(bridge, '_sendCollectedImages').mockRejectedValue(new Error('钉钉图片发送失败: /tmp/cover.png (upload failed)'))
+    bridge.configManager.getConfig = () => ({
+      settings: { agent: { outputBaseDir: tempDir } },
+      dingtalk: { maxHistorySessions: 5, robotCode: 'robot-1' }
+    })
+
+    await expect(bridge.sendToTarget({
+      sessionId: session.id,
+      targetId: 'staff-1',
+      displayName: '张三',
+      imagePaths: ['/tmp/cover.png']
+    })).rejects.toThrow('钉钉图片发送失败')
+  })
+
   it('rejects sending a DingTalk-bound session to another target before network send', async () => {
     const { bridge, manager } = createHarness()
     const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })

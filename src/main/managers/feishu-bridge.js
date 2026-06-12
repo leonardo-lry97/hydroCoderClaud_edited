@@ -1424,10 +1424,13 @@ class FeishuBridge {
     }
   }
 
-  async sendToTarget({ sessionId, targetId, targetType, displayName, text, openId } = {}) {
+  async sendToTarget({ sessionId, targetId, targetType, displayName, text, openId, imagePaths = [] } = {}) {
     this._syncSessionDatabase()
     const content = typeof text === 'string' ? text.trim() : ''
-    if (!content) {
+    const normalizedImagePaths = Array.isArray(imagePaths)
+      ? imagePaths.map(item => typeof item === 'string' ? item.trim() : '').filter(Boolean)
+      : []
+    if (!content && normalizedImagePaths.length === 0) {
       throw new Error('发送内容不能为空')
     }
     const resolvedId = targetId || openId || this._sessionTargets.get(sessionId)?.openId || ''
@@ -1441,12 +1444,25 @@ class FeishuBridge {
     }
     const receiveIdType = targetType === 'chat' ? 'chat_id' : 'open_id'
     const bindChatType = targetType === 'chat' ? 'group' : 'p2p'
-    const messageId = await this._api.sendTextMessage(receiveIdType, resolvedOpenId, content)
+    let messageId = null
+    if (content) {
+      messageId = await this._api.sendTextMessage(receiveIdType, resolvedOpenId, content)
+    }
+    for (const imagePath of normalizedImagePaths) {
+      const imageKey = await this._api.uploadImage(imagePath)
+      await this._api.sendImageMessage(receiveIdType, resolvedOpenId, imageKey)
+    }
     if (sessionId) {
       this.bindTarget(sessionId, { targetId: resolvedOpenId, targetType: bindChatType, displayName })
       this._clearProactiveRebindSuppressionForSender(resolvedOpenId)
     }
-    return { success: true, messageId, targetId: resolvedOpenId }
+    return {
+      success: true,
+      messageId,
+      targetId: resolvedOpenId,
+      sentText: Boolean(content),
+      imageCount: normalizedImagePaths.length
+    }
   }
 
   _resolveMapKeyForSession(sessionId) {

@@ -723,7 +723,7 @@ describe('EnterpriseWeixinBridge', () => {
       text: '任务已完成',
     })
 
-    expect(result).toEqual({ success: true, targetId: 'user-b' })
+    expect(result).toEqual({ success: true, targetId: 'user-b', sentText: true, imageCount: 0 })
     expect(wsClient.sendMessage).toHaveBeenCalledWith('user-b', {
       msgtype: 'markdown',
       markdown: { content: '任务已完成' },
@@ -734,6 +734,42 @@ describe('EnterpriseWeixinBridge', () => {
       targetType: 'user',
     })
     expect(manager.sessionDatabase.updateImIdentity).toHaveBeenLastCalledWith(created.id, expect.objectContaining({ userId: 'user-b', chatId: '' }))
+  })
+
+  it('supports proactive enterprise weixin image-only sends', async () => {
+    const { bridge, manager, wsClient } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
+    const sendMessageSpy = vi.spyOn(wsClient, 'sendMessage')
+    const sendImageSpy = vi.spyOn(bridge, '_sendImagesToChat').mockResolvedValue(1)
+
+    const result = await bridge.sendToTarget({
+      sessionId: created.id,
+      targetId: 'user-b',
+      displayName: 'HydroCoder',
+      imagePaths: ['C:\\workspace\\output\\cover.png'],
+    })
+
+    expect(sendMessageSpy).not.toHaveBeenCalled()
+    expect(sendImageSpy).toHaveBeenCalledWith('user-b', ['C:\\workspace\\output\\cover.png'])
+    expect(result).toEqual({
+      success: true,
+      targetId: 'user-b',
+      sentText: false,
+      imageCount: 1
+    })
+  })
+
+  it('fails proactive enterprise weixin image sends when image forwarding fails', async () => {
+    const { bridge, manager } = createHarness()
+    const created = manager.create({ type: 'chat', source: 'manual', title: '普通会话' })
+    vi.spyOn(bridge, '_sendImagesToChat').mockRejectedValue(new Error('企业微信图片发送失败: /tmp/cover.png (upload failed)'))
+
+    await expect(bridge.sendToTarget({
+      sessionId: created.id,
+      targetId: 'user-b',
+      displayName: 'HydroCoder',
+      imagePaths: ['/tmp/cover.png'],
+    })).rejects.toThrow('企业微信图片发送失败')
   })
 
   it('reuses the bound session after proactive send without asking history choice again', async () => {

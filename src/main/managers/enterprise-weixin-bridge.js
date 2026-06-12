@@ -1396,16 +1396,22 @@ class EnterpriseWeixinBridge {
   }
 
   async _sendImagesToChat(chatId, imagePaths = []) {
-    if (!this._wsClient || typeof this._wsClient.sendMediaMessage !== 'function') return
+    if (!this._wsClient || typeof this._wsClient.sendMediaMessage !== 'function') return 0
+    let sentCount = 0
     for (const imagePath of imagePaths) {
       const mediaId = await this._uploadImageFile(imagePath)
-      if (!mediaId) continue
+      if (!mediaId) {
+        throw new Error(`企业微信图片上传失败: ${imagePath}`)
+      }
       try {
         await this._wsClient.sendMediaMessage(chatId, 'image', mediaId)
+        sentCount += 1
       } catch (err) {
         console.error('[EnterpriseWeixin] Failed to send proactive image media:', imagePath, err.message)
+        throw new Error(`企业微信图片发送失败: ${imagePath} (${err.message})`)
       }
     }
+    return sentCount
   }
 
   _enqueueInboundMessage(sessionId, frame, message, identity) {
@@ -1680,10 +1686,13 @@ class EnterpriseWeixinBridge {
     }
   }
 
-  async sendToTarget({ sessionId, targetId, targetType, text, displayName, userId } = {}) {
+  async sendToTarget({ sessionId, targetId, targetType, text, displayName, userId, imagePaths = [] } = {}) {
     this._syncSessionDatabase()
     const content = typeof text === 'string' ? text.trim() : ''
-    if (!content) throw new Error('发送内容不能为空')
+    const normalizedImagePaths = Array.isArray(imagePaths)
+      ? imagePaths.map(item => typeof item === 'string' ? item.trim() : '').filter(Boolean)
+      : []
+    if (!content && normalizedImagePaths.length === 0) throw new Error('发送内容不能为空')
 
     const resolvedId = typeof (targetId || userId || '') === 'string' ? (targetId || userId || '').trim() : ''
     if (!resolvedId) throw new Error('targetId 不能为空')
@@ -1694,16 +1703,27 @@ class EnterpriseWeixinBridge {
       this._assertSessionTargetAllowed(sessionId, resolvedId, displayName)
     }
 
-    await this._wsClient.sendMessage(resolvedId, {
-      msgtype: 'markdown',
-      markdown: { content },
-    })
+    if (content) {
+      await this._wsClient.sendMessage(resolvedId, {
+        msgtype: 'markdown',
+        markdown: { content },
+      })
+    }
+    let sentImageCount = 0
+    if (normalizedImagePaths.length > 0) {
+      sentImageCount = await this._sendImagesToChat(resolvedId, normalizedImagePaths)
+    }
 
     if (sessionId) {
       this.bindTarget(sessionId, { targetId: resolvedId, targetType: targetType || 'user', displayName })
     }
 
-    return { success: true, targetId: resolvedId }
+    return {
+      success: true,
+      targetId: resolvedId,
+      sentText: Boolean(content),
+      imageCount: sentImageCount
+    }
   }
 
   bindTarget(sessionId, { targetId, targetType, displayName } = {}) {

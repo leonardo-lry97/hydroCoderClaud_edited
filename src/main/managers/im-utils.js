@@ -4,6 +4,7 @@
  * 从 dingtalk-bridge / feishu-bridge / weixin-bridge 中提取的逐字重复代码。
  */
 
+const fs = require('fs')
 const path = require('path')
 
 // ─── 图片提取 ───
@@ -48,6 +49,47 @@ function normalizePath(rawPath) {
   return rawPath
 }
 
+function isAbsoluteLocalPath(value) {
+  if (typeof value !== 'string') return false
+  const normalizedValue = normalizePath(value.trim())
+  if (!normalizedValue) return false
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(normalizedValue)) return false
+  return path.isAbsolute(normalizedValue)
+}
+
+async function validateLocalImagePaths(imagePaths = []) {
+  const normalizedPaths = Array.isArray(imagePaths)
+    ? imagePaths.map(item => typeof item === 'string' ? normalizePath(item.trim()) : '').filter(Boolean)
+    : []
+
+  if (normalizedPaths.length === 0) {
+    return []
+  }
+
+  const validated = []
+  for (const imagePath of normalizedPaths) {
+    if (!isAbsoluteLocalPath(imagePath)) {
+      throw new Error(`图片路径必须是本地绝对路径: ${imagePath}`)
+    }
+    if (!IMAGE_EXTENSIONS.test(imagePath)) {
+      throw new Error(`图片路径必须是受支持的图片文件: ${imagePath}`)
+    }
+    const stats = await fs.promises.stat(imagePath).catch(() => null)
+    if (!stats || !stats.isFile()) {
+      throw new Error(`图片文件不存在: ${imagePath}`)
+    }
+    if (stats.size <= 0) {
+      throw new Error(`图片文件为空: ${imagePath}`)
+    }
+    if (stats.size > IMAGE_MAX_SIZE) {
+      throw new Error(`图片文件不能超过 ${Math.floor(IMAGE_MAX_SIZE / (1024 * 1024))}MB: ${imagePath}`)
+    }
+    validated.push(imagePath)
+  }
+
+  return validated
+}
+
 // ─── 时间格式化 ───
 
 /**
@@ -78,5 +120,7 @@ module.exports = {
   IMAGE_PATH_MAX_DEPTH,
   extractImagePaths,
   normalizePath,
+  isAbsoluteLocalPath,
+  validateLocalImagePaths,
   formatRelativeTime,
 }

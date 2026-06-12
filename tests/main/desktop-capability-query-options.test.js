@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   createSdkMcpServer: config => config,
@@ -16,6 +19,22 @@ const {
 } = await import('../../src/main/managers/desktop-capability-query-options.js')
 
 describe('desktop capability query options', () => {
+  let tempDir
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hydro-desktop-capability-'))
+  })
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  })
+
+  function createImageFile(name = 'cover.png') {
+    const filePath = path.join(tempDir, name)
+    fs.writeFileSync(filePath, Buffer.from('fake-image'))
+    return filePath
+  }
+
   function parseToolPayload(result) {
     expect(result?.content?.[0]?.type).toBe('text')
     return JSON.parse(result.content[0].text)
@@ -712,7 +731,7 @@ describe('desktop capability query options', () => {
 
     expect(options.appendSystemPrompt).toContain('call im_send directly and default to that bound target')
     expect(options.appendSystemPrompt).toContain('agent群A')
-    expect(tools.im_send.description).toContain('可直接只传 text 发送到该绑定目标')
+    expect(tools.im_send.description).toContain('可直接只传 text 或 imagePaths 发送到该绑定目标')
     expect(tools.im_send.inputSchema.channel.safeParse(undefined).success).toBe(true)
   })
 
@@ -949,6 +968,88 @@ describe('desktop capability query options', () => {
       userId: 'wecom-user-1',
       sessionId: 'chat-im-1'
     })
+  })
+
+  it('passes image paths through unified builtin IM sends', async () => {
+    const {
+      tools,
+      feishuBridge
+    } = await createOptionsWithBuiltinIm()
+    const imagePath = createImageFile()
+
+    await tools.im_send.handler({
+      channel: 'feishu',
+      targetKey: '飞书李四',
+      imagePaths: [imagePath]
+    })
+
+    expect(feishuBridge.sendToTarget).toHaveBeenCalledWith({
+      channel: 'feishu',
+      targetId: 'ou_123',
+      targetType: 'user',
+      displayName: '飞书李四',
+      openId: 'ou_123',
+      text: '',
+      imagePaths: [imagePath],
+      sessionId: 'chat-im-1'
+    })
+  })
+
+  it('accepts POSIX absolute image paths for builtin IM sends', async () => {
+    const {
+      tools,
+      feishuBridge
+    } = await createOptionsWithBuiltinIm()
+    const posixImagePath = path.posix.join('/tmp', `hydro-im-${Date.now()}.png`)
+    fs.mkdirSync(path.dirname(posixImagePath), { recursive: true })
+    fs.writeFileSync(posixImagePath, Buffer.from('fake-image'))
+
+    await tools.im_send.handler({
+      channel: 'feishu',
+      targetKey: '飞书李四',
+      imagePaths: [posixImagePath]
+    })
+
+    expect(feishuBridge.sendToTarget).toHaveBeenCalledWith(expect.objectContaining({
+      imagePaths: [posixImagePath]
+    }))
+
+    fs.rmSync(posixImagePath, { force: true })
+  })
+
+  it('rejects im_send when both text and imagePaths are empty', async () => {
+    const { tools } = await createOptionsWithBuiltinIm()
+
+    await expect(tools.im_send.handler({
+      channel: 'feishu',
+      targetKey: '飞书李四'
+    })).rejects.toThrow('text 与 imagePaths 不能同时为空')
+  })
+
+  it('rejects relative image paths for builtin IM sends', async () => {
+    const { tools, feishuBridge } = await createOptionsWithBuiltinIm()
+
+    await expect(tools.im_send.handler({
+      channel: 'feishu',
+      targetKey: '飞书李四',
+      imagePaths: ['cover.png']
+    })).rejects.toThrow('图片路径必须是本地绝对路径')
+
+    expect(feishuBridge.sendToTarget).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-image local files for builtin IM sends', async () => {
+    const { tools, feishuBridge } = await createOptionsWithBuiltinIm()
+    const filePath = path.join(tempDir, 'notes.txt')
+    fs.writeFileSync(filePath, 'hello')
+
+    await expect(tools.im_send.handler({
+      channel: 'feishu',
+      targetKey: '飞书李四',
+      imagePaths: [filePath]
+    })).rejects.toThrow('图片路径必须是受支持的图片文件')
+
+    expect(feishuBridge.sendToTarget).not.toHaveBeenCalled()
   })
 
   it('uses bound target by default when im_send omits channel and target', async () => {

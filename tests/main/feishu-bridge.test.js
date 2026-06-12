@@ -559,6 +559,34 @@ describe('FeishuBridge', () => {
     })).toThrow(/当前会话已绑定飞书联系人「ou_target_1」/)
   })
 
+  it('supports proactive Feishu image-only sends', async () => {
+    const { configManager, manager, mainWindow } = createManager()
+    const bridge = new FeishuBridge(configManager, manager, mainWindow)
+    const uploadSpy = vi.spyOn(bridge._api, 'uploadImage').mockResolvedValue('img_send_1')
+    const sendImageSpy = vi.spyOn(bridge._api, 'sendImageMessage').mockResolvedValue('om_img_1')
+    const sendTextSpy = vi.spyOn(bridge._api, 'sendTextMessage').mockResolvedValue('om_send_1')
+
+    const created = manager.create({ type: 'chat', source: 'manual', title: '桌面会话', cwd: tempDir })
+    const session = manager.sessions.get(created.id)
+
+    const sendResult = await bridge.sendToTarget({
+      sessionId: session.id,
+      targetId: 'ou_target',
+      displayName: '张三',
+      imagePaths: ['C:\\workspace\\output\\cover.png']
+    })
+
+    expect(sendTextSpy).not.toHaveBeenCalled()
+    expect(uploadSpy).toHaveBeenCalledWith('C:\\workspace\\output\\cover.png')
+    expect(sendImageSpy).toHaveBeenCalledWith('open_id', 'ou_target', 'img_send_1')
+    expect(sendResult).toMatchObject({
+      success: true,
+      targetId: 'ou_target',
+      sentText: false,
+      imageCount: 1
+    })
+  })
+
   it('rejects rebinding a persisted Feishu group target after in-memory binding is lost', () => {
     const { configManager, manager, mainWindow } = createManager()
     const bridge = new FeishuBridge(configManager, manager, mainWindow)
