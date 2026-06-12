@@ -321,7 +321,7 @@
 - 这一期在当前主线中已经不仅是“接入 ScheduledTaskService”，还补齐了 embedded current-session 跟随语义
 - 对水文工作台这类 embedded app 而言，`sessionBindingMode=current` 现在表示“跟随该 app 当前会话”
 - 当页面执行 `/clear` 或用户新建 embedded 会话后，后续定时任务会自动跟到新的当前会话
-- 如果该 app 当前无会话，任务会 `skipped`，而不是创建普通后台 scheduled 会话
+- 如果该 app 当前无会话，任务会 `skipped`，而不是创建普通后台独立任务会话
 
 ## 5.6 第 5 期：扩展应用平台抽象
 

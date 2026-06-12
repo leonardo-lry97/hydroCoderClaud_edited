@@ -303,7 +303,7 @@ embedded BrowserWindow
 - embedded app 里创建、且 `sessionBindingMode=current` 的定时任务，不再等价于“永远绑定创建当时那个 sessionId”
 - 真实语义是“后续运行时跟随该 app 当前会话”
 - 因此 `/clear` 或 embedded 面板里的“新建会话”会让后续任务执行自动跟到新会话
-- 如果该 app 当前没有可跟随的会话，任务会记一次 `skipped`，而不是偷偷回落到普通后台 scheduled session
+- 如果该 app 当前没有可跟随的会话，任务会记一次 `skipped`，而不是偷偷回落到普通后台独立任务会话
 
 ### 水文工作台专属能力注入
 
@@ -377,10 +377,10 @@ new ScheduledTaskService(configManager, agentSessionManager)
 
 - 定时任务不再持有独立 `apiProfileId` / `modelId`
 - 任务执行统一复用“绑定会话当前 runtime”
-- `sessionBindingMode=new` 仍表示使用独立 scheduled 会话
+- `sessionBindingMode=new` 仍表示使用独立任务会话
 - 普通聊天创建的 `sessionBindingMode=current` 任务，仍静态绑定具体 `sessionId`
 - embedded app 创建的 `sessionBindingMode=current` 任务，运行时通过 `runtimeState` 里的 embedded 元信息回查 `appId -> currentSessionId`
-- 如果普通/current 绑定会话丢失，执行时会按旧路径重建一个新的默认 scheduled 会话
+- 如果普通/current 绑定会话丢失，执行时会按旧路径重建一个新的默认任务会话
 - 只有 embedded current 绑定任务在“app 当前无会话”时会 `skip`，这是刻意保留的差异语义
 
 ### 支持的调度类型

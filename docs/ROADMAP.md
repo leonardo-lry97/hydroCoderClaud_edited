@@ -210,7 +210,7 @@ Agent / 工具调用链路在 Windows 文件路径上仍有历史兼容问题，
 当前现状补充：
 
 - `hydrodesktop` 定时任务本身已改为跟随绑定会话 runtime，不再维护任务级模型配置
-- 对 `source === 'scheduled'` 会话，定时任务工具是否继续注入由 `allowScheduledSessionScheduleTools` 控制，默认开启
+- 会话是否关联 `taskId` 不再影响定时任务工具注入，所有会话按统一规则处理
 - 普通身份 prompt 不再因为 `scheduled` 来源被单独屏蔽
 
 远期需要补上更细粒度的能力路由与冲突消解，避免“一刀切”禁用内建 Cron 对其他潜在场景造成副作用：

@@ -172,7 +172,7 @@ IM 用户发消息 → 平台 Stream/WS → DingTalk / Feishu / EnterpriseWeixin
 
 - embedded app 的“当前会话”不是纯前端概念，主进程运行态也会记录 `appId -> currentSessionId`
 - 这条指针会被 embedded 定时任务 `sessionBindingMode=current` 复用，因此 `/clear` 和“新建会话”后，任务会自动跟到新的当前会话
-- 如果某个 app 当前没有可跟随会话，相关任务会 `skip`，而不是回落普通 scheduled session
+- 如果某个 app 当前没有可跟随会话，相关任务会 `skip`，而不是回落到独立任务会话
 
 当前已落地并保留入口的内嵌 app 页面：
 

@@ -6,7 +6,7 @@
 > 后续实现补充（2026-05）：
 > - 水文工作台 embedded current-session 绑定的定时任务，现已改为跟随 app 当前会话
 > - `/clear` 与 embedded “新建会话”后，主进程 current session 指针会同步切到新会话
-> - 当 app 当前没有可跟随会话时，相关任务执行会 `skipped`，不再回落普通 scheduled session
+> - 当 app 当前没有可跟随会话时，相关任务执行会 `skipped`，不再回落到独立任务会话
 
 ## 1. 当前问题
 
@@ -219,12 +219,11 @@ Agent Session
 - embedded hydrology session 的三层能力组合
 - hydrology domain 工具返回值
 - 不影响普通 Agent session
-- 不影响 scheduled source session
+- 不影响任务关联会话
 
 当前这部分已进一步落地为：
 
-- 不再通过 `source === 'scheduled'` 单独屏蔽普通身份 prompt
-- scheduled 会话是否继续注入定时任务管理工具，由全局开关控制
+- 不再依赖任何 `scheduled` 特殊会话语义控制 prompt 或工具注入
 
 ## 9. 非目标（历史记录）
 
