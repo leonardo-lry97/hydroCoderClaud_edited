@@ -17,6 +17,7 @@
         :session-source="sessionSource"
         :session-im-channel="sessionImChannel"
         :draft-text="inputText"
+        :draft-images="attachedImages"
         :dingtalk-notify-api="dingtalkNotifyApi"
         :weixin-notify-api="weixinNotifyApi"
         :feishu-notify-api="feishuNotifyApi"

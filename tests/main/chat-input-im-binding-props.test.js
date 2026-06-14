@@ -11,6 +11,14 @@ const tabManagementPath = path.resolve(__dirname, '../../src/renderer/composable
 const mainContentPath = path.resolve(__dirname, '../../src/renderer/pages/main/components/MainContent.vue')
 const notebookChatPanelPath = path.resolve(__dirname, '../../src/renderer/pages/notebook/components/ChatPanel.vue')
 
+const sliceSource = (source, startMarker, endMarker) => {
+  const start = source.indexOf(startMarker)
+  expect(start).toBeGreaterThanOrEqual(0)
+  const end = source.indexOf(endMarker, start + startMarker.length)
+  expect(end).toBeGreaterThan(start)
+  return source.slice(start, end)
+}
+
 describe('chat input IM binding props', () => {
   it('passes session IM channel from the active tab into the toolbar', () => {
     const agentChatTabSource = fs.readFileSync(agentChatTabPath, 'utf-8')
@@ -23,6 +31,7 @@ describe('chat input IM binding props', () => {
     expect(chatInputSource).toContain('sessionTitle:')
     expect(chatInputSource).toContain(':session-title="sessionTitle"')
     expect(chatInputSource).toContain(':session-im-channel="sessionImChannel"')
+    expect(chatInputSource).toContain(':draft-images="attachedImages"')
     expect(toolbarSource).toContain('sessionTitle: { type: String, default: \'\' }')
     expect(toolbarSource).toContain('sessionImChannel: { type: String, default: null }')
     expect(toolbarSource).toContain('return !resolvedImBindingSource.value || resolvedImBindingSource.value === \'dingtalk\'')
@@ -49,11 +58,24 @@ describe('chat input IM binding props', () => {
     const toolbarSource = fs.readFileSync(chatInputToolbarPath, 'utf-8')
 
     expect(toolbarSource).toContain('const buildOutboundImText = (rawText) => {')
+    expect(toolbarSource).toContain('const collectOutboundImages = () => {')
     expect(toolbarSource).toContain("t('agent.imQuickSendSessionPrefix', { title: normalizeSessionTitle() })")
-    expect(toolbarSource).toContain('text: buildOutboundImText(dingtalkText.value)')
-    expect(toolbarSource).toContain('text: buildOutboundImText(weixinText.value)')
-    expect(toolbarSource).toContain('text: buildOutboundImText(feishuText.value)')
-    expect(toolbarSource).toContain('text: buildOutboundImText(enterpriseWeixinText.value)')
+    expect(toolbarSource).toContain('text: buildOutboundImText(resolvedDraftText.value)')
+    expect(toolbarSource).toContain('images: collectOutboundImages()')
+  })
+
+  it('clears the shared draft after a successful IM quick-send', () => {
+    const toolbarSource = fs.readFileSync(chatInputToolbarPath, 'utf-8')
+    const chatInputSource = fs.readFileSync(chatInputPath, 'utf-8')
+    const weixinClickHandler = sliceSource(toolbarSource, 'const handleWeixinButtonClick = () => {', 'const toggleWeixinDropdown = () => {')
+    const weixinSendHandler = sliceSource(toolbarSource, 'const sendWeixinQuickMessage = async () => {', 'const sendFeishuQuickMessage = async () => {')
+
+    expect(toolbarSource).toContain("emit('clear')")
+    expect(weixinClickHandler).not.toContain('requireDraftContent')
+    expect(weixinClickHandler).toContain('toggleWeixinDropdown()')
+    expect(weixinSendHandler).toContain('if (!requireDraftContent()) return')
+    expect(chatInputSource).toContain('@clear="handleClear"')
+    expect(chatInputSource).toContain("attachedImages.value = []")
   })
 
   it('adds an IM unbind action to all bound quick-send dropdowns', () => {

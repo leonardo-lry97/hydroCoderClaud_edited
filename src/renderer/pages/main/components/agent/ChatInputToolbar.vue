@@ -110,7 +110,7 @@
         class="weixin-btn"
         :class="{ sending: weixinSending }"
         :title="weixinBtnTitle"
-        @click="toggleWeixinDropdown"
+        @click="handleWeixinButtonClick"
       >
         <Icon name="weixin" :size="16" />
       </div>
@@ -134,12 +134,10 @@
             </div>
             <div v-if="weixinTargets.length === 0" class="weixin-empty">{{ t('agent.weixinNoTargets') }}</div>
             <template v-else>
-              <textarea
-                v-model="weixinText"
-                class="weixin-message-input"
-                :placeholder="t('agent.weixinQuickSendPlaceholder')"
-                rows="3"
-              />
+              <div class="weixin-message-preview">{{ draftText || t('agent.imQuickSendEmptyHint') }}</div>
+              <div v-if="draftImages.length > 0" class="weixin-image-preview-count">
+                {{ t('agent.imQuickSendImageCount', { count: draftImages.length }) }}
+              </div>
               <div v-if="weixinError" class="weixin-error">{{ weixinError }}</div>
               <div class="weixin-actions">
                 <button class="weixin-action secondary" type="button" @click="closeWeixinDropdown">
@@ -173,7 +171,7 @@
         class="enterprise-weixin-btn"
         :class="{ sending: enterpriseWeixinSending }"
         :title="enterpriseWeixinBtnTitle"
-        @click="toggleEnterpriseWeixinDropdown"
+        @click="handleEnterpriseWeixinButtonClick"
       >
         <Icon name="wecom" :size="16" />
       </div>
@@ -244,12 +242,10 @@
                   </div>
                 </div>
               </div>
-              <textarea
-                v-model="enterpriseWeixinText"
-                class="enterprise-weixin-message-input"
-                :placeholder="t('agent.enterpriseWeixinQuickSendPlaceholder')"
-                rows="3"
-              />
+              <div class="enterprise-weixin-message-preview">{{ draftText || t('agent.imQuickSendEmptyHint') }}</div>
+              <div v-if="draftImages.length > 0" class="enterprise-weixin-image-preview-count">
+                {{ t('agent.imQuickSendImageCount', { count: draftImages.length }) }}
+              </div>
               <div class="enterprise-weixin-actions">
                 <button class="enterprise-weixin-action secondary" type="button" @click="closeEnterpriseWeixinDropdown">
                   {{ t('common.cancel') }}
@@ -283,7 +279,7 @@
         class="dingtalk-btn"
         :class="{ sending: dingtalkSending }"
         :title="dingtalkBtnTitle"
-        @click="toggleDingTalkDropdown"
+        @click="handleDingTalkButtonClick"
       >
         <Icon name="dingtalk" :size="16" />
       </div>
@@ -351,12 +347,10 @@
             <div v-if="dingtalkError" class="dingtalk-error">{{ dingtalkError }}</div>
             <div v-if="dingtalkTargets.length === 0" class="dingtalk-empty">{{ t('agent.dingtalkNoTargets') }}</div>
             <template v-else>
-              <textarea
-                v-model="dingtalkText"
-                class="dingtalk-message-input"
-                :placeholder="t('agent.dingtalkQuickSendPlaceholder')"
-                rows="3"
-              />
+              <div class="dingtalk-message-preview">{{ draftText || t('agent.imQuickSendEmptyHint') }}</div>
+              <div v-if="draftImages.length > 0" class="dingtalk-image-preview-count">
+                {{ t('agent.imQuickSendImageCount', { count: draftImages.length }) }}
+              </div>
               <div class="dingtalk-actions">
                 <button class="dingtalk-action secondary" type="button" @click="closeDingTalkDropdown">
                   {{ t('common.cancel') }}
@@ -389,7 +383,7 @@
         class="feishu-btn"
         :class="{ sending: feishuSending }"
         :title="feishuBtnTitle"
-        @click="toggleFeishuDropdown"
+        @click="handleFeishuButtonClick"
       >
         <Icon name="feishu" :size="16" />
       </div>
@@ -412,12 +406,10 @@
             </div>
             <div v-if="feishuTargets.length === 0" class="feishu-empty">{{ t('agent.feishuNoTargets') }}</div>
             <template v-else>
-              <textarea
-                v-model="feishuText"
-                class="feishu-message-input"
-                :placeholder="t('agent.feishuQuickSendPlaceholder')"
-                rows="3"
-              />
+              <div class="feishu-message-preview">{{ draftText || t('agent.imQuickSendEmptyHint') }}</div>
+              <div v-if="draftImages.length > 0" class="feishu-image-preview-count">
+                {{ t('agent.imQuickSendImageCount', { count: draftImages.length }) }}
+              </div>
               <div v-if="feishuError" class="feishu-error">{{ feishuError }}</div>
               <div class="feishu-actions">
                 <button class="feishu-action secondary" type="button" @click="closeFeishuDropdown">
@@ -459,7 +451,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useDialog } from 'naive-ui'
+import { useDialog, useMessage } from 'naive-ui'
 import { useLocale } from '@composables/useLocale'
 import Icon from '@components/icons/Icon.vue'
 
@@ -479,6 +471,7 @@ const props = defineProps({
   sessionSource: { type: String, default: 'manual' },
   sessionImChannel: { type: String, default: null },
   draftText: { type: String, default: '' },
+  draftImages: { type: Array, default: () => [] },
   dingtalkNotifyApi: {
     type: Object,
     default: null
@@ -510,6 +503,7 @@ const emit = defineEmits([
 
 const { t } = useLocale()
 const dialog = useDialog()
+const message = useMessage()
 const toolbarRootRef = ref(null)
 const showDropdown = ref(false)
 const showApiDropdown = ref(false)
@@ -520,7 +514,6 @@ const capLoading = ref(false)
 const showDingTalkDropdown = ref(false)
 const dingtalkTargets = ref([])
 const selectedDingTalkTargetId = ref(null)
-const dingtalkText = ref('')
 const dingtalkError = ref('')
 const dingtalkLoading = ref(false)
 const dingtalkSending = ref(false)
@@ -530,21 +523,18 @@ const dingtalkAliasSavingTargetId = ref(null)
 const showWeixinDropdown = ref(false)
 const weixinTargets = ref([])
 const selectedWeixinTargetId = ref(null)
-const weixinText = ref('')
 const weixinError = ref('')
 const weixinLoading = ref(false)
 const weixinSending = ref(false)
 const showFeishuDropdown = ref(false)
 const feishuTargets = ref([])
 const selectedFeishuTargetId = ref(null)
-const feishuText = ref('')
 const feishuError = ref('')
 const feishuLoading = ref(false)
 const feishuSending = ref(false)
 const showEnterpriseWeixinDropdown = ref(false)
 const enterpriseWeixinTargets = ref([])
 const selectedEnterpriseWeixinTargetId = ref(null)
-const enterpriseWeixinText = ref('')
 const enterpriseWeixinError = ref('')
 const enterpriseWeixinLoading = ref(false)
 const enterpriseWeixinSending = ref(false)
@@ -570,7 +560,7 @@ const showDingTalkBtn = computed(() => {
 })
 const dingtalkBtnTitle = computed(() => t('agent.dingtalkQuickSendTitle'))
 const selectedDingTalkTarget = computed(() => dingtalkTargets.value.find(target => target.id === selectedDingTalkTargetId.value) || null)
-const canSendDingTalk = computed(() => Boolean(selectedDingTalkTarget.value && dingtalkText.value.trim()))
+const canSendDingTalk = computed(() => Boolean(selectedDingTalkTarget.value))
 const hasBoundDingTalkTarget = computed(() => Boolean(props.sessionImChannel === 'dingtalk' && selectedDingTalkTarget.value))
 const resolvedDingTalkNotifyApi = computed(() => props.dingtalkNotifyApi || window.electronAPI || null)
 const showWeixinBtn = computed(() => {
@@ -581,7 +571,7 @@ const showWeixinBtn = computed(() => {
 })
 const weixinBtnTitle = computed(() => t('agent.weixinQuickSendTitle'))
 const selectedWeixinTarget = computed(() => weixinTargets.value.find(target => target.id === selectedWeixinTargetId.value) || null)
-const canSendWeixin = computed(() => Boolean(selectedWeixinTarget.value && weixinText.value.trim()))
+const canSendWeixin = computed(() => Boolean(selectedWeixinTarget.value))
 const hasBoundWeixinTarget = computed(() => Boolean(props.sessionImChannel === 'weixin' && selectedWeixinTarget.value))
 const resolvedWeixinNotifyApi = computed(() => props.weixinNotifyApi || window.electronAPI || null)
 const showFeishuBtn = computed(() => {
@@ -591,7 +581,7 @@ const showFeishuBtn = computed(() => {
 })
 const feishuBtnTitle = computed(() => t('agent.feishuQuickSendTitle'))
 const selectedFeishuTarget = computed(() => feishuTargets.value.find(target => target.id === selectedFeishuTargetId.value) || null)
-const canSendFeishu = computed(() => Boolean(selectedFeishuTarget.value && feishuText.value.trim()))
+const canSendFeishu = computed(() => Boolean(selectedFeishuTarget.value))
 const hasBoundFeishuTarget = computed(() => Boolean(props.sessionImChannel === 'feishu' && selectedFeishuTarget.value))
 const resolvedFeishuNotifyApi = computed(() => props.feishuNotifyApi || window.electronAPI || null)
 const showEnterpriseWeixinBtn = computed(() => {
@@ -601,9 +591,12 @@ const showEnterpriseWeixinBtn = computed(() => {
 })
 const enterpriseWeixinBtnTitle = computed(() => t('agent.enterpriseWeixinQuickSendTitle'))
 const selectedEnterpriseWeixinTarget = computed(() => enterpriseWeixinTargets.value.find(target => target.id === selectedEnterpriseWeixinTargetId.value) || null)
-const canSendEnterpriseWeixin = computed(() => Boolean(selectedEnterpriseWeixinTarget.value && enterpriseWeixinText.value.trim()))
+const canSendEnterpriseWeixin = computed(() => Boolean(selectedEnterpriseWeixinTarget.value))
 const hasBoundEnterpriseWeixinTarget = computed(() => Boolean(props.sessionImChannel === 'enterprise-weixin' && selectedEnterpriseWeixinTarget.value))
 const resolvedEnterpriseWeixinNotifyApi = computed(() => props.enterpriseWeixinNotifyApi || window.electronAPI || null)
+const resolvedDraftText = computed(() => typeof props.draftText === 'string' ? props.draftText.trim() : '')
+const resolvedDraftImages = computed(() => Array.isArray(props.draftImages) ? props.draftImages : [])
+const hasDraftContent = computed(() => Boolean(resolvedDraftText.value || resolvedDraftImages.value.length > 0))
 
 const isDingTalkChatTarget = (target) => target?.targetType === 'chat'
 
@@ -652,6 +645,26 @@ const closeEnterpriseWeixinBridgeUi = () => {
   enterpriseWeixinEditingTargetId.value = null
   enterpriseWeixinAliasDraft.value = ''
   enterpriseWeixinAliasSavingTargetId.value = null
+}
+
+const collectOutboundImages = () => {
+  return resolvedDraftImages.value
+    .map((image) => {
+      if (!image || typeof image !== 'object') return null
+      const base64 = typeof image.base64 === 'string' ? image.base64.trim() : ''
+      if (!base64) return null
+      return {
+        base64,
+        mediaType: typeof image.mediaType === 'string' && image.mediaType.trim() ? image.mediaType.trim() : 'image/png'
+      }
+    })
+    .filter(Boolean)
+}
+
+const requireDraftContent = () => {
+  if (hasDraftContent.value) return true
+  message.warning(t('agent.imQuickSendEmptyHint'))
+  return false
 }
 
 const resolveBridgeEnabled = (status, fallbackEnabled = false) => {
@@ -1060,6 +1073,10 @@ const saveEnterpriseWeixinAlias = async (target) => {
   }
 }
 
+const handleDingTalkButtonClick = () => {
+  toggleDingTalkDropdown()
+}
+
 const toggleDingTalkDropdown = () => {
   showDingTalkDropdown.value = !showDingTalkDropdown.value
   showDropdown.value = false
@@ -1069,10 +1086,13 @@ const toggleDingTalkDropdown = () => {
   showFeishuDropdown.value = false
   showEnterpriseWeixinDropdown.value = false
   if (showDingTalkDropdown.value) {
-    dingtalkText.value = props.draftText || ''
     dingtalkError.value = ''
     loadDingTalkTargets()
   }
+}
+
+const handleWeixinButtonClick = () => {
+  toggleWeixinDropdown()
 }
 
 const toggleWeixinDropdown = () => {
@@ -1084,10 +1104,13 @@ const toggleWeixinDropdown = () => {
   showFeishuDropdown.value = false
   showEnterpriseWeixinDropdown.value = false
   if (showWeixinDropdown.value) {
-    weixinText.value = props.draftText || ''
     weixinError.value = ''
     loadWeixinTargets()
   }
+}
+
+const handleFeishuButtonClick = () => {
+  toggleFeishuDropdown()
 }
 
 const toggleFeishuDropdown = () => {
@@ -1099,10 +1122,13 @@ const toggleFeishuDropdown = () => {
   showWeixinDropdown.value = false
   showEnterpriseWeixinDropdown.value = false
   if (showFeishuDropdown.value) {
-    feishuText.value = props.draftText || ''
     feishuError.value = ''
     loadFeishuTargets()
   }
+}
+
+const handleEnterpriseWeixinButtonClick = () => {
+  toggleEnterpriseWeixinDropdown()
 }
 
 const toggleEnterpriseWeixinDropdown = () => {
@@ -1114,7 +1140,6 @@ const toggleEnterpriseWeixinDropdown = () => {
   showWeixinDropdown.value = false
   showFeishuDropdown.value = false
   if (showEnterpriseWeixinDropdown.value) {
-    enterpriseWeixinText.value = props.draftText || ''
     enterpriseWeixinError.value = ''
     enterpriseWeixinActionCommand.value = ''
     loadEnterpriseWeixinTargets()
@@ -1273,7 +1298,8 @@ const unbindEnterpriseWeixinTarget = async () => {
 
 const sendDingTalkQuickMessage = async () => {
   const dingtalkApi = resolvedDingTalkNotifyApi.value
-  if (!canSendDingTalk.value || !props.sessionId || !dingtalkApi?.sendDingTalkText) return
+  if (!selectedDingTalkTarget.value || !props.sessionId || !dingtalkApi?.sendDingTalkText) return
+  if (!requireDraftContent()) return
   dingtalkSending.value = true
   dingtalkError.value = ''
   try {
@@ -1284,14 +1310,16 @@ const sendDingTalkQuickMessage = async () => {
       targetId: target.id,
       targetType: target.targetType || 'user',
       displayName: target.displayName || target.name || target.userId || target.id,
-      text: buildOutboundImText(dingtalkText.value)
+      text: buildOutboundImText(resolvedDraftText.value),
+      images: collectOutboundImages()
     })
-    if (result?.error) {
-      console.error('[ChatInputToolbar] send dingtalk failed:', result.error)
-      dingtalkError.value = result.error || t('agent.dingtalkQuickSendFailed')
+    if (result?.error || result?.success === false) {
+      console.error('[ChatInputToolbar] send dingtalk failed:', result?.error)
+      dingtalkError.value = result?.error || t('agent.dingtalkQuickSendFailed')
     } else {
       showDingTalkDropdown.value = false
       notifyImBindingUpdated()
+      emit('clear')
     }
   } catch (err) {
     console.error('[ChatInputToolbar] send dingtalk error:', err)
@@ -1303,7 +1331,8 @@ const sendDingTalkQuickMessage = async () => {
 
 const sendWeixinQuickMessage = async () => {
   const weixinApi = resolvedWeixinNotifyApi.value
-  if (!canSendWeixin.value || !props.sessionId || !weixinApi?.sendWeixinNotifyText) return
+  if (!selectedWeixinTarget.value || !props.sessionId || !weixinApi?.sendWeixinNotifyText) return
+  if (!requireDraftContent()) return
   weixinSending.value = true
   weixinError.value = ''
   try {
@@ -1312,14 +1341,16 @@ const sendWeixinQuickMessage = async () => {
       sessionId: props.sessionId,
       accountId: target.accountId,
       targetId: target.id,
-      text: buildOutboundImText(weixinText.value)
+      text: buildOutboundImText(resolvedDraftText.value),
+      images: collectOutboundImages()
     })
-    if (result?.error) {
-      console.error('[ChatInputToolbar] send weixin failed:', result.error)
-      weixinError.value = result.error || t('agent.weixinQuickSendFailed')
+    if (result?.error || result?.success === false) {
+      console.error('[ChatInputToolbar] send weixin failed:', result?.error)
+      weixinError.value = result?.error || t('agent.weixinQuickSendFailed')
     } else {
       showWeixinDropdown.value = false
       notifyImBindingUpdated()
+      emit('clear')
     }
   } catch (err) {
     console.error('[ChatInputToolbar] send weixin error:', err)
@@ -1331,7 +1362,8 @@ const sendWeixinQuickMessage = async () => {
 
 const sendFeishuQuickMessage = async () => {
   const feishuApi = resolvedFeishuNotifyApi.value
-  if (!canSendFeishu.value || !props.sessionId || !feishuApi?.sendFeishuNotifyText) return
+  if (!selectedFeishuTarget.value || !props.sessionId || !feishuApi?.sendFeishuNotifyText) return
+  if (!requireDraftContent()) return
   feishuSending.value = true
   feishuError.value = ''
   try {
@@ -1341,14 +1373,16 @@ const sendFeishuQuickMessage = async () => {
       openId: target.openId || target.id,
       targetType: target.targetType || 'user',
       displayName: target.displayName || target.name || target.userId || target.id,
-      text: buildOutboundImText(feishuText.value)
+      text: buildOutboundImText(resolvedDraftText.value),
+      images: collectOutboundImages()
     })
-    if (result?.error) {
-      console.error('[ChatInputToolbar] send feishu failed:', result.error)
-      feishuError.value = result.error || t('agent.feishuQuickSendFailed')
+    if (result?.error || result?.success === false) {
+      console.error('[ChatInputToolbar] send feishu failed:', result?.error)
+      feishuError.value = result?.error || t('agent.feishuQuickSendFailed')
     } else {
       showFeishuDropdown.value = false
       notifyImBindingUpdated()
+      emit('clear')
     }
   } catch (err) {
     console.error('[ChatInputToolbar] send feishu error:', err)
@@ -1360,7 +1394,8 @@ const sendFeishuQuickMessage = async () => {
 
 const sendEnterpriseWeixinQuickMessage = async () => {
   const enterpriseWeixinApi = resolvedEnterpriseWeixinNotifyApi.value
-  if (!canSendEnterpriseWeixin.value || !props.sessionId || !enterpriseWeixinApi?.sendEnterpriseWeixinText) return
+  if (!selectedEnterpriseWeixinTarget.value || !props.sessionId || !enterpriseWeixinApi?.sendEnterpriseWeixinText) return
+  if (!requireDraftContent()) return
   enterpriseWeixinSending.value = true
   enterpriseWeixinError.value = ''
   try {
@@ -1371,14 +1406,16 @@ const sendEnterpriseWeixinQuickMessage = async () => {
       targetId: target.id,
       targetType: target.targetType || 'user',
       displayName: target.displayName || target.name || target.userId || target.id,
-      text: buildOutboundImText(enterpriseWeixinText.value)
+      text: buildOutboundImText(resolvedDraftText.value),
+      images: collectOutboundImages()
     })
-    if (result?.error) {
-      console.error('[ChatInputToolbar] send enterprise weixin failed:', result.error)
-      enterpriseWeixinError.value = result.error || t('agent.enterpriseWeixinQuickSendFailed')
+    if (result?.error || result?.success === false) {
+      console.error('[ChatInputToolbar] send enterprise weixin failed:', result?.error)
+      enterpriseWeixinError.value = result?.error || t('agent.enterpriseWeixinQuickSendFailed')
     } else {
       showEnterpriseWeixinDropdown.value = false
       notifyImBindingUpdated()
+      emit('clear')
     }
   } catch (err) {
     console.error('[ChatInputToolbar] send enterprise weixin error:', err)
