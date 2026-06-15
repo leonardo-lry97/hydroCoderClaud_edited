@@ -12,6 +12,7 @@ export default {
     edit: '编辑',
     view: '查看',
     add: '添加',
+    manage: '管理',
     close: '关闭',
     browse: '浏览',
     expand: '展开',
@@ -1031,6 +1032,7 @@ export default {
     title: '服务商管理',
     subtitle: '管理 API 服务商定义',
     addProvider: '添加服务商',
+    addLinkedProfile: '新增关联 API 配置',
     editProvider: '编辑服务商',
     deleteProvider: '删除服务商',
     providerName: '服务商名称',
@@ -1039,14 +1041,19 @@ export default {
     defaultBaseUrl: '默认接口地址',
     defaultModelIds: '默认模型 ID 列表',
     defaultModelIdsPlaceholder: '每行一个模型 ID，例如\nclaude-sonnet-4-6\nclaude-opus-4-6',
-    defaultModelMapping: '默认层级映射',
+    defaultModelMapping: '默认层级映射（仅用于开发者模式）',
     defaultModelMappingHint: '可选。填写后会注入 opus / sonnet / haiku 对应的默认环境变量。',
     deleteConfirm: '确定要删除此服务商吗？',
     deleteSuccess: '服务商已删除',
     saveSuccess: '服务商已保存',
     cannotDeleteBuiltIn: '内置服务商无法删除',
     cannotEditBuiltIn: '内置服务商无法编辑',
-    providerInUse: '该服务商正在被使用，无法删除'
+    providerInUse: '该服务商正在被使用，无法删除',
+    linkedProfiles: '关联 API 配置',
+    linkedProfilesTitle: '{provider} 的 API 配置',
+    linkedProfilesSubtitle: '直接在当前服务商下创建、测试和维护关联的 API 配置。',
+    noLinkedProfiles: '当前服务商还没有关联的 API 配置',
+    selectProviderHint: '选择一个服务商后，可直接在右侧管理它的关联 API 配置。'
   },
 
   // 全局设置

@@ -51,6 +51,7 @@
             <n-select
               v-model:value="formData.serviceProvider"
               :options="providerOptions"
+              :disabled="!!lockedProviderId"
               @update:value="onServiceProviderChange"
             />
           </n-form-item>
@@ -91,7 +92,7 @@
       <n-grid :cols="2" :x-gap="24">
         <n-grid-item>
           <n-form-item :label="t('profileManager.baseUrl')">
-            <n-input v-model:value="formData.baseUrl" :placeholder="t('profileManager.baseUrlPlaceholder')" />
+            <n-input :value="resolvedBaseUrl" readonly />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
@@ -183,7 +184,11 @@ const props = defineProps({
   profile: Object,
   isEdit: Boolean,
   providers: Array,
-  testing: Boolean
+  testing: Boolean,
+  lockedProviderId: {
+    type: String,
+    default: ''
+  }
 })
 
 const emit = defineEmits(['update:show', 'save', 'test'])
@@ -259,6 +264,14 @@ const getActiveProvider = (serviceProvider = formData.value.serviceProvider) => 
   return props.providers?.find(provider => provider.id === serviceProvider) || null
 }
 
+const resolvedBaseUrl = computed(() => {
+  const providerBaseUrl = getActiveProvider()?.baseUrl
+  if (typeof providerBaseUrl === 'string' && providerBaseUrl.trim()) {
+    return providerBaseUrl.trim()
+  }
+  return typeof formData.value.baseUrl === 'string' ? formData.value.baseUrl.trim() : ''
+})
+
 const providerModelIds = computed(() => {
   return normalizeModelIds(getActiveProvider()?.defaultModels)
 })
@@ -282,32 +295,6 @@ const modelSelectPlaceholder = computed(() => {
   return t('profileManager.noModelIds')
 })
 
-// Watch for profile changes to populate form
-watch(() => props.profile, (newProfile) => {
-  if (newProfile) {
-    formData.value = {
-      ...defaultFormData(),
-      ...newProfile,
-      selectedModelId: typeof newProfile.selectedModelId === 'string' ? newProfile.selectedModelId.trim() : '',
-      requestTimeout: (newProfile.requestTimeout || 120000) / 1000
-    }
-  } else {
-    formData.value = defaultFormData()
-  }
-}, { immediate: true })
-
-// Watch for proxy toggle to auto-fill defaults
-watch(() => formData.value.useProxy, (useProxy) => {
-  if (useProxy) {
-    if (!formData.value.httpsProxy) {
-      formData.value.httpsProxy = 'http://127.0.0.1:7890'
-    }
-    if (!formData.value.httpProxy) {
-      formData.value.httpProxy = 'http://127.0.0.1:7890'
-    }
-  }
-})
-
 const onServiceProviderChange = (value) => {
   const provider = props.providers?.find(p => p.id === value)
   if (provider) {
@@ -324,6 +311,38 @@ const onServiceProviderChange = (value) => {
   }
 }
 
+// Watch for profile changes to populate form
+watch(() => props.profile, (newProfile) => {
+  if (newProfile) {
+    formData.value = {
+      ...defaultFormData(),
+      ...newProfile,
+      selectedModelId: typeof newProfile.selectedModelId === 'string' ? newProfile.selectedModelId.trim() : '',
+      requestTimeout: (newProfile.requestTimeout || 120000) / 1000
+    }
+  } else {
+    formData.value = defaultFormData()
+  }
+}, { immediate: true })
+
+watch(() => props.lockedProviderId, (providerId) => {
+  if (!providerId) return
+  formData.value.serviceProvider = providerId
+  onServiceProviderChange(providerId)
+}, { immediate: true })
+
+// Watch for proxy toggle to auto-fill defaults
+watch(() => formData.value.useProxy, (useProxy) => {
+  if (useProxy) {
+    if (!formData.value.httpsProxy) {
+      formData.value.httpsProxy = 'http://127.0.0.1:7890'
+    }
+    if (!formData.value.httpProxy) {
+      formData.value.httpProxy = 'http://127.0.0.1:7890'
+    }
+  }
+})
+
 const handleSave = async () => {
   try {
     await formRef.value?.validate()
@@ -336,7 +355,7 @@ const handleSave = async () => {
       serviceProvider: formData.value.serviceProvider,
       authType: formData.value.authType,
       authToken: formData.value.authToken,
-      baseUrl: formData.value.baseUrl,
+      baseUrl: resolvedBaseUrl.value,
       selectedModelId,
       requestTimeout: formData.value.requestTimeout * 1000,
       disableNonessentialTraffic: formData.value.disableNonessentialTraffic,
@@ -354,7 +373,7 @@ const handleSave = async () => {
 
 const handleTest = () => {
   const config = {
-    baseUrl: formData.value.baseUrl,
+    baseUrl: resolvedBaseUrl.value,
     authToken: formData.value.authToken,
     authType: formData.value.authType,
     serviceProvider: formData.value.serviceProvider,

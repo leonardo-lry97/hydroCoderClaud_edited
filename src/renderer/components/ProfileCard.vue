@@ -28,11 +28,11 @@
     </div>
 
     <template #action>
-      <n-space justify="end">
-        <n-button size="small" :loading="testing" @click="$emit('test', profile)">{{ t('common.test') }}</n-button>
-        <n-button size="small" @click="$emit('edit', profile)">{{ t('common.edit') }}</n-button>
+      <n-space justify="end" :size="8">
+        <n-button size="tiny" :loading="testing" @click="$emit('test', profile)">{{ t('common.test') }}</n-button>
+        <n-button size="tiny" @click="$emit('edit', profile)">{{ t('common.edit') }}</n-button>
         <n-button
-          size="small"
+          size="tiny"
           type="error"
           :disabled="profile.isDefault"
           @click="$emit('delete', profile.id)"
@@ -64,7 +64,7 @@ const props = defineProps({
 defineEmits(['edit', 'delete', 'set-default', 'test'])
 
 const maskedApiKey = computed(() => {
-  const key = props.profile.apiKey || ''
+  const key = props.profile.authToken || props.profile.apiKey || ''
   if (key.length <= 8) return '********'
   return key.substring(0, 4) + '****' + key.substring(key.length - 4)
 })
@@ -73,18 +73,26 @@ const maskedApiKey = computed(() => {
 <style scoped>
 .profile-card {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-  height: 100%;
+}
+
+.profile-card:deep(.n-card__content) {
+  padding: 20px 24px 16px;
+}
+
+.profile-card:deep(.n-card__action) {
+  padding: 14px 24px 16px;
 }
 
 .profile-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  gap: 12px;
 }
 
 .profile-name {
@@ -94,12 +102,13 @@ const maskedApiKey = computed(() => {
 }
 
 .profile-name .icon {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .profile-name .name {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
+  line-height: 1.3;
 }
 
 .default-switch {
@@ -111,29 +120,33 @@ const maskedApiKey = computed(() => {
 .profile-info {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 12px;
 }
 
 .label {
   color: #8c8c8c;
   font-weight: 500;
   flex-shrink: 0;
+  line-height: 1.5;
 }
 
 .value {
   text-align: right;
+  min-width: 0;
+  line-height: 1.5;
 }
 
 .url-value {
   font-size: 12px;
-  max-width: 180px;
+  max-width: 190px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

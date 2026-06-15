@@ -11,6 +11,7 @@ export default {
     edit: 'Edit',
     view: 'View',
     add: 'Add',
+    manage: 'Manage',
     close: 'Close',
     browse: 'Browse',
     expand: 'Expand',
@@ -1028,6 +1029,7 @@ export default {
     title: 'Provider Manager',
     subtitle: 'Manage API provider definitions',
     addProvider: 'Add Provider',
+    addLinkedProfile: 'Add Linked API Profile',
     editProvider: 'Edit Provider',
     deleteProvider: 'Delete Provider',
     providerName: 'Provider Name',
@@ -1036,14 +1038,19 @@ export default {
     defaultBaseUrl: 'Default Base URL',
     defaultModelIds: 'Default Model ID List',
     defaultModelIdsPlaceholder: 'One model ID per line, for example\nclaude-sonnet-4-6\nclaude-opus-4-6',
-    defaultModelMapping: 'Default Tier Mapping',
+    defaultModelMapping: 'Default Tier Mapping (Developer Mode Only)',
     defaultModelMappingHint: 'Optional. Filled values are injected as the default opus / sonnet / haiku environment variables.',
     deleteConfirm: 'Are you sure you want to delete this provider?',
     deleteSuccess: 'Provider deleted',
     saveSuccess: 'Provider saved',
     cannotDeleteBuiltIn: 'Built-in providers cannot be deleted',
     cannotEditBuiltIn: 'Built-in providers cannot be edited',
-    providerInUse: 'This provider is in use and cannot be deleted'
+    providerInUse: 'This provider is in use and cannot be deleted',
+    linkedProfiles: 'Linked API Profiles',
+    linkedProfilesTitle: 'API Profiles for {provider}',
+    linkedProfilesSubtitle: 'Create, test, and manage linked API profiles directly within this provider.',
+    noLinkedProfiles: 'No API profiles are linked to this provider yet',
+    selectProviderHint: 'Select a provider to manage its linked API profiles on the right.'
   },
 
   // Global Settings
