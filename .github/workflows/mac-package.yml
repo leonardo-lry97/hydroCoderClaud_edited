@@ -1,0 +1,107 @@
+name: Manual macOS Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to build, e.g. main or v1.7.82'
+        required: false
+        default: 'main'
+      build_arm64:
+        description: 'Build Apple Silicon installer'
+        type: boolean
+        required: false
+        default: true
+      build_x64:
+        description: 'Build Intel installer'
+        type: boolean
+        required: false
+        default: true
+
+env:
+  CI: true
+
+jobs:
+  build-macos-arm64:
+    if: ${{ github.event.inputs.build_arm64 == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vue
+        run: npm run build:vue
+
+      - name: Build Electron package
+        run: npx electron-builder --mac dmg zip --arm64 --publish never
+
+      - name: Package installer bundle
+        run: bash scripts/package-mac-installers.sh "$(node -p "require('./package.json').version")" dist arm64
+
+      - name: Upload arm64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-package-arm64
+          path: |
+            dist/*darwin-arm64.dmg
+            dist/*darwin-arm64.zip
+            dist/*macos-arm64-installer.tar.gz
+            dist/*darwin-arm64.dmg.blockmap
+            dist/*darwin-arm64.zip.blockmap
+            dist/latest-mac.yml
+          if-no-files-found: error
+
+  build-macos-x64:
+    if: ${{ github.event.inputs.build_x64 == 'true' }}
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vue
+        run: npm run build:vue
+
+      - name: Build Electron package
+        run: npx electron-builder --mac dmg zip --x64 --publish never
+
+      - name: Package installer bundle
+        run: bash scripts/package-mac-installers.sh "$(node -p "require('./package.json').version")" dist x64
+
+      - name: Upload x64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-package-x64
+          path: |
+            dist/*darwin-x64.dmg
+            dist/*darwin-x64.zip
+            dist/*macos-x64-installer.tar.gz
+            dist/*darwin-x64.dmg.blockmap
+            dist/*darwin-x64.zip.blockmap
+            dist/latest-mac.yml
+          if-no-files-found: error

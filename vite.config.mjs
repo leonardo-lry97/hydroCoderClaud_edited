@@ -27,6 +27,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         home: path.resolve(__dirname, 'src/renderer/index.html'),
+        workbench: path.resolve(__dirname, 'src/renderer/pages/workbench/index.html'),
+        webChat: path.resolve(__dirname, 'src/renderer/pages/web-chat/index.html'),
         main: path.resolve(__dirname, 'src/renderer/pages/main/index.html'),
         modelSettings: path.resolve(__dirname, 'src/renderer/pages/model-settings/index.html'),
         profileManager: path.resolve(__dirname, 'src/renderer/pages/profile-manager/index.html'),

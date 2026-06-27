@@ -171,13 +171,15 @@
       <section class="hero">
         <div class="card">
           <span class="eyebrow">Hydro Desktop · Web MVP</span>
-          <h1>已适配为可部署到 Vercel 的浏览器演示版入口</h1>
+          <h1>已增加可真实对话的 Web 端入口</h1>
           <p>
-            这个仓库原本是 Electron 桌面应用。当前 Web MVP 为 Vercel 补齐了根路径首页、浏览器端
-            <code>electronAPI</code> 兼容层和多页面访问入口，便于在线演示 UI 与配置能力。
+            这个仓库原本是 Electron 桌面应用。当前版本新增了一个独立的 Web Chat 页面，聊天请求通过
+            Node 后端代理到 <code>DeepSeek API</code>，密钥只保留在服务端环境变量，不进入前端包。
           </p>
           <div class="hero-actions">
-            <a class="button primary" href="./pages/main/index.html">打开主工作台</a>
+            <a class="button primary" href="./pages/workbench/index.html">打开第三阶段工作台</a>
+            <a class="button secondary" href="./pages/web-chat/index.html">打开在线对话版</a>
+            <a class="button secondary" href="./pages/main/index.html">打开主工作台</a>
             <a class="button secondary" href="./pages/provider-manager/index.html">服务商管理</a>
             <a class="button secondary" href="./pages/settings-workbench/index.html">能力管理</a>
           </div>
@@ -187,16 +189,17 @@
           <div class="section">
             <h2>当前可用</h2>
             <div class="tips">
+              <div class="tip">第三阶段工作台已整合任务模板、任务记录和会话资产</div>
+              <div class="tip">通过服务端代理与 DeepSeek 进行真实对话</div>
               <div class="tip">浏览主界面、设置页和能力管理页</div>
-              <div class="tip">在浏览器里用 Mock 数据演示主题、语言和基础配置</div>
-              <div class="tip">直接作为静态站点部署到 Vercel</div>
+              <div class="tip">在浏览器里用 Mock 数据演示其他配置页面</div>
             </div>
           </div>
           <div class="section">
             <h2>当前限制</h2>
             <div class="tips">
-              <div class="tip">CLI、PTY、SQLite、本地文件读写仍需桌面端或服务端支持</div>
-              <div class="tip">Agent 对话与终端会显示为 Web Demo 降级能力</div>
+              <div class="tip">当前在线对话版只覆盖聊天链路，未接入本地终端和文件系统</div>
+              <div class="tip">要线上部署需配一个真正的 Node 服务端，不再是纯静态 Vercel 站点</div>
             </div>
           </div>
         </div>
@@ -205,6 +208,14 @@
       <section class="section">
         <h2>页面入口</h2>
         <div class="grid">
+          <a class="mini-card" href="./pages/workbench/index.html">
+            <h3>第三阶段工作台</h3>
+            <p>把任务模板、任务记录、在线对话和会话资产整合到一个正式入口里。</p>
+          </a>
+          <a class="mini-card" href="./pages/web-chat/index.html">
+            <h3>在线对话版</h3>
+            <p>通过后端代理调用 DeepSeek，验证真实聊天链路已经跑通。</p>
+          </a>
           <a class="mini-card" href="./pages/main/index.html">
             <h3>主工作台</h3>
             <p>查看左侧项目、模式切换和主布局，验证浏览器端不再启动即崩。</p>
@@ -237,9 +248,9 @@
       <section class="section">
         <h2>部署说明</h2>
         <div class="tips">
-          <div class="tip">Vercel 输出目录为 <code>src/renderer/pages-dist</code></div>
-          <div class="tip">安装命令使用 <code>npm install --ignore-scripts</code>，避免 Electron 原生模块在 Vercel 里重编译</div>
-          <div class="tip">构建命令使用 <code>npm run build:vue</code></div>
+          <div class="tip">静态页面构建目录仍为 <code>src/renderer/pages-dist</code></div>
+          <div class="tip">在线对话版启动命令为 <code>DEEPSEEK_API_KEY=... npm run web</code></div>
+          <div class="tip">当前阶段要部署真实聊天功能，需要 Node 服务端而不是纯静态托管</div>
         </div>
       </section>
     </main>

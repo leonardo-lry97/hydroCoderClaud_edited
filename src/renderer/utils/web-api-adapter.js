@@ -27,10 +27,15 @@ const defaultState = {
       defaultModels: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5'],
     },
     {
-      id: 'openai-compatible',
-      name: 'OpenAI Compatible',
-      baseUrl: 'https://api.openai.com/v1',
-      defaultModels: ['gpt-4.1', 'gpt-4o-mini'],
+      id: 'deepseek',
+      name: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      defaultModels: ['deepseek-chat', 'deepseek-reasoner'],
+      defaultModelMapping: {
+        opus: 'deepseek-reasoner',
+        sonnet: 'deepseek-chat',
+        haiku: 'deepseek-chat',
+      },
     },
   ],
   apiProfiles: [
@@ -39,7 +44,9 @@ const defaultState = {
       name: 'Default Profile',
       icon: 'AI',
       isDefault: true,
-      serviceProvider: 'official',
+      serviceProvider: 'deepseek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      selectedModelId: 'deepseek-chat',
     },
   ],
   projects: [
@@ -73,6 +80,40 @@ const detectLocale = () => {
   return lang.startsWith('zh') ? 'zh-CN' : 'en-US'
 }
 
+const migrateSavedProviders = (providers) => {
+  if (!Array.isArray(providers)) return clone(defaultState.providers)
+
+  return providers.map((provider) => {
+    if (provider?.id !== 'openai-compatible') return provider
+    return {
+      ...provider,
+      id: 'deepseek',
+      name: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      defaultModels: ['deepseek-chat', 'deepseek-reasoner'],
+      defaultModelMapping: {
+        opus: 'deepseek-reasoner',
+        sonnet: 'deepseek-chat',
+        haiku: 'deepseek-chat',
+      },
+    }
+  })
+}
+
+const migrateSavedProfiles = (profiles) => {
+  if (!Array.isArray(profiles)) return clone(defaultState.apiProfiles)
+
+  return profiles.map((profile) => {
+    if (profile?.serviceProvider !== 'openai-compatible') return profile
+    return {
+      ...profile,
+      serviceProvider: 'deepseek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      selectedModelId: profile?.selectedModelId || 'deepseek-chat',
+    }
+  })
+}
+
 const loadState = () => {
   if (!isBrowser) return clone(defaultState)
   const saved = safeParse(window.localStorage.getItem(STORAGE_KEY), null)
@@ -92,8 +133,8 @@ const loadState = () => {
       ...clone(defaultState).terminal,
       ...(saved?.terminal || {}),
     },
-    providers: Array.isArray(saved?.providers) ? saved.providers : clone(defaultState.providers),
-    apiProfiles: Array.isArray(saved?.apiProfiles) ? saved.apiProfiles : clone(defaultState.apiProfiles),
+    providers: migrateSavedProviders(saved?.providers),
+    apiProfiles: migrateSavedProfiles(saved?.apiProfiles),
     projects: Array.isArray(saved?.projects) ? saved.projects : clone(defaultState.projects),
     activeSessions: Array.isArray(saved?.activeSessions) ? saved.activeSessions : [],
     historySessions: Array.isArray(saved?.historySessions) ? saved.historySessions : [],

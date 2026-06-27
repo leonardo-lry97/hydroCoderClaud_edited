@@ -19,6 +19,8 @@
     "build:win:local": "npm run build:vue && electron-builder --win nsis && powershell -ExecutionPolicy Bypass -File scripts\\local-package-win.ps1",
     "build:linux": "npm run build:vue && electron-builder --linux",
     "build:vue": "vite build",
+    "start:web": "node src/server/web-chat-server.js",
+    "web": "npm run build:vue && npm run start:web",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -104,7 +106,15 @@
       {
         "from": "docs/user-guide",
         "to": "guides",
-        "filter": ["*.html", "*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif", "*.svg"]
+        "filter": [
+          "*.html",
+          "*.png",
+          "*.jpg",
+          "*.jpeg",
+          "*.webp",
+          "*.gif",
+          "*.svg"
+        ]
       }
     ],
     "win": {
@@ -160,5 +170,8 @@
       "icon": "assets/icon.png",
       "category": "Development"
     }
+  },
+  "optionalDependencies": {
+    "dmg-license": "^1.0.11"
   }
 }

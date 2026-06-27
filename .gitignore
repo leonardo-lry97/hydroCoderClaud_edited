@@ -41,6 +41,7 @@ desktop.ini
 # 不应该提交到仓库
 config.json
 data/
+.web-chat-data/
 
 # E2E / Playwright
 e2e/

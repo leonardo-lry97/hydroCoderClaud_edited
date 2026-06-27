@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hydro Web Workbench</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-card">
+        <p class="eyebrow">Hydro Web Workbench</p>
+        <h1>第三阶段工作台</h1>
+        <p class="subcopy">把在线对话、网页任务、任务记录和会话资产收敛到一个统一页面里。</p>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>总览</h2>
+          <button id="refreshOverviewBtn" class="ghost-btn" type="button">刷新</button>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card"><span>会话</span><strong id="overviewSessions">0</strong></div>
+          <div class="stat-card"><span>消息</span><strong id="overviewMessages">0</strong></div>
+          <div class="stat-card"><span>任务</span><strong id="overviewTasks">0</strong></div>
+          <div class="stat-card"><span>模型</span><strong id="overviewModel">-</strong></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>任务模板</h2>
+        </div>
+        <div id="templateList" class="template-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>最近任务</h2>
+        </div>
+        <div id="taskList" class="task-list"></div>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <section class="topbar">
+        <div>
+          <p class="eyebrow">Task Runner</p>
+          <h2>在线任务执行台</h2>
+        </div>
+        <div class="topbar-actions">
+          <a class="ghost-link" href="/web-chat">返回聊天页</a>
+        </div>
+      </section>
+
+      <section class="workspace-grid">
+        <div class="panel form-panel">
+          <div class="panel-head">
+            <h2>运行任务</h2>
+          </div>
+          <label class="field">
+            <span>任务类型</span>
+            <select id="templateSelect"></select>
+          </label>
+          <label class="field">
+            <span>网页 URL（可选）</span>
+            <input id="referenceUrlInput" type="url" placeholder="https://example.com/article" />
+          </label>
+          <label class="field">
+            <span>任务指令</span>
+            <textarea id="promptInput" rows="6" placeholder="例如：请基于这个网页，整理三条可执行建议"></textarea>
+          </label>
+          <label class="field">
+            <span>补充上下文</span>
+            <textarea id="extraContextInput" rows="5" placeholder="可粘贴会议纪要、文档要点或需求背景"></textarea>
+          </label>
+          <div class="button-row">
+            <button id="runTaskBtn" class="primary-btn" type="button">执行任务</button>
+            <button id="newSessionBtn" class="ghost-btn" type="button">新建空会话</button>
+          </div>
+          <div id="runStatus" class="run-status">待命</div>
+        </div>
+
+        <div class="panel result-panel">
+          <div class="panel-head">
+            <h2>任务结果</h2>
+          </div>
+          <div id="resultMeta" class="meta-text">还没有任务结果</div>
+          <pre id="resultOutput" class="result-output">运行一个任务后，结果会显示在这里。</pre>
+        </div>
+
+        <div class="panel session-panel">
+          <div class="panel-head">
+            <h2>关联会话</h2>
+          </div>
+          <div id="sessionList" class="session-list"></div>
+          <div id="messageList" class="message-list"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

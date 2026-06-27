@@ -211,11 +211,11 @@ const availableIcons = ['🟣', '🔵', '🟢', '🟠', '🟡', '🔴', '⚪', '
 const defaultFormData = () => ({
   name: '',
   icon: '🟣',
-  serviceProvider: 'official',
+  serviceProvider: 'deepseek',
   authType: 'api_key',
   authToken: '',
-  baseUrl: 'https://api.anthropic.com',
-  selectedModelId: '',
+  baseUrl: 'https://api.deepseek.com/v1',
+  selectedModelId: 'deepseek-chat',
   requestTimeout: 120,
   disableNonessentialTraffic: true,
   useProxy: false,
@@ -235,6 +235,7 @@ const rules = computed(() => ({
 const providerOptions = computed(() => {
   if (!props.providers || props.providers.length === 0) {
     return [
+      { label: 'DeepSeek', value: 'deepseek' },
       { label: 'Official API', value: 'official' },
       { label: 'Proxy Service', value: 'proxy' },
       { label: 'Other', value: 'other' }

@@ -7,7 +7,16 @@ const { SERVICE_PROVIDERS, LATEST_MODEL_ALIASES } = require('../utils/constants'
 
 const BUILTIN_PROVIDER_MODELS = {
   official: [LATEST_MODEL_ALIASES.sonnet, LATEST_MODEL_ALIASES.opus, LATEST_MODEL_ALIASES.haiku],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
   proxy: [LATEST_MODEL_ALIASES.sonnet, LATEST_MODEL_ALIASES.opus, LATEST_MODEL_ALIASES.haiku]
+}
+
+const BUILTIN_PROVIDER_MODEL_MAPPINGS = {
+  deepseek: {
+    opus: 'deepseek-reasoner',
+    sonnet: 'deepseek-chat',
+    haiku: 'deepseek-chat'
+  }
 }
 
 function normalizeModelIds(modelIds) {
@@ -44,12 +53,13 @@ function normalizeProviderModelMapping(mapping) {
 function normalizeProviderDefinition(definition) {
   const providerId = typeof definition?.id === 'string' ? definition.id.trim() : ''
   const builtinModels = BUILTIN_PROVIDER_MODELS[providerId] || []
+  const builtinModelMapping = BUILTIN_PROVIDER_MODEL_MAPPINGS[providerId] || null
 
   return {
     id: providerId,
     name: definition?.name || providerId,
     baseUrl: definition?.baseUrl || '',
-    defaultModelMapping: normalizeProviderModelMapping(definition?.defaultModelMapping),
+    defaultModelMapping: normalizeProviderModelMapping(definition?.defaultModelMapping || builtinModelMapping),
     defaultModels: normalizeModelIds(definition?.defaultModels || builtinModels)
   }
 }
@@ -63,7 +73,7 @@ function getDefaultProviders() {
     id,
     name: SERVICE_PROVIDERS[id].label,
     baseUrl: SERVICE_PROVIDERS[id].baseUrl || '',
-    defaultModelMapping: null,
+    defaultModelMapping: BUILTIN_PROVIDER_MODEL_MAPPINGS[id] || null,
     defaultModels: BUILTIN_PROVIDER_MODELS[id] || []
   }))
 }
@@ -107,6 +117,11 @@ const providerConfigMixin = {
         ...definition
       })
       definitionMap.set(normalized.id, normalized)
+    }
+
+    for (const builtinDefinition of getDefaultProviders()) {
+      if (!builtinDefinition?.id || definitionMap.has(builtinDefinition.id)) continue
+      definitionMap.set(builtinDefinition.id, builtinDefinition)
     }
 
     for (const profile of Array.isArray(this.config.apiProfiles) ? this.config.apiProfiles : []) {

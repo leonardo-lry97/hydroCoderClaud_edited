@@ -74,6 +74,8 @@ Custom license — personal use, learning, and development permitted; commercial
 2. **运行** — 启动 Hydro Desktop，配置 API 服务商，开始编码
 
 > 详细安装步骤（Node.js、Git Bash、CLI 配置）请参阅完整 [安装指南](docs/INSTALL.md)。
+>
+> 当前仓库同时提供可执行任务的 Web 工作台与 macOS 安装包交付说明，参见 [Web 与 macOS 交付说明](docs/WEB-MAC-DELIVERY.md)。
 
 ### 使用入门
 

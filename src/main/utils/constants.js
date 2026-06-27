@@ -28,6 +28,10 @@ const SERVICE_PROVIDERS = {
     label: '官方 API',
     baseUrl: 'https://api.anthropic.com'
   },
+  deepseek: {
+    label: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1'
+  },
   proxy: {
     label: '中转服务',
     baseUrl: ''

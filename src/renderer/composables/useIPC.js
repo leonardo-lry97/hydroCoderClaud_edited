@@ -8,20 +8,28 @@ import { ref } from 'vue'
 const mockData = {
   listProviders: () => [
     {
+      id: 'deepseek',
+      name: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      defaultModels: ['deepseek-chat', 'deepseek-reasoner']
+    },
+    {
       id: 'official',
       name: '官方 API',
       baseUrl: 'https://api.anthropic.com',
       defaultModels: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5']
-    },
-    {
-      id: 'proxy',
-      name: '中转服务',
-      baseUrl: null,
-      defaultModels: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5']
     }
   ],
   listAPIProfiles: () => [
-    { id: '1', name: '默认配置', icon: '🟣', isDefault: true, serviceProvider: 'official' }
+    {
+      id: '1',
+      name: '默认配置',
+      icon: '🟣',
+      isDefault: true,
+      serviceProvider: 'deepseek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      selectedModelId: 'deepseek-chat'
+    }
   ]
 }
 

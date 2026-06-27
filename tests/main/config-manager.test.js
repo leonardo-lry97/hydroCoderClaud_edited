@@ -89,6 +89,7 @@ describe('ConfigManager', () => {
     it('应该初始化内置服务商及其默认模型 ID 列表', () => {
       const providers = configManager.getServiceProviderDefinitions()
       const official = providers.find(provider => provider.id === 'official')
+      const deepseek = providers.find(provider => provider.id === 'deepseek')
       const proxy = providers.find(provider => provider.id === 'proxy')
 
       expect(official?.defaultModels).toEqual([
@@ -101,6 +102,15 @@ describe('ConfigManager', () => {
         'claude-opus-4-6',
         'claude-haiku-4-5'
       ])
+      expect(deepseek?.defaultModels).toEqual([
+        'deepseek-chat',
+        'deepseek-reasoner'
+      ])
+      expect(deepseek?.defaultModelMapping).toEqual({
+        opus: 'deepseek-reasoner',
+        sonnet: 'deepseek-chat',
+        haiku: 'deepseek-chat'
+      })
       expect(official).not.toHaveProperty('needsMapping')
       expect(proxy).not.toHaveProperty('needsMapping')
     })

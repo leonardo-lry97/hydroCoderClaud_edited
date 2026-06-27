@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hydro Web Chat</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-card">
+        <p class="eyebrow">Hydro Web Chat</p>
+        <h1>在线对话增强版</h1>
+        <p class="subcopy">后端通过 DeepSeek API 代理对话，密钥只保留在服务端环境变量。</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>服务状态</h2>
+          <button id="refreshHealthBtn" class="ghost-btn" type="button">刷新</button>
+        </div>
+        <div class="status-list">
+          <div class="status-row"><span>Provider</span><strong id="providerValue">-</strong></div>
+          <div class="status-row"><span>Model</span><strong id="modelValue">-</strong></div>
+          <div class="status-row"><span>API Key</span><strong id="apiKeyValue">-</strong></div>
+          <div class="status-row"><span>Sessions</span><strong id="sessionCountValue">0</strong></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>新会话</h2>
+        </div>
+        <label class="field">
+          <span>模型</span>
+          <select id="modelSelect">
+            <option value="deepseek-chat">deepseek-chat</option>
+            <option value="deepseek-reasoner">deepseek-reasoner</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>系统提示词</span>
+          <textarea id="systemPromptInput" rows="4">你是 Hydro Web Chat 助手，请用简洁、准确的中文回答。</textarea>
+        </label>
+        <button id="newSessionBtn" class="primary-btn" type="button">创建会话</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>会话列表</h2>
+        </div>
+        <div id="sessionList" class="session-list"></div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <section class="chat-header">
+        <div>
+          <p class="eyebrow">当前会话</p>
+          <h2 id="chatTitle">请先创建会话</h2>
+        </div>
+        <div class="chat-meta">
+          <span id="chatModel">-</span>
+          <span id="chatUpdatedAt">-</span>
+        </div>
+      </section>
+
+      <section id="messageList" class="message-list">
+        <div class="empty-state">
+          <h3>准备就绪</h3>
+          <p>创建一个会话后，就可以通过后端调用 DeepSeek 进行真实对话。</p>
+        </div>
+      </section>
+
+      <section class="composer">
+        <label class="field">
+          <span>消息内容</span>
+          <textarea id="messageInput" rows="5" placeholder="输入问题，例如：请帮我规划一个水利行业 AI 产品的 Web 化路线"></textarea>
+        </label>
+        <label class="field">
+          <span>参考网页 URL（可选）</span>
+          <input id="referenceUrlInput" type="url" placeholder="https://example.com/article" />
+        </label>
+        <label class="field">
+          <span>补充上下文（可选）</span>
+          <textarea id="extraContextInput" rows="4" placeholder="可粘贴文档摘要、需求说明或你希望模型重点参考的内容"></textarea>
+        </label>
+        <label class="field">
+          <span>导入文本文件（可选）</span>
+          <input id="contextFileInput" type="file" accept=".txt,.md,.json,.csv,.html,.js,.ts,.py,.java,.xml,.yml,.yaml" />
+        </label>
+        <div class="composer-actions">
+          <div id="sendStatus" class="send-status">空闲</div>
+          <div class="action-buttons">
+            <button id="sendBtn" class="primary-btn" type="button">流式发送</button>
+            <button id="sendPlainBtn" class="ghost-btn" type="button">普通发送</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
