@@ -26,6 +26,7 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
+        home: path.resolve(__dirname, 'src/renderer/index.html'),
         main: path.resolve(__dirname, 'src/renderer/pages/main/index.html'),
         modelSettings: path.resolve(__dirname, 'src/renderer/pages/model-settings/index.html'),
         profileManager: path.resolve(__dirname, 'src/renderer/pages/profile-manager/index.html'),

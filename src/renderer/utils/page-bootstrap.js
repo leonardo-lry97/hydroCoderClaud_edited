@@ -1,3 +1,7 @@
+import { ensureWebAdapter } from './web-api-adapter'
+
+ensureWebAdapter()
+
 const BOOTSTRAP_I18N = {
   'zh-CN': {
     app: {

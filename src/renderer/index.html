@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hydro Desktop Web Demo</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f3ee;
+        --panel: #fffdf9;
+        --text: #2d2d2d;
+        --muted: #6b6b6b;
+        --border: #e7dfd7;
+        --primary: #da7756;
+        --primary-hover: #c96a4b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: linear-gradient(180deg, #faf7f2 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+
+      .shell {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 48px 20px 64px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: 24px;
+        align-items: stretch;
+      }
+
+      .card {
+        background: rgba(255, 253, 249, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 28px;
+        box-shadow: 0 20px 60px rgba(67, 38, 25, 0.08);
+        backdrop-filter: blur(10px);
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(218, 119, 86, 0.1);
+        color: var(--primary);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      h1 {
+        margin: 18px 0 14px;
+        font-size: clamp(34px, 5vw, 56px);
+        line-height: 1.05;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .hero-actions,
+      .links,
+      .tips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 22px;
+      }
+
+      a.button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 0 18px;
+        border-radius: 12px;
+        text-decoration: none;
+        font-weight: 600;
+        transition: 0.2s ease;
+      }
+
+      a.button.primary {
+        background: var(--primary);
+        color: #fff;
+      }
+
+      a.button.primary:hover {
+        background: var(--primary-hover);
+      }
+
+      a.button.secondary {
+        border: 1px solid var(--border);
+        color: var(--text);
+        background: #fff;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .mini-card {
+        padding: 18px;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: #fff;
+      }
+
+      .mini-card h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+
+      .mini-card p {
+        font-size: 14px;
+      }
+
+      .section {
+        margin-top: 24px;
+      }
+
+      .section h2 {
+        margin: 0 0 8px;
+        font-size: 22px;
+      }
+
+      .tip {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: #fff;
+        border: 1px solid var(--border);
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.05);
+        font-family: "JetBrains Mono", Consolas, monospace;
+        font-size: 13px;
+      }
+
+      @media (max-width: 900px) {
+        .hero,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="card">
+          <span class="eyebrow">Hydro Desktop · Web MVP</span>
+          <h1>已适配为可部署到 Vercel 的浏览器演示版入口</h1>
+          <p>
+            这个仓库原本是 Electron 桌面应用。当前 Web MVP 为 Vercel 补齐了根路径首页、浏览器端
+            <code>electronAPI</code> 兼容层和多页面访问入口，便于在线演示 UI 与配置能力。
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="./pages/main/index.html">打开主工作台</a>
+            <a class="button secondary" href="./pages/provider-manager/index.html">服务商管理</a>
+            <a class="button secondary" href="./pages/settings-workbench/index.html">能力管理</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section">
+            <h2>当前可用</h2>
+            <div class="tips">
+              <div class="tip">浏览主界面、设置页和能力管理页</div>
+              <div class="tip">在浏览器里用 Mock 数据演示主题、语言和基础配置</div>
+              <div class="tip">直接作为静态站点部署到 Vercel</div>
+            </div>
+          </div>
+          <div class="section">
+            <h2>当前限制</h2>
+            <div class="tips">
+              <div class="tip">CLI、PTY、SQLite、本地文件读写仍需桌面端或服务端支持</div>
+              <div class="tip">Agent 对话与终端会显示为 Web Demo 降级能力</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>页面入口</h2>
+        <div class="grid">
+          <a class="mini-card" href="./pages/main/index.html">
+            <h3>主工作台</h3>
+            <p>查看左侧项目、模式切换和主布局，验证浏览器端不再启动即崩。</p>
+          </a>
+          <a class="mini-card" href="./pages/model-settings/index.html">
+            <h3>模型配置</h3>
+            <p>演示服务商与 API Profile 的前端配置界面。</p>
+          </a>
+          <a class="mini-card" href="./pages/global-settings/index.html">
+            <h3>全局设置</h3>
+            <p>验证主题、模式和基础设置在 Web 端的读取与保存。</p>
+          </a>
+        </div>
+        <div class="grid">
+          <a class="mini-card" href="./pages/channel-settings/index.html">
+            <h3>渠道配置</h3>
+            <p>展示多 IM 桥接相关设置页面。</p>
+          </a>
+          <a class="mini-card" href="./pages/session-manager/index.html">
+            <h3>会话查询</h3>
+            <p>展示会话页壳层与浏览器演示模式下的降级行为。</p>
+          </a>
+          <a class="mini-card" href="./pages/settings-workbench/index.html">
+            <h3>能力工作台</h3>
+            <p>查看 Skills、MCP、Hooks 等管理入口。</p>
+          </a>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>部署说明</h2>
+        <div class="tips">
+          <div class="tip">Vercel 输出目录为 <code>src/renderer/pages-dist</code></div>
+          <div class="tip">安装命令使用 <code>npm install --ignore-scripts</code>，避免 Electron 原生模块在 Vercel 里重编译</div>
+          <div class="tip">构建命令使用 <code>npm run build:vue</code></div>
+        </div>
+      </section>
+    </main>
+  </body>
+  </html>
